@@ -18,6 +18,10 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { BookingModal } from './BookingModal';
 
+import { useUser } from '../context/UserContext';
+import { fetchChatThread, sendChatMessage, markChatMessageRead } from '../api/chatApi';
+import { chatStore } from '../store/chatStore';
+
 export interface ChatMessage {
   id: string;
   sender: 'other' | 'me' | 'system';
@@ -38,12 +42,32 @@ export interface ChatMessage {
 interface ChatDetailScreenProps {
   visible: boolean;
   onClose: () => void;
+  partnerId?: string;
+  token?: string | null;
   contactName?: string;
   contactRole?: string;
   contactAvatar?: string;
   isOnline?: boolean;
   initialMessage?: string;
   userRole?: 'homeowner' | 'kasambahay';
+}
+
+function formatTimeOnly(isoString?: string): string {
+  if (!isoString) {
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes().toString().padStart(2, '0');
+    return `${hours % 12 || 12}:${minutes} ${hours >= 12 ? 'PM' : 'AM'}`;
+  }
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return 'Now';
+    const hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${hours % 12 || 12}:${minutes} ${hours >= 12 ? 'PM' : 'AM'}`;
+  } catch {
+    return 'Now';
+  }
 }
 
 const REACTION_OPTIONS = ['❤️', '👍', '😂', '😭', '😮'];
@@ -94,15 +118,23 @@ function SmoothReactionPill({ align, onSelect }: { align: 'left' | 'right'; onSe
 export function ChatDetailScreen({
   visible,
   onClose,
-  contactName = 'Vincente Ganda',
-  contactRole = 'Cleaner',
-  contactAvatar = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=300',
+  partnerId,
+  token,
+  contactName = 'User',
+  contactRole = 'Member',
+  contactAvatar,
   isOnline = true,
   initialMessage,
   userRole = 'homeowner',
 }: ChatDetailScreenProps) {
   const insets = useSafeAreaInsets();
+  const { user } = useUser();
+  const effectiveToken = token || user.token;
   const scrollViewRef = useRef<ScrollView>(null);
+
+  const resolvedAvatar =
+    contactAvatar ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || 'User')}&background=FFB43B&color=fff`;
 
   const [inputMessage, setInputMessage] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -114,10 +146,7 @@ export function ChatDetailScreen({
   const [activeBookingDetails, setActiveBookingDetails] = useState<any>(null);
 
   const handleKasambahayConfirm = (msgId: string) => {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes().toString().padStart(2, '0');
-    const timeString = `${hours % 12 || 12}:${minutes} ${hours >= 12 ? 'PM' : 'AM'}`;
+    const timeString = formatTimeOnly();
 
     setMessages((prev) => {
       const updated = prev.map((msg) => {
@@ -141,7 +170,7 @@ export function ChatDetailScreen({
           sender: 'other',
           text: `I have accepted and confirmed the booking request! Thank you po! 😊`,
           time: timeString,
-          avatar: contactAvatar,
+          avatar: resolvedAvatar,
         },
       ];
     });
@@ -152,66 +181,141 @@ export function ChatDetailScreen({
   };
 
   React.useEffect(() => {
-    if (visible) {
-      const baseMessages: ChatMessage[] = [
-        {
-          id: '1',
-          sender: 'other',
-          text: "Good morning po! Anong oras ako darating this Monday?",
-          time: '8:02 AM',
-          avatar: contactAvatar,
-        },
-        {
-          id: '2',
-          sender: 'me',
-          text: 'Good morning! Please come at 8 AM. 😊',
-          time: '8:10 AM',
-        },
-        {
-          id: '3',
-          sender: 'system',
-          time: '8:12 AM',
-          bookingInfo: {
-            title: 'BOOKING READY',
-            startDate: 'May 11, 2026',
-            details: 'P 5,000/mo · Mon – Sat · 8AM – 5PM',
-          },
-        },
-        {
-          id: '4',
-          sender: 'other',
-          text: "Noted, Ma'am!",
-          time: '8:15 AM',
-          avatar: contactAvatar,
-        },
-      ];
+    if (!visible) return;
 
-      if (initialMessage) {
-        baseMessages.push({
-          id: '5',
-          sender: 'me',
-          text: initialMessage,
-          time: '11:51 PM',
+    let isMounted = true;
+
+    const syncThread = (isInitial = false) => {
+      if (!partnerId || !effectiveToken) return;
+
+      fetchChatThread(effectiveToken, partnerId)
+        .then((items) => {
+          if (!isMounted) return;
+
+          if (items && items.length > 0) {
+            const mapped: ChatMessage[] = items.map((m) => ({
+              id: m.chat_message_id,
+              sender: m.is_sender ? ('me' as const) : ('other' as const),
+              text: m.message_payload,
+              time: formatTimeOnly(m.createdAt),
+              avatar: m.is_sender ? undefined : resolvedAvatar,
+            }));
+
+            setMessages((prev) => {
+              // Only update if count changed or last message id is different to avoid redundant re-renders
+              const prevLastId = prev[prev.length - 1]?.id;
+              const newLastId = mapped[mapped.length - 1]?.id;
+              if (prev.length !== mapped.length || prevLastId !== newLastId) {
+                return mapped;
+              }
+              return prev;
+            });
+
+            // Mark unread messages from partner as read
+            items.forEach((m) => {
+              if (!m.is_sender && !m.is_read) {
+                markChatMessageRead(effectiveToken, m.chat_message_id).catch(() => {});
+              }
+            });
+          } else if (isInitial && initialMessage) {
+            // New thread with initial auto-message!
+            const tempId = Date.now().toString();
+            setMessages([
+              {
+                id: tempId,
+                sender: 'me',
+                text: initialMessage,
+                time: formatTimeOnly(),
+              },
+            ]);
+
+            // Persist the initial message to backend
+            sendChatMessage(effectiveToken, partnerId, initialMessage)
+              .then((res) => {
+                if (res?.data?.chat_message_id && isMounted) {
+                  setMessages((prev) =>
+                    prev.map((msg) => (msg.id === tempId ? { ...msg, id: res.data.chat_message_id } : msg))
+                  );
+                }
+                chatStore.addOrUpdateChat({
+                  partnerId,
+                  name: contactName,
+                  badge: contactRole,
+                  avatar: resolvedAvatar,
+                  message: initialMessage,
+                  time: 'Just now',
+                });
+              })
+              .catch((err) => {
+                console.warn('[ChatDetailScreen] Failed to auto-send initial message:', err);
+              });
+          } else if (isInitial) {
+            setMessages([]);
+          }
+        })
+        .catch((err) => {
+          if (!isMounted) return;
+          if (isInitial) {
+            console.warn('[ChatDetailScreen] Could not load thread:', err);
+            if (initialMessage) {
+              setMessages([
+                {
+                  id: '1',
+                  sender: 'me',
+                  text: initialMessage,
+                  time: formatTimeOnly(),
+                },
+              ]);
+            } else {
+              setMessages([]);
+            }
+          }
         });
+    };
+
+    if (partnerId && effectiveToken) {
+      // 1. Initial immediate sync
+      syncThread(true);
+
+      // 2. Poll every 3 seconds while chat modal is visible
+      const intervalId = setInterval(() => {
+        syncThread(false);
+      }, 3000);
+
+      return () => {
+        isMounted = false;
+        clearInterval(intervalId);
+      };
+    } else {
+      if (initialMessage) {
+        setMessages([
+          {
+            id: '1',
+            sender: 'me',
+            text: initialMessage,
+            time: formatTimeOnly(),
+          },
+        ]);
+      } else {
+        setMessages([]);
       }
-      setMessages(baseMessages);
+      return () => {
+        isMounted = false;
+      };
     }
-  }, [visible, initialMessage, contactAvatar]);
+  }, [visible, partnerId, effectiveToken, resolvedAvatar, initialMessage]);
 
   const handleSend = () => {
-    if (!inputMessage.trim()) return;
+    const trimmed = inputMessage.trim();
+    if (!trimmed) return;
 
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    const formattedHours = hours % 12 || 12;
-    const timeString = `${formattedHours}:${minutes} ${ampm}`;
+    const timeString = formatTimeOnly();
+    const tempId = Date.now().toString();
 
     const newMessage: ChatMessage = {
-      id: Date.now().toString(),
+      id: tempId,
       sender: 'me',
-      text: inputMessage.trim(),
+      text: trimmed,
       time: timeString,
     };
 
@@ -225,6 +329,32 @@ export function ChatDetailScreen({
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
+
+    // Call real backend API if partnerId and token exist
+    if (partnerId && effectiveToken) {
+      sendChatMessage(effectiveToken, partnerId, trimmed)
+        .then((res) => {
+          // Update temp message ID to real DB ID
+          if (res?.data?.chat_message_id) {
+            setMessages((prev) =>
+              prev.map((msg) => (msg.id === tempId ? { ...msg, id: res.data.chat_message_id } : msg))
+            );
+          }
+          // Update inbox preview in chatStore
+          chatStore.addOrUpdateChat({
+            partnerId,
+            name: contactName,
+            badge: contactRole,
+            avatar: contactAvatar,
+            message: trimmed,
+            time: 'Just now',
+          });
+        })
+        .catch((err) => {
+          console.warn('[ChatDetailScreen] send failed:', err);
+          Alert.alert('Send Error', err.message || 'Could not send message. Please try again.');
+        });
+    }
   };
 
   const handlePickImage = async () => {
@@ -298,7 +428,7 @@ export function ChatDetailScreen({
 
           <View style={styles.headerInfo}>
             <View style={styles.avatarWrapper}>
-              <Image source={{ uri: contactAvatar }} style={styles.headerAvatar} />
+              <Image source={{ uri: resolvedAvatar }} style={styles.headerAvatar} />
               {isOnline ? <View style={styles.onlineDot} /> : null}
             </View>
             <View style={styles.headerTextCol}>
@@ -341,7 +471,9 @@ export function ChatDetailScreen({
           >
             {/* Date Separator Pill */}
             <View style={styles.datePill}>
-              <Text style={styles.datePillText}>Today, May 07</Text>
+              <Text style={styles.datePillText}>
+                Today, {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </Text>
             </View>
 
             {/* Messages */}
