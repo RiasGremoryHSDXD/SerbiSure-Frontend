@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,18 +10,23 @@ import {
   Dimensions,
   Animated,
   PanResponder,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { chatStore } from '../../store/chatStore';
 import { ChatDetailScreen } from '../ChatDetailScreen';
+import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
+
+import { useUser } from '../../context/UserContext';
 
 const logoSource = require('../../../assets/serbisure-logo.png');
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SWIPE_THRESHOLD = 0.25 * SCREEN_WIDTH;
 
 export interface JobOpening {
-  id: number;
+  id: number | string;
+  partnerId?: string;
   employerName: string;
   title: string;
   location: string;
@@ -33,99 +38,135 @@ export interface JobOpening {
   avatar: string;
 }
 
-const INITIAL_JOB_OPENINGS: JobOpening[] = [
-  {
-    id: 1,
-    employerName: 'Camille Prats',
-    title: 'Full-time Housekeeper',
-    location: 'Makati City',
-    description: 'Looking for experienced detailed-oriented staff for a 3-bedroom unit.',
-    price: 'P 18,000',
-    unit: 'per month',
-    tags: ['Verified Employer', 'STAY-IN'],
-    image: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=600',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=300',
-  },
-  {
-    id: 2,
-    employerName: 'Sabrina Reyes',
-    title: 'Private Nanny for Toddler',
-    location: 'Bonifacio Global City',
-    description: 'Energetic nanny needed for 3yo child. First aid certified preferred.',
-    price: 'P 20,000',
-    unit: 'per month',
-    tags: ['Verified Employer', 'NEARBY'],
-    image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=600',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=300',
-  },
-  {
-    id: 3,
-    employerName: 'Joshua Asucal',
-    title: 'Family Cook & Meal Prep',
-    location: 'Quezon City',
-    description: 'Weekly meal prep and healthy cooking for a family of 4.',
-    price: 'P 3,500',
-    unit: 'per service',
-    tags: ['Verified Employer', 'PART-TIME'],
-    image: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=600',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=300',
-  },
-  {
-    id: 4,
-    employerName: 'Daniela Mondragon',
-    title: 'Senior Caregiver & Companion',
-    location: 'Mandaluyong City',
-    description: 'Compassionate caregiver for elderly grandmother. Light housekeeping.',
-    price: 'P 22,000',
-    unit: 'per month',
-    tags: ['Verified Employer', 'STAY-IN'],
-    image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=600',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300',
-  },
-  {
-    id: 5,
-    employerName: 'Maria Santos',
-    title: 'All-Around Kasambahay',
-    location: 'Pasig City',
-    description: 'General house cleaning, laundry, ironing, and daily meal preparation.',
-    price: 'P 16,500',
-    unit: 'per month',
-    tags: ['Verified Employer', 'FULL-TIME'],
-    image: 'https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?auto=format&fit=crop&q=80&w=600',
-    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=300',
-  },
-  {
-    id: 6,
-    employerName: 'Victoria Zobel',
-    title: 'Deep Cleaner & Laundry Specialist',
-    location: 'Alabang, Muntinlupa',
-    description: 'Bi-weekly deep cleaning and wardrobe laundry care for modern residence.',
-    price: 'P 4,000',
-    unit: 'per day',
-    tags: ['Verified Employer', 'PART-TIME'],
-    image: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=600',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300',
-  },
-];
-
 const FILTER_TABS = ['Stay-in', 'Part-time', 'Nearby'];
+
+// Module-level cache: lives OUTSIDE the component so it survives tab switches.
+let jobFeedCache: JobOpening[] | null = null;
+
+export const clearJobFeedCache = () => {
+  jobFeedCache = null;
+};
 
 export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => void, token?: string | null } = {}) {
   const insets = useSafeAreaInsets();
-  const [jobs, setJobs] = useState<JobOpening[]>(INITIAL_JOB_OPENINGS);
+  const { user } = useUser();
+  const effectiveToken = token || user.token;
+
+  const [jobs, setJobs] = useState<JobOpening[]>(jobFeedCache || []);
+  const [isLoading, setIsLoading] = useState<boolean>(jobFeedCache === null);
+  const jobsRef = useRef<JobOpening[]>(jobs);
+  jobsRef.current = jobs;
+
+  const shimmerAnim = useRef(new Animated.Value(0.35)).current;
+
+  useEffect(() => {
+    if (isLoading) {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(shimmerAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(shimmerAnim, {
+            toValue: 0.35,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      pulse.start();
+      return () => pulse.stop();
+    }
+  }, [isLoading]);
+
   const [activeFilter, setActiveFilter] = useState('Stay-in');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeChat, setActiveChat] = useState<{
     visible: boolean;
+    partnerId?: string;
     name: string;
     role: string;
     avatar: string;
     initialMessage?: string;
   }>({
     visible: false,
+    partnerId: undefined,
     name: '',
     role: '',
     avatar: '',
   });
+
+  // forceRefresh=true skips the cache and hits the API fresh (used for pull-to-refresh)
+  const fetchFeed = async (forceRefresh = false) => {
+    if (!effectiveToken) {
+      setIsLoading(false);
+      return;
+    }
+
+    // If we have cached data and this is NOT a manual refresh, use the cache!
+    if (!forceRefresh && jobFeedCache !== null) {
+      setJobs(jobFeedCache);
+      jobsRef.current = jobFeedCache;
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/api/v1/booking/feed/`, {
+        headers: { Authorization: `Bearer ${effectiveToken}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const liveJobs: JobOpening[] = data.map((item: any) => {
+          const categories = Array.isArray(item.service_category)
+            ? item.service_category
+            : item.service_category
+            ? [item.service_category]
+            : ['Household'];
+          const avatarUrl =
+            item.profile_link ||
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Homeowner')}&background=FFB43B&color=fff`;
+
+          return {
+            id: item.booking_id,
+            partnerId: item.poster_id,
+            employerName: item.name || 'Homeowner',
+            title: categories.join(' & ') || 'Household Service',
+            location: item.service_address || 'Cagayan de Oro',
+            description: `Looking for ${categories.join(', ')} services at ${item.service_address || 'residence'}.`,
+            price: `P ${item.daily_rate || '0'}`,
+            unit: 'per day',
+            tags: ['Verified Employer', ...categories],
+            image: avatarUrl,
+            avatar: avatarUrl,
+          };
+        });
+
+        jobFeedCache = liveJobs;
+        setJobs(liveJobs);
+        jobsRef.current = liveJobs;
+      }
+    } catch (error) {
+      console.warn('[JobsScreen] Failed to load feed from backend', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Pull-to-refresh handler — forces a fresh API call and resets the swipe deck
+  const handlePullToRefresh = async () => {
+    setIsRefreshing(true);
+    position.setValue({ x: 0, y: 0 });
+    await fetchFeed(true); // forceRefresh=true bypasses the cache
+    setIsRefreshing(false);
+  };
+
+  // Only fetches on first load (or when token changes). Uses cache on tab switches.
+  useEffect(() => {
+    fetchFeed();
+  }, [effectiveToken]);
 
   // Floating Count (+1 / -1) Animation Values
   const plusAnim = useRef(new Animated.Value(0)).current;
@@ -145,13 +186,14 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
   };
 
   const removeCurrentCard = (swipedRight: boolean) => {
-    const currentJob = jobs[0];
+    const currentJob = jobsRef.current[0];
     if (!currentJob) return;
 
     if (swipedRight) {
       showCountAnimation('plus');
       chatStore.addOrUpdateChat({
-        id: currentJob.id + 100,
+        id: currentJob.partnerId || currentJob.id,
+        partnerId: currentJob.partnerId,
         name: currentJob.employerName,
         badge: 'Homeowner',
         avatar: currentJob.avatar,
@@ -163,6 +205,7 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
       // Directly open ChatDetailScreen modal with auto message!
       setActiveChat({
         visible: true,
+        partnerId: currentJob.partnerId,
         name: currentJob.employerName,
         role: 'Homeowner',
         avatar: currentJob.avatar,
@@ -172,7 +215,11 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
       showCountAnimation('minus');
     }
 
-    setJobs((prev) => prev.slice(1));
+    setJobs((prev) => {
+      const next = prev.slice(1);
+      jobsRef.current = next;
+      return next;
+    });
     position.setValue({ x: 0, y: 0 });
   };
 
@@ -257,11 +304,26 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
   const card2 = jobs[2];
 
   const handleResetDeck = () => {
-    setJobs(INITIAL_JOB_OPENINGS);
+    fetchFeed(true);
     position.setValue({ x: 0, y: 0 });
   };
 
   return (
+    <ScrollView
+      style={{ flex: 1, backgroundColor: '#F6F5F2' }}
+      contentContainerStyle={{ flex: 1 }}
+      scrollEnabled={isRefreshing || jobs.length === 0}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handlePullToRefresh}
+          colors={['#FFB43B']}
+          tintColor="#FFB43B"
+          title="Refreshing feed..."
+          titleColor="#888"
+        />
+      }
+    >
     <View style={styles.container}>
       {/* Top Status Bar Spacer */}
       <View style={{ height: insets.top, backgroundColor: '#F6F5F2', zIndex: 10 }} />
@@ -278,9 +340,15 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
       {/* Yellow Title Banner */}
       <View style={styles.greetingBanner}>
         <View style={styles.greetingTextContainer}>
-          <Text style={styles.headerTitle}>Job Openings</Text>
+          <Text style={styles.headerTitle}>
+            {user.accountType === 'Homeowner' ? 'Available Kasambahay' : 'Available Homeowner'}
+          </Text>
           <Text style={styles.headerSubtitle}>
-            {jobs.length > 0 ? `${jobs.length} opportunities available nearby` : 'No more jobs left nearby'}
+            {isLoading
+              ? 'Finding opportunities near you...'
+              : jobs.length > 0
+              ? `${jobs.length} opportunities available nearby`
+              : 'No more opportunities left nearby'}
           </Text>
         </View>
       </View>
@@ -310,11 +378,25 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
 
       {/* Vertical Stacked Cards Deck Area */}
       <View style={styles.cardsContainer}>
-        {jobs.length === 0 ? (
+        {isLoading ? (
+          <Animated.View style={[styles.skeletonCard, { opacity: shimmerAnim }]}>
+            <View style={styles.skeletonImageArea}>
+              <View style={styles.skeletonTagPill} />
+            </View>
+            <View style={styles.skeletonContentArea}>
+              <View style={styles.skeletonTitle} />
+              <View style={styles.skeletonSubtitle} />
+              <View style={styles.skeletonRow}>
+                <View style={styles.skeletonBadge} />
+                <View style={styles.skeletonPrice} />
+              </View>
+            </View>
+          </Animated.View>
+        ) : jobs.length === 0 ? (
           <View style={styles.emptyDeckCard}>
             <Ionicons name="checkmark-circle-outline" size={56} color="#FFB43B" style={{ marginBottom: 12 }} />
-            <Text style={styles.emptyTitle}>You've reviewed all jobs!</Text>
-            <Text style={styles.emptySub}>Check back later or reset the deck to review again.</Text>
+            <Text style={styles.emptyTitle}>You've reviewed all opportunities!</Text>
+            <Text style={styles.emptySub}>Check back later or refresh the deck to review again.</Text>
             <Pressable style={styles.resetBtn} onPress={handleResetDeck}>
               <Ionicons name="reload" size={16} color="#FFF" style={{ marginRight: 6 }} />
               <Text style={styles.resetBtnText}>Refresh Deck</Text>
@@ -501,12 +583,16 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
       <ChatDetailScreen
         visible={activeChat.visible}
         onClose={() => setActiveChat((prev) => ({ ...prev, visible: false }))}
+        partnerId={activeChat.partnerId}
+        token={token}
         contactName={activeChat.name}
         contactRole={activeChat.role}
         contactAvatar={activeChat.avatar}
         initialMessage={activeChat.initialMessage}
+        userRole="kasambahay"
       />
     </View>
+    </ScrollView>
   );
 }
 
@@ -782,5 +868,66 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
     position: 'relative',
+  },
+  skeletonCard: {
+    width: SCREEN_WIDTH - 48,
+    height: 480,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  skeletonImageArea: {
+    flex: 1,
+    backgroundColor: '#E2E8F0',
+    padding: 16,
+    justifyContent: 'flex-start',
+  },
+  skeletonTagPill: {
+    width: 90,
+    height: 24,
+    backgroundColor: '#CBD5E1',
+    borderRadius: 12,
+  },
+  skeletonContentArea: {
+    padding: 20,
+    backgroundColor: '#FFFFFF',
+  },
+  skeletonTitle: {
+    width: '65%',
+    height: 22,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 6,
+    marginBottom: 10,
+  },
+  skeletonSubtitle: {
+    width: '45%',
+    height: 14,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 4,
+    marginBottom: 16,
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  skeletonBadge: {
+    width: 70,
+    height: 20,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 6,
+  },
+  skeletonPrice: {
+    width: 80,
+    height: 22,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 6,
   },
 });

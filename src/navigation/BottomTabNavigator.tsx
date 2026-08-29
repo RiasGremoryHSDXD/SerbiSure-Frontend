@@ -38,9 +38,10 @@ export function BottomTabNavigator({ role = 'homeowner', avatarUri: oldAvatarUri
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [profileInitialView, setProfileInitialView] = useState<'main' | 'personal_info'>('main');
   const [postJobVisible, setPostJobVisible] = useState(false);
-
-  const isKasambahay = role === 'kasambahay';
-  const avatarUri = user.profileLink || oldAvatarUri
+  const isKasambahay = user.accountType
+    ? user.accountType.toLowerCase() === 'kasambahay'
+    : role.toLowerCase() === 'kasambahay';
+  const avatarUri = user.profileLink || oldAvatarUri;
 
   const handleOpenProfileView = () => {
     setProfileInitialView('personal_info');
