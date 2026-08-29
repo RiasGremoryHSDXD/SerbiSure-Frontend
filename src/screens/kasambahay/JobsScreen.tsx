@@ -379,19 +379,81 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
       {/* Vertical Stacked Cards Deck Area */}
       <View style={styles.cardsContainer}>
         {isLoading ? (
-          <Animated.View style={[styles.skeletonCard, { opacity: shimmerAnim }]}>
-            <View style={styles.skeletonImageArea}>
-              <View style={styles.skeletonTagPill} />
-            </View>
-            <View style={styles.skeletonContentArea}>
-              <View style={styles.skeletonTitle} />
-              <View style={styles.skeletonSubtitle} />
-              <View style={styles.skeletonRow}>
-                <View style={styles.skeletonBadge} />
-                <View style={styles.skeletonPrice} />
+          /* ── Rich Skeleton Loading ── */
+          <React.Fragment>
+            {/* Deep stack card (skeleton) */}
+            <Animated.View
+              style={[
+                styles.skeletonStackDeep,
+                { opacity: shimmerAnim },
+              ]}
+            />
+
+            {/* Mid stack card (skeleton) */}
+            <Animated.View
+              style={[
+                styles.skeletonStackMid,
+                { opacity: shimmerAnim },
+              ]}
+            />
+
+            {/* Front card (skeleton) - full detail */}
+            <Animated.View
+              style={[
+                styles.skeletonCard,
+                { opacity: shimmerAnim },
+              ]}
+            >
+              {/* Image area */}
+              <View style={styles.skeletonImageArea}>
+                {/* Top bar — avatar + name placeholder */}
+                <View style={styles.skeletonAvatarRow}>
+                  <View style={styles.skeletonAvatar} />
+                  <View style={{ flex: 1, marginLeft: 12, gap: 8 }}>
+                    <View style={styles.skeletonNameBar} />
+                    <View style={styles.skeletonSubBar} />
+                  </View>
+                </View>
+
+                {/* Verified badge pill top-right */}
+                <View style={styles.skeletonVerifiedPill} />
               </View>
-            </View>
-          </Animated.View>
+
+              {/* Content footer area */}
+              <View style={styles.skeletonContentArea}>
+                {/* Title + location */}
+                <View style={styles.skeletonTitle} />
+                <View style={styles.skeletonLocationRow}>
+                  <View style={styles.skeletonLocationDot} />
+                  <View style={styles.skeletonLocationBar} />
+                </View>
+
+                {/* Description lines */}
+                <View style={[styles.skeletonDescBar, { width: '100%' }]} />
+                <View style={[styles.skeletonDescBar, { width: '80%', marginTop: 6 }]} />
+
+                {/* Tags + Price row */}
+                <View style={styles.skeletonTagsPriceRow}>
+                  <View style={styles.skeletonTagsGroup}>
+                    <View style={styles.skeletonTag} />
+                    <View style={[styles.skeletonTag, { width: 64 }]} />
+                  </View>
+                  <View style={styles.skeletonPriceBox}>
+                    <View style={styles.skeletonPriceAmount} />
+                    <View style={styles.skeletonPriceUnit} />
+                  </View>
+                </View>
+              </View>
+            </Animated.View>
+
+            {/* Skeleton action buttons */}
+            <Animated.View
+              style={[styles.skeletonActionRow, { opacity: shimmerAnim }]}
+            >
+              <View style={styles.skeletonActionBtn} />
+              <View style={[styles.skeletonActionBtn, { marginLeft: 32 }]} />
+            </Animated.View>
+          </React.Fragment>
         ) : jobs.length === 0 ? (
           <View style={styles.emptyDeckCard}>
             <Ionicons name="checkmark-circle-outline" size={56} color="#FFB43B" style={{ marginBottom: 12 }} />
@@ -869,65 +931,156 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     position: 'relative',
   },
+  skeletonStackDeep: {
+    position: 'absolute',
+    width: SCREEN_WIDTH - 80,
+    height: 380,
+    borderRadius: 24,
+    backgroundColor: '#D8DDE8',
+    zIndex: 2,
+    transform: [{ scale: 0.92 }],
+    top: -24,
+  },
+  skeletonStackMid: {
+    position: 'absolute',
+    width: SCREEN_WIDTH - 64,
+    height: 380,
+    borderRadius: 24,
+    backgroundColor: '#DDE2EC',
+    zIndex: 5,
+    transform: [{ scale: 0.96 }],
+    top: -12,
+  },
   skeletonCard: {
+    position: 'absolute',
+    zIndex: 10,
     width: SCREEN_WIDTH - 48,
-    height: 480,
+    height: 380,
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.10,
     shadowRadius: 16,
-    elevation: 4,
+    elevation: 6,
   },
   skeletonImageArea: {
     flex: 1,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E8ECF4',
     padding: 16,
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
   },
-  skeletonTagPill: {
-    width: 90,
+  skeletonAvatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  skeletonAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#CBD5E1',
+  },
+  skeletonNameBar: {
+    height: 14,
+    width: '70%',
+    backgroundColor: '#CBD5E1',
+    borderRadius: 6,
+  },
+  skeletonSubBar: {
+    height: 10,
+    width: '45%',
+    backgroundColor: '#D1D9E5',
+    borderRadius: 4,
+  },
+  skeletonVerifiedPill: {
+    position: 'absolute',
+    right: 16,
+    top: 16,
+    width: 80,
     height: 24,
     backgroundColor: '#CBD5E1',
     borderRadius: 12,
   },
   skeletonContentArea: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     backgroundColor: '#FFFFFF',
+    gap: 8,
   },
   skeletonTitle: {
-    width: '65%',
-    height: 22,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 6,
-    marginBottom: 10,
-  },
-  skeletonSubtitle: {
-    width: '45%',
-    height: 14,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 4,
-    marginBottom: 16,
-  },
-  skeletonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  skeletonBadge: {
-    width: 70,
+    width: '60%',
     height: 20,
     backgroundColor: '#E2E8F0',
     borderRadius: 6,
   },
-  skeletonPrice: {
-    width: 80,
-    height: 22,
+  skeletonLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  skeletonLocationDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: '#E2E8F0',
-    borderRadius: 6,
+  },
+  skeletonLocationBar: {
+    height: 10,
+    width: '40%',
+    backgroundColor: '#E2E8F0',
+    borderRadius: 4,
+  },
+  skeletonDescBar: {
+    height: 10,
+    backgroundColor: '#E8ECF4',
+    borderRadius: 4,
+  },
+  skeletonTagsPriceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginTop: 4,
+  },
+  skeletonTagsGroup: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  skeletonTag: {
+    width: 52,
+    height: 22,
+    backgroundColor: '#FFF0DB',
+    borderRadius: 4,
+  },
+  skeletonPriceBox: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  skeletonPriceAmount: {
+    width: 64,
+    height: 16,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 4,
+  },
+  skeletonPriceUnit: {
+    width: 40,
+    height: 10,
+    backgroundColor: '#EEF2F7',
+    borderRadius: 3,
+  },
+  skeletonActionRow: {
+    position: 'absolute',
+    bottom: -62,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  skeletonActionBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#E2E8F0',
   },
 });
