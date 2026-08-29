@@ -17,13 +17,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { chatStore } from '../../store/chatStore';
 import { ChatDetailScreen } from '../ChatDetailScreen';
 import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
+import { useUser } from '../../context/UserContext';
 
 const logoSource = require('../../../assets/serbisure-logo.png');
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SWIPE_THRESHOLD = 0.25 * SCREEN_WIDTH;
 
 export interface WorkerProfile {
-  id: number;
+  id: number | string;
+  partnerId?: string;
   name: string;
   location: string;
   role: string;
@@ -34,68 +36,9 @@ export interface WorkerProfile {
   avatar: string;
 }
 
-const INITIAL_WORKER_PROFILES: WorkerProfile[] = [
-  {
-    id: 1,
-    name: 'Sisa Reyes',
-    location: 'Quezon City',
-    role: 'Experienced Yaya & Cook',
-    years: '3 yrs exp',
-    tags: ['Infant Care', 'Meal Prep'],
-    price: 'P 300',
-    image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=600',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=300',
-  },
-  {
-    id: 2,
-    name: 'Vincente Ganda',
-    location: 'Makati City',
-    role: 'Professional Housekeeper',
-    years: '5 yrs exp',
-    tags: ['Deep Cleaning', 'Laundry Care'],
-    price: 'P 450',
-    image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=600',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=300',
-  },
-  {
-    id: 3,
-    name: 'Teresa Kalood',
-    location: 'Taguig City',
-    role: 'Certified Babysitter & Nanny',
-    years: '3 yrs exp',
-    tags: ['Toddler Care', 'First Aid'],
-    price: 'P 350',
-    image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=600',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300',
-  },
-  {
-    id: 4,
-    name: 'Maria Santos',
-    location: 'Pasig City',
-    role: 'Elderly Caregiver',
-    years: '4 yrs exp',
-    tags: ['Elderly Care', 'Medication'],
-    price: 'P 600',
-    image: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=600',
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=300',
-  },
-  {
-    id: 5,
-    name: 'Clara Alonso',
-    location: 'Mandaluyong City',
-    role: 'All-Around Kasambahay',
-    years: '7 yrs exp',
-    tags: ['Cleaning', 'Cooking'],
-    price: 'P 400',
-    image: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=600',
-    avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=300',
-  },
-];
-
 const FILTER_TABS = ['Top Rated', 'Cleaning', 'Cooking'];
 
 // Module-level cache: lives OUTSIDE the component so it survives tab switches.
-// useRef resets to null every time the component remounts — this does NOT.
 let feedCache: WorkerProfile[] | null = null;
 
 export const clearFeedCache = () => {
@@ -104,21 +47,53 @@ export const clearFeedCache = () => {
 
 export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?: string | null, onViewProfile?: () => void, token?: string | null }) {
   const insets = useSafeAreaInsets();
+  const { user } = useUser();
+  const effectiveToken = token || user.token;
+
   const today = new Date();
   const dateString = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
 
-  const [profiles, setProfiles] = useState<WorkerProfile[]>(INITIAL_WORKER_PROFILES);
+  const [profiles, setProfiles] = useState<WorkerProfile[]>(feedCache || []);
+  const [isLoading, setIsLoading] = useState<boolean>(feedCache === null);
+  const profilesRef = useRef<WorkerProfile[]>(profiles);
+  profilesRef.current = profiles;
+
+  const shimmerAnim = useRef(new Animated.Value(0.35)).current;
+
+  useEffect(() => {
+    if (isLoading) {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(shimmerAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(shimmerAnim, {
+            toValue: 0.35,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      pulse.start();
+      return () => pulse.stop();
+    }
+  }, [isLoading]);
+
   const [activeFilter, setActiveFilter] = useState('Top Rated');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [activeChat, setActiveChat] = useState<{
     visible: boolean;
+    partnerId?: string;
     name: string;
     role: string;
     avatar: string;
     initialMessage?: string;
   }>({
     visible: false,
+    partnerId: undefined,
     name: '',
     role: '',
     avatar: '',
@@ -126,17 +101,22 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
 
   // forceRefresh=true skips the cache and hits the API fresh (used for pull-to-refresh)
   const fetchFeed = async (forceRefresh = false) => {
-    if (!token) return;
+    if (!effectiveToken) {
+      setIsLoading(false);
+      return;
+    }
 
     // If we have cached data and this is NOT a manual refresh, use the cache!
     if (!forceRefresh && feedCache !== null) {
       setProfiles(feedCache);
+      profilesRef.current = feedCache;
+      setIsLoading(false);
       return;
     }
 
     try {
       const response = await fetchWithTimeout(`${API_BASE_URL}/api/v1/booking/feed/`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${effectiveToken}` },
       });
 
       if (response.ok) {
@@ -145,24 +125,32 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
           const categories = Array.isArray(item.service_category)
             ? item.service_category
             : (item.service_category ? [item.service_category] : ['General']);
+          const avatarUrl =
+            item.profile_link ||
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Kasambahay')}&background=FFB43B&color=fff`;
+
           return {
             id: item.booking_id,
+            partnerId: item.poster_id,
             name: item.name || 'Anonymous User',
             location: item.service_address || 'Unknown City',
             role: categories.join(', '),
             years: 'Available Now',
             tags: categories,
             price: `P ${item.daily_rate || '0'}`,
-            image: item.profile_link || 'https://i.pravatar.cc/150?u=serbisure',
-            avatar: item.profile_link || 'https://i.pravatar.cc/150?u=serbisure',
+            image: avatarUrl,
+            avatar: avatarUrl,
           };
         });
-        // Save to cache and update state
+
         feedCache = liveProfiles;
         setProfiles(liveProfiles);
+        profilesRef.current = liveProfiles;
       }
     } catch (error) {
       console.error("Failed to load feed from backend", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -177,7 +165,7 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
   // Only fetches on first load (or when token changes). Uses cache on tab switches.
   useEffect(() => {
     fetchFeed();
-  }, [token]);
+  }, [effectiveToken]);
 
   // Floating Count (+1 / -1) Animation Values
   const plusAnim = useRef(new Animated.Value(0)).current;
@@ -197,14 +185,15 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
   };
 
   const removeCurrentCard = (swipedRight: boolean) => {
-    const currentWorker = profiles[0];
+    const currentWorker = profilesRef.current[0];
     if (!currentWorker) return;
 
     if (swipedRight) {
       showCountAnimation('plus');
       const badgeRole = (currentWorker.role && currentWorker.role.split(' ')[0]) || 'Kasambahay';
       chatStore.addOrUpdateChat({
-        id: currentWorker.id + 200,
+        id: currentWorker.partnerId || currentWorker.id,
+        partnerId: currentWorker.partnerId,
         name: currentWorker.name,
         badge: badgeRole,
         avatar: currentWorker.avatar,
@@ -216,6 +205,7 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
       // Directly open ChatDetailScreen modal with auto message!
       setActiveChat({
         visible: true,
+        partnerId: currentWorker.partnerId,
         name: currentWorker.name,
         role: badgeRole,
         avatar: currentWorker.avatar,
@@ -225,7 +215,11 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
       showCountAnimation('minus');
     }
 
-    setProfiles((prev) => prev.slice(1));
+    setProfiles((prev) => {
+      const next = prev.slice(1);
+      profilesRef.current = next;
+      return next;
+    });
     position.setValue({ x: 0, y: 0 });
   };
 
@@ -310,7 +304,7 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
   const card2 = profiles[2];
 
   const handleResetDeck = () => {
-    fetchFeed()
+    fetchFeed(true);
     position.setValue({ x: 0, y: 0 });
   };
 
@@ -352,7 +346,7 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
         <View style={styles.greetingTextContainer}>
           <Text style={styles.dateText}>{dateString}</Text>
           <Text style={styles.greetingText} numberOfLines={1} adjustsFontSizeToFit>
-            Available Kasambahay
+            {user.accountType === 'Kasambahay' ? 'Available Homeowner' : 'Available Kasambahay'}
           </Text>
         </View>
         <Ionicons name="options-outline" size={28} color="#333" />
@@ -383,10 +377,24 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
 
       {/* Vertical Stacked Cards Deck Area */}
       <View style={styles.cardsContainer}>
-        {profiles.length === 0 ? (
+        {isLoading ? (
+          <Animated.View style={[styles.skeletonCard, { opacity: shimmerAnim }]}>
+            <View style={styles.skeletonImageArea}>
+              <View style={styles.skeletonTagPill} />
+            </View>
+            <View style={styles.skeletonContentArea}>
+              <View style={styles.skeletonTitle} />
+              <View style={styles.skeletonSubtitle} />
+              <View style={styles.skeletonRow}>
+                <View style={styles.skeletonBadge} />
+                <View style={styles.skeletonPrice} />
+              </View>
+            </View>
+          </Animated.View>
+        ) : profiles.length === 0 ? (
           <View style={styles.emptyDeckCard}>
             <Ionicons name="checkmark-circle-outline" size={56} color="#FFB43B" style={{ marginBottom: 12 }} />
-            <Text style={styles.emptyTitle}>No more workers left nearby!</Text>
+            <Text style={styles.emptyTitle}>No more profiles left nearby!</Text>
             <Text style={styles.emptySub}>Check back later or refresh the deck to review again.</Text>
             <Pressable style={styles.resetBtn} onPress={handleResetDeck}>
               <Ionicons name="reload" size={16} color="#FFF" style={{ marginRight: 6 }} />
@@ -576,10 +584,13 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
       <ChatDetailScreen
         visible={activeChat.visible}
         onClose={() => setActiveChat((prev) => ({ ...prev, visible: false }))}
+        partnerId={activeChat.partnerId}
+        token={token}
         contactName={activeChat.name}
         contactRole={activeChat.role}
         contactAvatar={activeChat.avatar}
         initialMessage={activeChat.initialMessage}
+        userRole="homeowner"
       />
     </View>
     </ScrollView>
@@ -864,5 +875,66 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
     position: 'relative',
+  },
+  skeletonCard: {
+    width: SCREEN_WIDTH - 48,
+    height: 480,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  skeletonImageArea: {
+    flex: 1,
+    backgroundColor: '#E2E8F0',
+    padding: 16,
+    justifyContent: 'flex-start',
+  },
+  skeletonTagPill: {
+    width: 90,
+    height: 24,
+    backgroundColor: '#CBD5E1',
+    borderRadius: 12,
+  },
+  skeletonContentArea: {
+    padding: 20,
+    backgroundColor: '#FFFFFF',
+  },
+  skeletonTitle: {
+    width: '65%',
+    height: 22,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 6,
+    marginBottom: 10,
+  },
+  skeletonSubtitle: {
+    width: '45%',
+    height: 14,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 4,
+    marginBottom: 16,
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  skeletonBadge: {
+    width: 70,
+    height: 20,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 6,
+  },
+  skeletonPrice: {
+    width: 80,
+    height: 22,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 6,
   },
 });
