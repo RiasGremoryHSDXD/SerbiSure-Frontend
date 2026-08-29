@@ -9,15 +9,23 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   Animated,
   Easing,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
 
 const logoSource = require('../../../assets/serbisure-logo.png');
+
+function generateUUIDv4() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
 
 interface PostServiceScreenProps {
   visible: boolean;
@@ -30,20 +38,18 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
   // Form State
-  const [selectedService, setSelectedService] = useState('Cleaning');
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [engagementType, setEngagementType] = useState<'short' | 'long'>('short');
-  const [dailyRate, setDailyRate] = useState('500');
-  const [viewDate, setViewDate] = useState<Date>(new Date(2026, 4, 1)); // May 2026 default
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date(2026, 4, 26)); // May 26, 2026 default
-  const [startTime, setStartTime] = useState('12:00 PM');
-  const [endTime, setEndTime] = useState('09:00 PM');
-  
+  const defaultDate = new Date();
+  defaultDate.setDate(defaultDate.getDate() + 1); // Default to tomorrow
+  const [viewDate, setViewDate] = useState<Date>(new Date(defaultDate.getFullYear(), defaultDate.getMonth(), 1));
+  const [selectedDate, setSelectedDate] = useState<Date>(defaultDate);
+  const [selectedTime, setSelectedTime] = useState<'morning' | 'afternoon' | 'night'>('afternoon');
   const [address, setAddress] = useState('');
   const [floorUnit, setFloorUnit] = useState('');
   const [zipCode, setZipCode] = useState('');
-  const [scopeOfWork, setScopeOfWork] = useState<string[]>(['Cleaning']);
-  const [aboutNotes, setAboutNotes] = useState('');
-  
+  const [instructions, setInstructions] = useState('');
+  const [offerAmount, setOfferAmount] = useState('500');
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [postedSuccess, setPostedSuccess] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
@@ -54,6 +60,7 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
 
   useEffect(() => {
     if (postedSuccess) {
+      // Spring pop-in scale animation
       scaleAnim.setValue(0.7);
       Animated.spring(scaleAnim, {
         toValue: 1,
@@ -62,6 +69,7 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
         useNativeDriver: true,
       }).start();
 
+      // Continuous 360-degree rotation animation for the loader ring
       rotateAnim.setValue(0);
       const animation = Animated.loop(
         Animated.timing(rotateAnim, {
@@ -81,27 +89,6 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
-
-  const services = [
-    { id: 'Cleaning', label: 'Cleaning', icon: 'brush-outline' },
-    { id: 'Child Care', label: 'Child Care', icon: 'happy-outline' },
-    { id: 'Cook', label: 'Cook', icon: 'restaurant-outline' },
-    { id: 'Caregiver', label: 'Caregiver', icon: 'heart-outline' },
-    { id: 'Laundry', label: 'Laundry', icon: 'shirt-outline' },
-    { id: 'All-around', label: 'All-around', icon: 'home-outline' },
-  ];
-
-  const scopeOptions = [
-    'Cooking', 'Laundry', 'Cleaning', 'Child Care', 'Caregiver', 'All Around'
-  ];
-
-  const toggleScope = (option: string) => {
-    if (scopeOfWork.includes(option)) {
-      setScopeOfWork(scopeOfWork.filter((item) => item !== option));
-    } else {
-      setScopeOfWork([...scopeOfWork, option]);
-    }
-  };
 
   const handlePrevMonth = () => {
     setViewDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
@@ -165,19 +152,97 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
     return `${monthNames[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
   };
 
-  const handleNext = () => {
+  const services = [
+    { id: 'Cleaning', label: 'Cleaning', icon: 'brush-outline' },
+    { id: 'Child_care', label: 'Child Care', icon: 'happy-outline' },
+    { id: 'Cooking', label: 'Cook', icon: 'restaurant-outline' },
+    { id: 'Caregiver', label: 'Caregiver', icon: 'heart-outline' },
+    { id: 'Laundry', label: 'Laundry', icon: 'shirt-outline' },
+    { id: 'All-around', label: 'All-around', icon: 'home-outline' },
+  ];
+
+  const resetForm = () => {
+    setStep(1);
+    setSelectedServices([]);
+    setEngagementType('short');
+    setSelectedTime('afternoon');
+    setAddress('');
+    setFloorUnit('');
+    setZipCode('');
+    setInstructions('');
+    setOfferAmount('500');
+    setAgreedTerms(false);
+  };
+
+  const handleClose = () => {
+    resetForm();
+    onClose();
+  };
+
+  const handleNext = async () => {
     if (step < 4) {
+      if (step === 1 && selectedServices.length === 0) {
+        Alert.alert('Error', 'Please select at least one service.');
+        return;
+      }
       setStep((prev) => (prev + 1) as 1 | 2 | 3 | 4);
     } else {
-      // Step 4 Submit
+      if (!agreedTerms) {
+        Alert.alert('Error', 'Please agree to the Terms of Service.');
+        return;
+      }
+      
       setIsPosting(true);
-      setPostedSuccess(true);
-      setTimeout(() => {
-        setPostedSuccess(false);
+      
+      try {
+        const startTime = new Date(selectedDate);
+        startTime.setHours(selectedTime === 'morning' ? 8 : selectedTime === 'afternoon' ? 12 : 17, 0, 0, 0);
+
+        const endTime = new Date(selectedDate);
+        endTime.setHours(selectedTime === 'morning' ? 12 : selectedTime === 'afternoon' ? 17 : 21, 0, 0, 0);
+
+        const payload = {
+          booking_type: engagementType === 'short' ? 'short_term' : 'long_term',
+          service_category: selectedServices,
+          start_time: startTime.toISOString(),
+          end_time: endTime.toISOString(),
+          service_address: address,
+          floor_number: floorUnit || undefined,
+          zip_code: zipCode,
+          special_instruction: instructions || undefined,
+          daily_rate: offerAmount
+        };
+
+        const response = await fetchWithTimeout(`${API_BASE_URL}/api/v1/booking/post/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+            'Idempotency-Key': generateUUIDv4()
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error(errorData);
+          Alert.alert('Booking Error', JSON.stringify(errorData));
+          setIsPosting(false);
+          return;
+        }
+
+        setPostedSuccess(true);
+        setTimeout(() => {
+          setPostedSuccess(false);
+          setIsPosting(false);
+          resetForm();
+          onClose();
+        }, 2000);
+      } catch (error) {
+        console.error(error);
+        Alert.alert('Network Error', 'Failed to connect to the server.');
         setIsPosting(false);
-        setStep(1);
-        onClose();
-      }, 2000);
+      }
     }
   };
 
@@ -185,7 +250,7 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
     if (step > 1) {
       setStep((prev) => (prev - 1) as 1 | 2 | 3 | 4);
     } else {
-      onClose();
+      handleClose();
     }
   };
 
@@ -195,7 +260,7 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
       animationType="slide"
       transparent={false}
       statusBarTranslucent={true}
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
       <KeyboardAvoidingView
@@ -229,12 +294,12 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
             <View style={styles.titleBlock}>
               {step === 1 && (
                 <Text style={styles.mainTitle}>
-                  What <Text style={styles.titleHighlight}>service</Text> do you offer?
+                  What <Text style={styles.titleHighlight}>service</Text> do you offer today?
                 </Text>
               )}
               {step === 2 && (
                 <Text style={styles.mainTitle}>
-                  Set your <Text style={styles.titleHighlight}>rate & availability</Text>
+                  When do you <Text style={styles.titleHighlight}>offer</Text> the service?
                 </Text>
               )}
               {step === 3 && <Text style={styles.mainTitle}>Service Details</Text>}
@@ -246,18 +311,37 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
             </View>
           </View>
 
-          {/* Dynamic Content Area */}
+          {/* Dynamic Content Area (Fits without scrolling) */}
           <View style={styles.contentArea}>
             {/* STEP 1 */}
             {step === 1 && (
               <View style={styles.serviceGrid}>
                 {services.map((item) => {
-                  const isSelected = selectedService === item.id;
+                  const isSelected = selectedServices.includes(item.id);
+                  
+                  const handleToggle = () => {
+                    setSelectedServices(prev => {
+                      if (item.id === 'All-around') return ['All-around'];
+                      
+                      let updated = prev.includes(item.id) 
+                        ? prev.filter(s => s !== item.id) 
+                        : [...prev, item.id];
+                        
+                      updated = updated.filter(s => s !== 'All-around');
+                      
+                      const coreServices = ['Cleaning', 'Child_care', 'Cooking', 'Caregiver', 'Laundry'];
+                      const hasAllCore = coreServices.every(s => updated.includes(s));
+                      
+                      if (hasAllCore) return ['All-around'];
+                      return updated;
+                    });
+                  };
+
                   return (
                     <Pressable
                       key={item.id}
                       style={[styles.serviceCard, isSelected && styles.serviceCardActive]}
-                      onPress={() => setSelectedService(item.id)}
+                      onPress={handleToggle}
                     >
                       <View style={[styles.iconCircle, isSelected && styles.iconCircleActive]}>
                         <Ionicons name={item.icon as any} size={26} color="#FFB43B" />
@@ -273,205 +357,197 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
 
             {/* STEP 2 */}
             {step === 2 && (
-              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-                <View style={styles.step2Container}>
-                  {/* Short-term / Long-term Toggle */}
-                  <View style={styles.typeToggleRow}>
-                    <Pressable
-                      style={[styles.typeCard, engagementType === 'short' && styles.typeCardActive]}
-                      onPress={() => setEngagementType('short')}
-                    >
-                      <View style={styles.typeIconCircle}>
-                        <Ionicons name="time-outline" size={20} color="#FFB43B" />
-                      </View>
-                      <View style={{ width: '100%' }}>
-                        <Text style={styles.typeTitle}>Short-term</Text>
-                        <Text style={styles.typeSub}>Single visit or short service</Text>
-                      </View>
-                    </Pressable>
+              <View style={styles.step2Container}>
+                {/* Short-term / Long-term Toggle */}
+                <View style={styles.typeToggleRow}>
+                  <Pressable
+                    style={[styles.typeCard, engagementType === 'short' && styles.typeCardActive]}
+                    onPress={() => setEngagementType('short')}
+                  >
+                    <View style={styles.typeIconCircle}>
+                      <Ionicons name="time-outline" size={20} color="#FFB43B" />
+                    </View>
+                    <View style={{ width: '100%' }}>
+                      <Text style={styles.typeTitle}>Short-term</Text>
+                      <Text style={styles.typeSub}>Single visit or short service</Text>
+                    </View>
+                  </Pressable>
 
-                    <Pressable
-                      style={[styles.typeCard, engagementType === 'long' && styles.typeCardActive]}
-                      onPress={() => setEngagementType('long')}
-                    >
-                      <View style={styles.typeIconCircle}>
-                        <Ionicons name="calendar-outline" size={20} color="#FFB43B" />
-                      </View>
-                      <View style={{ width: '100%' }}>
-                        <Text style={styles.typeTitle}>Long-term</Text>
-                        <Text style={styles.typeSub}>Weekly or monthly service</Text>
-                      </View>
-                    </Pressable>
-                  </View>
+                  <Pressable
+                    style={[styles.typeCard, engagementType === 'long' && styles.typeCardActive]}
+                    onPress={() => setEngagementType('long')}
+                  >
+                    <View style={styles.typeIconCircle}>
+                      <Ionicons name="calendar-outline" size={20} color="#FFB43B" />
+                    </View>
+                    <View style={{ width: '100%' }}>
+                      <Text style={styles.typeTitle}>Long-term</Text>
+                      <Text style={styles.typeSub}>Weekly or monthly service</Text>
+                    </View>
+                  </Pressable>
+                </View>
 
-                  {/* Your Daily Rate Section */}
-                  <Text style={styles.inputGroupLabel}>Your Daily Rate</Text>
-                  <View style={styles.rateInputWrapper}>
-                    <Text style={styles.currencyPrefix}>₱</Text>
-                    <TextInput
-                      style={styles.rateInput}
-                      value={dailyRate}
-                      onChangeText={setDailyRate}
-                      keyboardType="numeric"
-                    />
-                    <Text style={styles.rateUnitText}>/ day</Text>
-                  </View>
-                  <Text style={styles.inputSubtext}>Enter your expected daily rate</Text>
-
-                  {/* Market Range Box */}
-                  <View style={styles.marketBox}>
-                    <Text style={styles.marketText}>
-                      Market range · {selectedService}: <Text style={{ fontWeight: '800' }}>₱ 400 – ₱ 700 / day</Text> in CDO.
+                {/* Calendar Grid */}
+                <View style={styles.calendarCard}>
+                  <View style={styles.calendarHeader}>
+                    <Text style={styles.calendarMonth}>
+                      {viewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                     </Text>
+                    <View style={styles.calendarArrows}>
+                      <Pressable onPress={handlePrevMonth} style={{ padding: 4, marginRight: 6 }} hitSlop={10}>
+                        <Ionicons name="chevron-back" size={16} color="#666" />
+                      </Pressable>
+                      <Pressable onPress={handleNextMonth} style={{ padding: 4 }} hitSlop={10}>
+                        <Ionicons name="chevron-forward" size={16} color="#666" />
+                      </Pressable>
+                    </View>
                   </View>
 
-                  {/* Calendar Grid */}
-                  <Text style={styles.sectionLabel}>Date Available</Text>
-                  <View style={styles.calendarCard}>
-                    <View style={styles.calendarHeader}>
-                      <Text style={styles.calendarMonth}>
-                        {viewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  <View style={styles.daysHeader}>
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+                      <Text key={d} style={styles.dayHeaderText}>
+                        {d}
                       </Text>
-                      <View style={styles.calendarArrows}>
-                        <Pressable onPress={handlePrevMonth} style={{ padding: 4, marginRight: 6 }} hitSlop={10}>
-                          <Ionicons name="chevron-back" size={16} color="#666" />
-                        </Pressable>
-                        <Pressable onPress={handleNextMonth} style={{ padding: 4 }} hitSlop={10}>
-                          <Ionicons name="chevron-forward" size={16} color="#666" />
-                        </Pressable>
-                      </View>
-                    </View>
-
-                    <View style={styles.daysHeader}>
-                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                        <Text key={d} style={styles.dayHeaderText}>
-                          {d}
-                        </Text>
-                      ))}
-                    </View>
-
-                    <View style={styles.datesGrid}>
-                      {getCalendarDays().map((item, idx) => {
-                        const isSelected =
-                          selectedDate.getFullYear() === item.date.getFullYear() &&
-                          selectedDate.getMonth() === item.date.getMonth() &&
-                          selectedDate.getDate() === item.date.getDate();
-
-                        return (
-                          <View key={idx} style={styles.dateCellWrapper}>
-                            <Pressable
-                              style={[
-                                styles.dateCell,
-                                isSelected && styles.dateCellSelected,
-                              ]}
-                              onPress={() => {
-                                setSelectedDate(item.date);
-                                if (!item.isCurrentMonth) {
-                                  setViewDate(new Date(item.date.getFullYear(), item.date.getMonth(), 1));
-                                }
-                              }}
-                            >
-                              <Text
-                                style={[
-                                  styles.dateCellText,
-                                  !item.isCurrentMonth && styles.dateCellMuted,
-                                  isSelected && styles.dateCellTextSelected,
-                                ]}
-                              >
-                                {item.dayNum}
-                              </Text>
-                            </Pressable>
-                          </View>
-                        );
-                      })}
-                    </View>
+                    ))}
                   </View>
 
-                  {/* Time Availability */}
-                  <Text style={styles.sectionLabel}>What hours are you available?</Text>
-                  <View style={styles.timeSelectRow}>
-                    <View style={styles.timeBox}>
-                      <Text style={styles.timeText}>{startTime}</Text>
-                      <Ionicons name="chevron-down" size={14} color="#666" />
-                    </View>
-                    <Text style={styles.toText}>to</Text>
-                    <View style={styles.timeBox}>
-                      <Text style={styles.timeText}>{endTime}</Text>
-                      <Ionicons name="chevron-down" size={14} color="#666" />
-                    </View>
+                  <View style={styles.datesGrid}>
+                    {getCalendarDays().map((item, idx) => {
+                      const isSelected =
+                        selectedDate.getFullYear() === item.date.getFullYear() &&
+                        selectedDate.getMonth() === item.date.getMonth() &&
+                        selectedDate.getDate() === item.date.getDate();
+
+                      return (
+                        <View key={idx} style={styles.dateCellWrapper}>
+                          <Pressable
+                            style={[
+                              styles.dateCell,
+                              isSelected && styles.dateCellSelected,
+                            ]}
+                            onPress={() => {
+                              setSelectedDate(item.date);
+                              if (!item.isCurrentMonth) {
+                                setViewDate(new Date(item.date.getFullYear(), item.date.getMonth(), 1));
+                              }
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.dateCellText,
+                                !item.isCurrentMonth && styles.dateCellMuted,
+                                isSelected && styles.dateCellTextSelected,
+                              ]}
+                            >
+                              {item.dayNum}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      );
+                    })}
                   </View>
                 </View>
-              </ScrollView>
+
+                {/* Time Selection */}
+                <Text style={styles.sectionLabel}>What time works best?</Text>
+                <View style={styles.timeSlotRow}>
+                  <Pressable
+                    style={[styles.timeSlotCard, selectedTime === 'morning' && styles.timeSlotActive]}
+                    onPress={() => setSelectedTime('morning')}
+                  >
+                    <Ionicons name="sunny-outline" size={18} color="#FFB43B" />
+                    <Text style={styles.timeSlotTitle}>Morning</Text>
+                    <Text style={styles.timeSlotSub}>8 AM - 12 PM</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[styles.timeSlotCard, selectedTime === 'afternoon' && styles.timeSlotActive]}
+                    onPress={() => setSelectedTime('afternoon')}
+                  >
+                    <Ionicons name="partly-sunny-outline" size={18} color="#FFB43B" />
+                    <Text style={styles.timeSlotTitle}>Afternoon</Text>
+                    <Text style={styles.timeSlotSub}>12 PM - 5 PM</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[styles.timeSlotCard, selectedTime === 'night' && styles.timeSlotActive]}
+                    onPress={() => setSelectedTime('night')}
+                  >
+                    <Ionicons name="moon-outline" size={18} color="#FFB43B" />
+                    <Text style={styles.timeSlotTitle}>Night</Text>
+                    <Text style={styles.timeSlotSub}>5 PM - 9 PM</Text>
+                  </Pressable>
+                </View>
+              </View>
             )}
 
             {/* STEP 3 */}
             {step === 3 && (
-              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-                <View style={styles.step3Container}>
-                  <Text style={styles.inputGroupLabel}>SERVICE ADDRESS</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="Enter street, building, or area"
-                    placeholderTextColor="#999"
-                    value={address}
-                    onChangeText={setAddress}
-                  />
+              <View style={styles.step3Container}>
+                <Text style={styles.inputGroupLabel}>SERVICE ADDRESS</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Enter street, building, or area"
+                  placeholderTextColor="#999"
+                  value={address}
+                  onChangeText={setAddress}
+                />
 
-                  <View style={styles.twoColumnRow}>
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={styles.inputGroupLabel}>FLOOR / UNIT #</Text>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="Optional"
-                        placeholderTextColor="#999"
-                        value={floorUnit}
-                        onChangeText={setFloorUnit}
-                      />
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 8 }}>
-                      <Text style={styles.inputGroupLabel}>ZIP CODE</Text>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="e.g. 1200"
-                        placeholderTextColor="#999"
-                        value={zipCode}
-                        onChangeText={setZipCode}
-                        keyboardType="numeric"
-                      />
-                    </View>
+                <View style={styles.twoColumnRow}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={styles.inputGroupLabel}>FLOOR / UNIT #</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="Optional"
+                      placeholderTextColor="#999"
+                      value={floorUnit}
+                      onChangeText={setFloorUnit}
+                    />
                   </View>
-
-                  <Text style={styles.sectionLabelLarge}>Scope of Work</Text>
-                  <View style={styles.scopeGrid}>
-                    {scopeOptions.map((opt) => {
-                      const isChecked = scopeOfWork.includes(opt);
-                      return (
-                        <Pressable
-                          key={opt}
-                          style={styles.scopeItem}
-                          onPress={() => toggleScope(opt)}
-                        >
-                          <View style={[styles.scopeCheckbox, isChecked && styles.scopeCheckboxActive]}>
-                            {isChecked && <Ionicons name="checkmark" size={12} color="#FFF" />}
-                          </View>
-                          <Text style={styles.scopeLabel}>{opt}</Text>
-                        </Pressable>
-                      );
-                    })}
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    <Text style={styles.inputGroupLabel}>ZIP CODE</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="e.g. 1200"
+                      placeholderTextColor="#999"
+                      value={zipCode}
+                      onChangeText={setZipCode}
+                      keyboardType="numeric"
+                    />
                   </View>
+                </View>
 
-                  <Text style={styles.sectionLabelLarge}>About You / Notes</Text>
+                <Text style={styles.sectionLabelLarge}>Add specific instructions</Text>
+                <TextInput
+                  style={styles.multilineInput}
+                  multiline
+                  numberOfLines={4}
+                  placeholder="Example: 'Available on weekdays, non-smoker, comfortable with pets...'"
+                  placeholderTextColor="#999"
+                  value={instructions}
+                  onChangeText={setInstructions}
+                />
+
+                <Text style={styles.inputGroupLabel}>YOUR DAILY RATE</Text>
+                <View style={styles.offerInputWrapper}>
+                  <Text style={styles.currencyPrefix}>₱</Text>
                   <TextInput
-                    style={styles.multilineInput}
-                    multiline
-                    numberOfLines={4}
-                    placeholder="e.g. 'Available weekdays, non-smoker...'"
-                    placeholderTextColor="#999"
-                    value={aboutNotes}
-                    onChangeText={setAboutNotes}
+                    style={styles.offerInput}
+                    value={offerAmount}
+                    onChangeText={setOfferAmount}
+                    keyboardType="numeric"
                   />
                 </View>
-              </ScrollView>
+
+                <View style={styles.recommendBox}>
+                  <Text style={styles.recommendTitle}>
+                    Recommended range for {selectedServices.length > 0 ? (services.find(x => x.id === selectedServices[0])?.label || selectedServices[0]) : 'Home Service'}: <Text style={{ fontWeight: '800' }}>₱ 400 - ₱ 700 / day</Text>
+                  </Text>
+                  <Text style={styles.recommendSub}>
+                    Based on market rates for domestic service in your area.
+                  </Text>
+                </View>
+              </View>
             )}
 
             {/* STEP 4 */}
@@ -481,7 +557,11 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
                 <View style={styles.summaryCard}>
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Service</Text>
-                    <Text style={styles.summaryValue}>{selectedService}</Text>
+                    <Text style={[styles.summaryValue, { flex: 1, textAlign: 'right', marginLeft: 16 }]}>
+                      {selectedServices.length > 0 
+                        ? selectedServices.map(s => services.find(x => x.id === s)?.label || s).join(', ')
+                        : 'None'}
+                    </Text>
                   </View>
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Type</Text>
@@ -490,30 +570,32 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
                     </Text>
                   </View>
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Rate</Text>
-                    <Text style={[styles.summaryValue, { color: '#D97706', fontWeight: '800' }]}>
-                      ₱{dailyRate} / day
-                    </Text>
-                  </View>
-                  <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Date</Text>
                     <Text style={styles.summaryValue}>{formatSelectedDate(selectedDate)}</Text>
                   </View>
                   <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Rate</Text>
+                    <Text style={[styles.summaryValue, { color: '#D97706', fontWeight: '800' }]}>
+                      ₱{offerAmount} / day
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Time</Text>
-                    <Text style={styles.summaryValue}>{startTime} - {endTime}</Text>
+                    <Text style={styles.summaryValue}>
+                      {selectedTime === 'morning' ? '8:00 AM - 12:00 PM' : selectedTime === 'afternoon' ? '12:00 PM - 5:00 PM' : '5:00 PM - 9:00 PM'}
+                    </Text>
                   </View>
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Location</Text>
                     <Text style={[styles.summaryValue, { textAlign: 'right', flex: 1, marginLeft: 20 }]}>
-                      Zone 13 Puli Carmen
+                      {address || 'Not specified'}
                     </Text>
                   </View>
                 </View>
 
                 <View style={styles.visibleNoticeBox}>
                   <Text style={styles.visibleNoticeText}>
-                    Your listing will be visible to verified homeowners once submitted.
+                    Your listing will be visible to verified Homeowners once submitted.
                   </Text>
                 </View>
 
@@ -532,7 +614,7 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
             )}
           </View>
 
-          {/* Fixed Bottom Buttons Area */}
+          {/* Fixed Bottom Buttons Area (Same Position & Size across all 4 steps!) */}
           <View style={styles.bottomButtonsContainer}>
             <Pressable
               style={({ pressed }) => [styles.nextButton, pressed && styles.btnPressed]}
@@ -540,7 +622,7 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
               disabled={isPosting}
             >
               <Text style={styles.nextButtonText}>
-                {isPosting ? 'Posting...' : step === 4 ? 'Post →' : 'Next →'}
+                {isPosting ? 'Posting...' : step === 4 ? 'Post' : 'Next'}
               </Text>
             </Pressable>
 
@@ -549,7 +631,7 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
               onPress={handleBack}
               disabled={isPosting}
             >
-              <Text style={styles.backButtonText}>← Back</Text>
+              <Text style={styles.backButtonText}>Back</Text>
             </Pressable>
           </View>
         </View>
@@ -613,7 +695,7 @@ const styles = StyleSheet.create({
   },
   titleBlock: {
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 16,
   },
   mainTitle: {
     fontSize: 24,
@@ -675,13 +757,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   // STEP 2 STYLES
-  step2Container: {
-    paddingBottom: 10,
-  },
+  step2Container: {},
   typeToggleRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 12,
+    marginBottom: 14,
   },
   typeCard: {
     flex: 1,
@@ -717,56 +797,11 @@ const styles = StyleSheet.create({
     color: '#888',
     lineHeight: 12,
   },
-  rateInputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    height: 44,
-    paddingHorizontal: 14,
-    borderWidth: 1.5,
-    borderColor: '#FFB43B',
-    marginBottom: 4,
-  },
-  currencyPrefix: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#D97706',
-    marginRight: 6,
-  },
-  rateInput: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#D97706',
-  },
-  rateUnitText: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
-  },
-  inputSubtext: {
-    fontSize: 10,
-    color: '#888',
-    marginBottom: 8,
-  },
-  marketBox: {
-    backgroundColor: '#E0F2F1',
-    borderRadius: 10,
-    padding: 10,
-    borderLeftWidth: 3,
-    borderLeftColor: '#00897B',
-    marginBottom: 12,
-  },
-  marketText: {
-    fontSize: 10,
-    color: '#004D40',
-  },
   calendarCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 12,
-    marginBottom: 12,
+    marginBottom: 14,
     borderWidth: 1,
     borderColor: '#EFEFEF',
   },
@@ -827,38 +862,41 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontWeight: '700',
   },
-  timeSelectRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginTop: 6,
-  },
-  timeBox: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    height: 38,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  timeText: {
+  sectionLabel: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 8,
   },
-  toText: {
+  timeSlotRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  timeSlotCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#EFEFEF',
+  },
+  timeSlotActive: {
+    borderColor: '#FFB43B',
+    backgroundColor: '#FFFBF5',
+  },
+  timeSlotTitle: {
     fontSize: 11,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginTop: 2,
+  },
+  timeSlotSub: {
+    fontSize: 8,
     color: '#888',
   },
   // STEP 3 STYLES
-  step3Container: {
-    paddingBottom: 10,
-  },
+  step3Container: {},
   inputGroupLabel: {
     fontSize: 10,
     fontWeight: '800',
@@ -884,38 +922,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#1A1A1A',
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  scopeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 12,
-  },
-  scopeItem: {
-    width: '50%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  scopeCheckbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: '#888',
-    marginRight: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scopeCheckboxActive: {
-    backgroundColor: '#FFB43B',
-    borderColor: '#FFB43B',
-  },
-  scopeLabel: {
-    fontSize: 12,
-    color: '#333',
-    fontWeight: '500',
+    marginBottom: 6,
   },
   multilineInput: {
     backgroundColor: '#FFFFFF',
@@ -930,12 +937,44 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     marginBottom: 12,
   },
-  sectionLabel: {
-    fontSize: 12,
+  offerInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    height: 44,
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    borderColor: '#1A1A1A',
+    marginBottom: 12,
+  },
+  currencyPrefix: {
+    fontSize: 14,
     fontWeight: '700',
     color: '#1A1A1A',
-    marginBottom: 6,
-    marginTop: 6,
+    marginRight: 8,
+  },
+  offerInput: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  recommendBox: {
+    backgroundColor: '#E0F7FA',
+    borderRadius: 10,
+    padding: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#00ACC1',
+  },
+  recommendTitle: {
+    fontSize: 10,
+    color: '#006064',
+  },
+  recommendSub: {
+    fontSize: 9,
+    color: '#00838F',
+    marginTop: 2,
   },
   // STEP 4 STYLES
   step4Container: {},

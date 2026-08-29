@@ -8,6 +8,7 @@ type UserData = {
   lastName: string;
   profileLink?: string | null;
   accountType?: string;
+  userAbout?: string;
 };
 
 type UserContextType = {

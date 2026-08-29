@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, Image, ScrollView, Pressable, Alert } from 'react-native';
+import { StyleSheet, Text, View, Image, ScrollView, Pressable, Alert, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useLanguage, type Language } from '../../context/LanguageContext';
 import { useUser } from '../../context/UserContext';
 import { fetchReceivedReviews, fetchReviewSummary, ReviewItem, ReviewSummaryData } from '../../api/reviewApi';
+import { fetchUserAbout, updateUserAbout } from '../../api/accountApi';
 
 const logoSource = require('../../../assets/serbisure-logo.png');
 
@@ -20,13 +21,19 @@ type ProfileScreenProps = Readonly<{
 export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar, onBack, onLogout }: ProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const { language, setLanguage, t } = useLanguage();
-  const { getFullName, getFirstNameOnly, user } = useUser();
+  const { getFullName, getFirstNameOnly, user, updateUser } = useUser();
   const [currentView, setCurrentView] = useState<'main' | 'personal_info'>(initialView);
   const [isLanguageExpanded, setIsLanguageExpanded] = useState(false);
   const [localAvatar, setLocalAvatar] = useState<string | null>(avatarUri || null);
 
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [summary, setSummary] = useState<ReviewSummaryData | null>(null);
+
+  const [bio, setBio] = useState<string>(user.userAbout || '');
+  const [isLoadingBio, setIsLoadingBio] = useState(false);
+  const [isEditingBio, setIsEditingBio] = useState(false);
+  const [editBioText, setEditBioText] = useState('');
+  const [isSavingBio, setIsSavingBio] = useState(false);
 
   React.useEffect(() => {
     if (avatarUri) {
@@ -42,6 +49,15 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
 
   React.useEffect(() => {
     if (user.token) {
+      setIsLoadingBio(true);
+      fetchUserAbout(user.token)
+        .then((about) => {
+          setBio(about);
+          updateUser({ userAbout: about });
+        })
+        .catch((err) => console.warn('[HomeownerProfile] fetch bio error:', err))
+        .finally(() => setIsLoadingBio(false));
+
       fetchReceivedReviews(user.token)
         .then((items) => {
           if (items && items.length > 0) {
@@ -169,10 +185,42 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
 
             {/* About Section */}
             <View style={styles.aboutSection}>
-              <Text style={styles.sectionTitle}>{t.aboutTitle} {getFirstNameOnly()}</Text>
-              <Text style={styles.aboutText}>
-                I'm a homeowner in Cagayan de Oro with two kids and a pet cat. I'm looking for a reliable nanny who can help care for my children, assist with daily routines, and be comfortable around pets while keeping our home safe and organized.
-              </Text>
+              <View style={styles.aboutHeaderRow}>
+                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>{t.aboutTitle} Homeowner</Text>
+                {bio && bio !== 'No Bio' && bio.trim() !== '' ? (
+                  <Pressable
+                    style={styles.editBioBtn}
+                    onPress={() => {
+                      setEditBioText(bio);
+                      setIsEditingBio(true);
+                    }}
+                  >
+                    <Ionicons name="pencil" size={13} color="#FFB43B" />
+                    <Text style={styles.editBioBtnText}>Edit</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+
+              {!bio || bio === 'No Bio' || bio.trim() === '' ? (
+                <Pressable
+                  style={styles.emptyBioContainer}
+                  onPress={() => {
+                    setEditBioText('');
+                    setIsEditingBio(true);
+                  }}
+                >
+                  <View style={styles.emptyBioIconCircle}>
+                    <Ionicons name="create-outline" size={18} color="#FFB43B" />
+                  </View>
+                  <View style={{ marginLeft: 12, flex: 1 }}>
+                    <Text style={styles.emptyBioTitle}>Add your bio</Text>
+                    <Text style={styles.emptyBioSubtitle}>Tell workers about your household, preferences, and requirements...</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#BDBDBD" />
+                </Pressable>
+              ) : (
+                <Text style={styles.aboutText}>{bio}</Text>
+              )}
             </View>
 
             {/* Reviews Section */}
@@ -340,6 +388,88 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
           </React.Fragment>
         )}
       </ScrollView>
+
+      {/* Edit Bio Modal */}
+      <Modal
+        visible={isEditingBio}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isSavingBio) setIsEditingBio(false);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit About Me</Text>
+              <Pressable
+                disabled={isSavingBio}
+                onPress={() => setIsEditingBio(false)}
+                hitSlop={8}
+              >
+                <Ionicons name="close" size={22} color="#777" />
+              </Pressable>
+            </View>
+
+            <Text style={styles.modalSubtitle}>
+              Write a short bio describing your household, preferences, or what you're looking for in a Kasambahay (up to 500 characters).
+            </Text>
+
+            <TextInput
+              style={styles.bioTextInput}
+              multiline
+              maxLength={500}
+              placeholder="e.g. I am a homeowner looking for a reliable, honest helper who can assist with daily housekeeping..."
+              placeholderTextColor="#999"
+              value={editBioText}
+              onChangeText={setEditBioText}
+              textAlignVertical="top"
+            />
+
+            <View style={styles.charCountRow}>
+              <Text style={styles.charCountText}>{editBioText.length}/500</Text>
+            </View>
+
+            <View style={styles.modalActionButtons}>
+              <Pressable
+                style={styles.cancelModalBtn}
+                disabled={isSavingBio}
+                onPress={() => setIsEditingBio(false)}
+              >
+                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.saveModalBtn, isSavingBio && { opacity: 0.7 }]}
+                disabled={isSavingBio}
+                onPress={async () => {
+                  if (!user.token) {
+                    Alert.alert('Error', 'You must be logged in to update your bio.');
+                    return;
+                  }
+                  setIsSavingBio(true);
+                  try {
+                    const updated = await updateUserAbout(user.token, editBioText.trim());
+                    setBio(updated);
+                    updateUser({ userAbout: updated });
+                    setIsEditingBio(false);
+                  } catch (err: any) {
+                    Alert.alert('Unable to Save Bio', err.message || 'Failed to update bio.');
+                  } finally {
+                    setIsSavingBio(false);
+                  }
+                }}
+              >
+                {isSavingBio ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={styles.saveModalBtnText}>Save</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -636,6 +766,57 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     marginTop: 30,
   },
+  aboutHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  editBioBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF7ED',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFE2B8',
+  },
+  editBioBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFB43B',
+    marginLeft: 4,
+  },
+  emptyBioContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFDF9',
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#FFE8C8',
+    borderStyle: 'dashed',
+    marginTop: 4,
+  },
+  emptyBioIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF2DE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyBioTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  emptyBioSubtitle: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 2,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -646,6 +827,95 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     lineHeight: 22,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#1A1A1A',
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: '#777',
+    lineHeight: 17,
+    marginBottom: 14,
+  },
+  bioTextInput: {
+    minHeight: 110,
+    maxHeight: 180,
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 13,
+    color: '#333',
+    backgroundColor: '#FAFAFA',
+  },
+  charCountRow: {
+    alignItems: 'flex-end',
+    marginTop: 6,
+    marginBottom: 16,
+  },
+  charCountText: {
+    fontSize: 11,
+    color: '#999',
+    fontWeight: '600',
+  },
+  modalActionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  cancelModalBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#F3F3F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelModalBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#555',
+  },
+  saveModalBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#FFB43B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 80,
+  },
+  saveModalBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFF',
   },
   reviewsSection: {
     paddingHorizontal: 24,
