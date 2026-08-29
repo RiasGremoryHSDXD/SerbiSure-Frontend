@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useLanguage, type Language } from '../../context/LanguageContext';
 import { useUser } from '../../context/UserContext';
+import { fetchReceivedReviews, fetchReviewSummary, ReviewItem, ReviewSummaryData } from '../../api/reviewApi';
 
 const logoSource = require('../../../assets/serbisure-logo.png');
 
@@ -24,6 +25,9 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
   const [isLanguageExpanded, setIsLanguageExpanded] = useState(false);
   const [localAvatar, setLocalAvatar] = useState<string | null>(avatarUri || null);
 
+  const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [summary, setSummary] = useState<ReviewSummaryData | null>(null);
+
   React.useEffect(() => {
     if (avatarUri) {
       setLocalAvatar(avatarUri);
@@ -35,6 +39,31 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
       setCurrentView(initialView);
     }
   }, [initialView]);
+
+  React.useEffect(() => {
+    if (user.token) {
+      fetchReceivedReviews(user.token)
+        .then((items) => {
+          if (items && items.length > 0) {
+            setReviews(items);
+          }
+        })
+        .catch((err) => console.warn('[ProfileScreen] Received reviews error:', err));
+
+      if (user.id) {
+        fetchReviewSummary(user.token, user.id)
+          .then((sum) => {
+            if (sum) setSummary(sum);
+          })
+          .catch((err) => console.warn('[ProfileScreen] Review summary error:', err));
+      }
+    }
+  }, [user.token, user.id]);
+
+  const positivePercentage =
+    summary && summary.total_reviews > 0
+      ? Math.round((summary.sentiment_breakdown.Positive / summary.total_reviews) * 100)
+      : 86;
 
   const handlePickImage = async () => {
     try {
@@ -85,7 +114,7 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
 
         {/* Header Row (Scrolls with content) */}
         <View style={[styles.headerRow, { marginTop: 10, marginBottom: 16 }]}>
-          <Pressable onPress={() => currentView === 'personal_info' ? setCurrentView('main') : onBack?.()}>
+          <Pressable onPress={() => (currentView === 'personal_info' ? setCurrentView('main') : onBack?.())}>
             <Ionicons
               name="arrow-back"
               size={24}
@@ -125,9 +154,9 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
               <View style={styles.sentimentRow}>
                 <Text style={styles.sentimentLabel}>{t.workerSentiment}</Text>
                 <View style={styles.sentimentBarBg}>
-                  <View style={styles.sentimentBarFill} />
+                  <View style={[styles.sentimentBarFill, { width: `${Math.min(100, Math.max(10, positivePercentage))}%` }]} />
                 </View>
-                <Text style={styles.sentimentScore}>86% {t.positive}</Text>
+                <Text style={styles.sentimentScore}>{positivePercentage}% {t.positive}</Text>
               </View>
 
               <View style={styles.tagsContainer}>
@@ -150,23 +179,51 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
             <View style={styles.reviewsSection}>
               <View style={styles.reviewsHeader}>
                 <Text style={[styles.sectionTitle, { flex: 1, marginRight: 12, marginBottom: 0 }]} numberOfLines={1} adjustsFontSizeToFit>{t.recentReviews}</Text>
-                <Text style={[styles.viewAllText, { flexShrink: 0 }]}>{t.viewAll} 3</Text>
+                <Text style={[styles.viewAllText, { flexShrink: 0 }]}>{t.viewAll} {summary?.total_reviews ?? (reviews.length || 3)}</Text>
               </View>
 
-              <View style={styles.reviewCard}>
-                <View style={styles.reviewCardHeader}>
-                  <View style={styles.starsRow}>
-                    {[1, 2, 3, 4, 5].map(i => <Ionicons key={i} name="star" size={14} color="#FFB43B" style={{ marginRight: 2 }} />)}
+              {reviews.length > 0 ? (
+                reviews.slice(0, 3).map((r) => (
+                  <View key={r.review_id} style={[styles.reviewCard, { marginBottom: 12 }]}>
+                    <View style={styles.reviewCardHeader}>
+                      <View style={styles.starsRow}>
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <Ionicons
+                            key={i}
+                            name={i <= r.rating ? 'star' : 'star-outline'}
+                            size={14}
+                            color="#FFB43B"
+                            style={{ marginRight: 2 }}
+                          />
+                        ))}
+                      </View>
+                      <View style={styles.positiveBadge}>
+                        <Text style={styles.positiveBadgeText}>{r.nlp_sentiment || 'Positive'}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.reviewText}>"{r.unstructured_feedback}"</Text>
+                    <Text style={styles.reviewAuthor}>
+                      — {r.reviewer_name || 'Verified User'}
+                      {r.createdAt ? `, ${new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : ''}
+                    </Text>
                   </View>
-                  <View style={styles.positiveBadge}>
-                    <Text style={styles.positiveBadgeText}>{t.positive}</Text>
+                ))
+              ) : (
+                <View style={styles.reviewCard}>
+                  <View style={styles.reviewCardHeader}>
+                    <View style={styles.starsRow}>
+                      {[1, 2, 3, 4, 5].map(i => <Ionicons key={i} name="star" size={14} color="#FFB43B" style={{ marginRight: 2 }} />)}
+                    </View>
+                    <View style={styles.positiveBadge}>
+                      <Text style={styles.positiveBadgeText}>{t.positive}</Text>
+                    </View>
                   </View>
+                  <Text style={styles.reviewText}>
+                    "The homeowner is kind and supportive. As an employer, they are respectful, organized, and clear with instructions. Working in their home with their two kids and pet has been a positive experience, and they create a safe and comfortable environment for staff. They are highly recommended as an employer."
+                  </Text>
+                  <Text style={styles.reviewAuthor}>— Clara A., D., Oct 2026</Text>
                 </View>
-                <Text style={styles.reviewText}>
-                  "The homeowner is kind and supportive. As an employer, they are respectful, organized, and clear with instructions. Working in their home with their two kids and pet has been a positive experience, and they create a safe and comfortable environment for staff. They are highly recommended as an employer."
-                </Text>
-                <Text style={styles.reviewAuthor}>— Clara A., D., Oct 2026</Text>
-              </View>
+              )}
             </View>
 
             {/* Bottom padding for tab bar */}

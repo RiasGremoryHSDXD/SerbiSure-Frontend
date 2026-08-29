@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useLanguage, type Language } from '../../context/LanguageContext';
 import { useUser } from '../../context/UserContext';
+import { fetchReceivedReviews, fetchReviewSummary, ReviewItem, ReviewSummaryData } from '../../api/reviewApi';
 
 const logoSource = require('../../../assets/serbisure-logo.png');
 
@@ -23,11 +24,14 @@ export function ProfileScreen({
 }) {
   const insets = useSafeAreaInsets();
   const { language, setLanguage, t } = useLanguage();
-  const { getFullName, getFirstNameOnly } = useUser();
+  const { getFullName, getFirstNameOnly, user } = useUser();
   const [currentView, setCurrentView] = useState<'main' | 'personal_info'>(initialView);
   const [isOnJob, setIsOnJob] = useState(false);
   const [isLanguageExpanded, setIsLanguageExpanded] = useState(false);
   const [localAvatar, setLocalAvatar] = useState<string | null>(avatarUri || null);
+
+  const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [summary, setSummary] = useState<ReviewSummaryData | null>(null);
 
   React.useEffect(() => {
     if (avatarUri) {
@@ -40,6 +44,31 @@ export function ProfileScreen({
       setCurrentView(initialView);
     }
   }, [initialView]);
+
+  React.useEffect(() => {
+    if (user.token) {
+      fetchReceivedReviews(user.token)
+        .then((items) => {
+          if (items && items.length > 0) {
+            setReviews(items);
+          }
+        })
+        .catch((err) => console.warn('[KasambahayProfile] Received reviews error:', err));
+
+      if (user.id) {
+        fetchReviewSummary(user.token, user.id)
+          .then((sum) => {
+            if (sum) setSummary(sum);
+          })
+          .catch((err) => console.warn('[KasambahayProfile] Review summary error:', err));
+      }
+    }
+  }, [user.token, user.id]);
+
+  const positivePercentage =
+    summary && summary.total_reviews > 0
+      ? Math.round((summary.sentiment_breakdown.Positive / summary.total_reviews) * 100)
+      : 86;
 
   const handlePickImage = async () => {
     try {
@@ -118,7 +147,7 @@ export function ProfileScreen({
               <View style={styles.personalNameRow}>
                 <Text style={styles.personalName}>{getFullName()}</Text>
               </View>
-              <Text style={styles.personalRole}>Housekeeper & Cook</Text>
+              <Text style={styles.personalRole}>{user.accountType || 'Housekeeper & Cook'}</Text>
 
               <View style={styles.locationRow}>
                 <Ionicons name="location-outline" size={14} color="#555" />
@@ -130,9 +159,9 @@ export function ProfileScreen({
               <View style={styles.sentimentRow}>
                 <Text style={styles.sentimentLabel}>{t.clientSentiment}</Text>
                 <View style={styles.sentimentBarBg}>
-                  <View style={styles.sentimentBarFill} />
+                  <View style={[styles.sentimentBarFill, { width: `${Math.min(100, Math.max(10, positivePercentage))}%` }]} />
                 </View>
-                <Text style={styles.sentimentScore}>86% {t.positive}</Text>
+                <Text style={styles.sentimentScore}>{positivePercentage}% {t.positive}</Text>
               </View>
 
               <View style={styles.tagsContainer}>
@@ -148,7 +177,7 @@ export function ProfileScreen({
             <View style={styles.aboutSection}>
               <Text style={styles.sectionTitle}>{t.aboutTitle} Kasambahay</Text>
               <Text style={styles.aboutText}>
-                Hi, I'm Michelangelo, a verified housekeeper and cook based in Cagayan de Oro. I provide reliable, top-rated home care services, specializing in house cleaning, meal prep, childcare, and pet care to keep your household running smoothly and efficiently.
+                Hi, I'm {getFirstNameOnly()}, a verified housekeeper and cook based in Cagayan de Oro. I provide reliable, top-rated home care services, specializing in house cleaning, meal prep, childcare, and pet care to keep your household running smoothly and efficiently.
               </Text>
             </View>
 
@@ -156,25 +185,53 @@ export function ProfileScreen({
             <View style={styles.reviewsSection}>
               <View style={styles.reviewsHeader}>
                 <Text style={[styles.sectionTitle, { flex: 1, marginRight: 12, marginBottom: 0 }]} numberOfLines={1} adjustsFontSizeToFit>{t.recentReviews}</Text>
-                <Text style={[styles.viewAllText, { flexShrink: 0 }]}>{t.viewAll} 32</Text>
+                <Text style={[styles.viewAllText, { flexShrink: 0 }]}>{t.viewAll} {summary?.total_reviews ?? (reviews.length || 32)}</Text>
               </View>
 
-              <View style={styles.reviewCard}>
-                <View style={styles.reviewCardHeader}>
-                  <View style={styles.starsRow}>
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <Ionicons key={i} name="star" size={14} color="#FFB43B" style={{ marginRight: 2 }} />
-                    ))}
+              {reviews.length > 0 ? (
+                reviews.slice(0, 3).map((r) => (
+                  <View key={r.review_id} style={[styles.reviewCard, { marginBottom: 12 }]}>
+                    <View style={styles.reviewCardHeader}>
+                      <View style={styles.starsRow}>
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <Ionicons
+                            key={i}
+                            name={i <= r.rating ? 'star' : 'star-outline'}
+                            size={14}
+                            color="#FFB43B"
+                            style={{ marginRight: 2 }}
+                          />
+                        ))}
+                      </View>
+                      <View style={styles.positiveBadge}>
+                        <Text style={styles.positiveBadgeText}>{r.nlp_sentiment || 'Positive'}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.reviewText}>"{r.unstructured_feedback}"</Text>
+                    <Text style={styles.reviewAuthor}>
+                      — {r.reviewer_name || 'Verified Client'}
+                      {r.createdAt ? `, ${new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : ''}
+                    </Text>
                   </View>
-                  <View style={styles.positiveBadge}>
-                    <Text style={styles.positiveBadgeText}>{t.positive}</Text>
+                ))
+              ) : (
+                <View style={styles.reviewCard}>
+                  <View style={styles.reviewCardHeader}>
+                    <View style={styles.starsRow}>
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <Ionicons key={i} name="star" size={14} color="#FFB43B" style={{ marginRight: 2 }} />
+                      ))}
+                    </View>
+                    <View style={styles.positiveBadge}>
+                      <Text style={styles.positiveBadgeText}>{t.positive}</Text>
+                    </View>
                   </View>
+                  <Text style={styles.reviewText}>
+                    "Daven is an amazing cook! His meal prep has been an absolute lifesaver for our busy workweeks. He is organized, hygienic, and cooks delicious, healthy meals exactly to our liking. If you need someone to take over the kitchen and save you hours of cooking time, he is highly recommended!"
+                  </Text>
+                  <Text style={styles.reviewAuthor}>— Maria A., C., Oct 2025</Text>
                 </View>
-                <Text style={styles.reviewText}>
-                  "Daven is an amazing cook! His meal prep has been an absolute lifesaver for our busy workweeks. He is organized, hygienic, and cooks delicious, healthy meals exactly to our liking. If you need someone to take over the kitchen and save you hours of cooking time, he is highly recommended!"
-                </Text>
-                <Text style={styles.reviewAuthor}>— Maria A., C., Oct 2025</Text>
-              </View>
+              )}
             </View>
 
             {/* Bottom padding */}
