@@ -606,7 +606,7 @@ export function PostJobScreen({ visible, onClose, role = 'Homeowner', token }: P
               disabled={isPosting}
             >
               <Text style={styles.nextButtonText}>
-                {isPosting ? 'Posting...' : step === 4 ? 'Post →' : 'Next →'}
+                {isPosting ? 'Posting...' : step === 4 ? 'Post' : 'Next'}
               </Text>
             </Pressable>
 
@@ -615,7 +615,7 @@ export function PostJobScreen({ visible, onClose, role = 'Homeowner', token }: P
               onPress={handleBack}
               disabled={isPosting}
             >
-              <Text style={styles.backButtonText}>← Back</Text>
+              <Text style={styles.backButtonText}>Back</Text>
             </Pressable>
           </View>
         </View>
