@@ -76,7 +76,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
 
   const handleRegister = async () => {
     const cleanDigits = rawPhone.replace(/\D/g, '').replace(/^0+/, '');
-    const contactNumber = `63${cleanDigits}`;
+    const contactNumber = `+63${cleanDigits}`;
 
     if (!firstName.trim()) {
       Alert.alert("Missing Field", "Please enter your First Name.");
