@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 type UserData = {
+  id?: string;
+  token?: string | null;
   firstName: string;
   middleName: string;
   lastName: string;
@@ -17,6 +19,8 @@ type UserContextType = {
 };
 
 const defaultUser: UserData = {
+  id: '',
+  token: null,
   firstName: 'Daven Austhine',
   middleName: 'Santos',
   lastName: 'Sumagang',
@@ -64,6 +68,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
 
       if (decoded) {
         setUser({
+          id: decoded.user_id || decoded.id || decoded.sub || '',
+          token: token,
           firstName: decoded.first_name || '',
           middleName: decoded.middle_name || '',
           lastName: decoded.last_name || '',
@@ -72,11 +78,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
         })
       }
       else {
-        setUser({ firstName: '', middleName: '', lastName: '', profileLink: null, accountType: '' })
+        setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', profileLink: null, accountType: '' })
       }
     }
     else {
-      setUser({ firstName: '', middleName: '', lastName: '', accountType: '' })
+      setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', accountType: '' })
     }
   }, [token])
 
