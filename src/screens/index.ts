@@ -21,3 +21,8 @@ export { HomeScreen as KasambahayHomeScreen } from './kasambahay/HomeScreen';
 export { JobsScreen as KasambahayJobsScreen } from './kasambahay/JobsScreen';
 export { ChatsScreen as KasambahayChatsScreen } from './kasambahay/ChatsScreen';
 export { ProfileScreen as KasambahayProfileScreen } from './kasambahay/ProfileScreen';
+
+// Common Chat & Profile Modals
+export { ChatDetailScreen } from './ChatDetailScreen';
+export { UserProfileModal } from './UserProfileModal';
+
