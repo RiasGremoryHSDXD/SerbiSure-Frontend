@@ -11,6 +11,7 @@ type UserData = {
   userAbout?: string;
   resumeUrl?: string | null;
   resumeUploadedAt?: string | null;
+  verificationStatus?: string;
 };
 
 type UserContextType = {
