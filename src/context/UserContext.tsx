@@ -9,6 +9,8 @@ type UserData = {
   profileLink?: string | null;
   accountType?: string;
   userAbout?: string;
+  resumeUrl?: string | null;
+  resumeUploadedAt?: string | null;
 };
 
 type UserContextType = {

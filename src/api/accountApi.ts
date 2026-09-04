@@ -79,6 +79,7 @@ export interface PublicProfile {
   account_type: string;
   verification_status: string;
   profile_link: string | null;
+  resume_url?: string | null;
   user_about: string;
   user_tags: string[];
   city: string | null;
@@ -112,4 +113,93 @@ export async function fetchPublicProfile(token: string, userId: string): Promise
     throw error;
   }
 }
+
+export interface ResumeResponse {
+  resume_url: string | null;
+  resume_uploaded_at: string | null;
+}
+
+/**
+ * Fetch the authenticated Kasambahay's resume info.
+ * GET /api/v1/accounts/resume/
+ */
+export async function fetchKasambahayResume(token: string): Promise<ResumeResponse> {
+  try {
+    const res = await fetchWithTimeout(`${ACCOUNTS_BASE}/resume/`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson?.detail || `Failed to fetch resume (${res.status})`);
+    }
+
+    const data: ResumeResponse = await res.json();
+    return data;
+  } catch (error: any) {
+    console.warn('[accountApi] fetchKasambahayResume error:', error?.message || error);
+    throw error;
+  }
+}
+
+/**
+ * Upload or update the authenticated Kasambahay's PDF resume.
+ * PATCH /api/v1/accounts/resume/
+ */
+export async function uploadKasambahayResume(
+  token: string,
+  fileUri: string,
+  fileName?: string,
+  idempotencyKey?: string
+): Promise<ResumeResponse> {
+  try {
+    const formData = new FormData();
+    const name = fileName || fileUri.split('/').pop() || 'resume.pdf';
+
+    formData.append('resume_pdf', {
+      uri: fileUri,
+      name,
+      type: 'application/pdf',
+    } as any);
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+    };
+
+    if (idempotencyKey) {
+      headers['Idempotency-Key'] = idempotencyKey;
+    }
+
+    const res = await fetchWithTimeout(`${ACCOUNTS_BASE}/resume/`, {
+      method: 'PATCH',
+      headers,
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      if (res.status === 429) {
+        throw new Error(errJson?.detail || 'Daily upload limit reached (5 uploads/day). Please try again later.');
+      }
+      if (errJson?.resume_pdf) {
+        const fieldError = Array.isArray(errJson.resume_pdf)
+          ? errJson.resume_pdf.join(' ')
+          : errJson.resume_pdf;
+        throw new Error(fieldError);
+      }
+      throw new Error(errJson?.detail || errJson?.error || `Failed to upload resume (${res.status})`);
+    }
+
+    const data: ResumeResponse = await res.json();
+    return data;
+  } catch (error: any) {
+    console.warn('[accountApi] uploadKasambahayResume error:', error?.message || error);
+    throw error;
+  }
+}
+
 

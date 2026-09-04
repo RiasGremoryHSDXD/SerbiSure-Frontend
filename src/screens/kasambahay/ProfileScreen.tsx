@@ -1,12 +1,20 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, Image, ScrollView, Pressable, Switch, Alert, Modal, TextInput, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, Image, ScrollView, Pressable, Switch, Alert, Modal, TextInput, ActivityIndicator, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useLanguage, type Language } from '../../context/LanguageContext';
 import { useUser } from '../../context/UserContext';
 import { fetchReceivedReviews, fetchReviewSummary, ReviewItem, ReviewSummaryData } from '../../api/reviewApi';
-import { fetchUserAbout, updateUserAbout } from '../../api/accountApi';
+import { fetchUserAbout, updateUserAbout, fetchKasambahayResume, uploadKasambahayResume } from '../../api/accountApi';
+
+// Safely require expo-document-picker to avoid crashing if native module is not yet compiled in APK
+let DocumentPicker: typeof import('expo-document-picker') | null = null;
+try {
+  DocumentPicker = require('expo-document-picker');
+} catch {
+  DocumentPicker = null;
+}
 
 const logoSource = require('../../../assets/serbisure-logo.png');
 
@@ -40,6 +48,11 @@ export function ProfileScreen({
   const [editBioText, setEditBioText] = useState('');
   const [isSavingBio, setIsSavingBio] = useState(false);
 
+  const [resumeUrl, setResumeUrl] = useState<string | null>(user.resumeUrl || null);
+  const [resumeUploadedAt, setResumeUploadedAt] = useState<string | null>(user.resumeUploadedAt || null);
+  const [isLoadingResume, setIsLoadingResume] = useState(false);
+  const [isUploadingResume, setIsUploadingResume] = useState(false);
+
   React.useEffect(() => {
     if (avatarUri) {
       setLocalAvatar(avatarUri);
@@ -62,6 +75,18 @@ export function ProfileScreen({
         })
         .catch((err) => console.warn('[KasambahayProfile] fetch bio error:', err))
         .finally(() => setIsLoadingBio(false));
+
+      setIsLoadingResume(true);
+      fetchKasambahayResume(user.token)
+        .then((res) => {
+          if (res) {
+            setResumeUrl(res.resume_url);
+            setResumeUploadedAt(res.resume_uploaded_at);
+            updateUser({ resumeUrl: res.resume_url, resumeUploadedAt: res.resume_uploaded_at });
+          }
+        })
+        .catch((err) => console.warn('[KasambahayProfile] fetch resume error:', err))
+        .finally(() => setIsLoadingResume(false));
 
       fetchReceivedReviews(user.token)
         .then((items) => {
@@ -111,6 +136,75 @@ export function ProfileScreen({
     } catch (e) {
       console.log('Error picking profile picture:', e);
     }
+  };
+
+  const handlePickAndUploadResume = async () => {
+    if (!user.token) {
+      Alert.alert('Authentication Required', 'Please log in to upload your resume.');
+      return;
+    }
+
+    if (!DocumentPicker || typeof DocumentPicker.getDocumentAsync !== 'function') {
+      Alert.alert(
+        'Rebuild Required',
+        'ExpoDocumentPicker requires a new app build to link native code. Please run "npm run android:build" (or "npm run android") to install the updated APK on your device.'
+      );
+      return;
+    }
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const file = result.assets[0];
+      if (!file) {
+        return;
+      }
+      const fileName = file.name || 'resume.pdf';
+      if (!fileName.toLowerCase().endsWith('.pdf')) {
+        Alert.alert('Invalid File Type', 'Only PDF files are accepted.');
+        return;
+      }
+
+      if (file.size && file.size > 10 * 1024 * 1024) {
+        Alert.alert('File Too Large', 'Resume file must be under 10MB.');
+        return;
+      }
+
+      setIsUploadingResume(true);
+      const idempotencyKey = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+
+      const data = await uploadKasambahayResume(user.token, file.uri, fileName, idempotencyKey);
+      setResumeUrl(data.resume_url);
+      setResumeUploadedAt(data.resume_uploaded_at);
+      updateUser({ resumeUrl: data.resume_url, resumeUploadedAt: data.resume_uploaded_at });
+      Alert.alert('Success', 'Your resume was uploaded successfully!');
+    } catch (err: any) {
+      console.warn('[KasambahayProfile] upload resume error:', err);
+      Alert.alert('Upload Failed', err.message || 'Failed to upload resume.');
+    } finally {
+      setIsUploadingResume(false);
+    }
+  };
+
+  const handleViewResume = () => {
+    if (!resumeUrl) {
+      Alert.alert('No Resume', 'No resume has been uploaded yet.');
+      return;
+    }
+    Linking.openURL(resumeUrl).catch(() => {
+      Alert.alert('Preview Failed', 'Could not open resume in browser or PDF viewer.');
+    });
   };
 
   return (
@@ -187,6 +281,75 @@ export function ProfileScreen({
                 <View style={styles.pillTag}><Text style={styles.pillTagText}>Meal Prep</Text></View>
                 <View style={styles.pillTag}><Text style={styles.pillTagText}>Pet Friendly</Text></View>
               </View>
+            </View>
+
+            {/* Resume Section — Placed directly above "About Kasambahay" */}
+            <View style={styles.resumeSection}>
+              <View style={styles.resumeHeaderRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="document-text" size={17} color="#FFB43B" style={{ marginRight: 6 }} />
+                  <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Resume / CV (PDF)</Text>
+                </View>
+                {resumeUrl ? (
+                  <View style={styles.resumeStatusBadge}>
+                    <Ionicons name="checkmark-circle" size={13} color="#27AE60" />
+                    <Text style={styles.resumeStatusBadgeText}>Uploaded</Text>
+                  </View>
+                ) : (
+                  <View style={[styles.resumeStatusBadge, { backgroundColor: '#F0F0F0' }]}>
+                    <Text style={[styles.resumeStatusBadgeText, { color: '#888' }]}>Optional</Text>
+                  </View>
+                )}
+              </View>
+
+              {isLoadingResume ? (
+                <View style={styles.resumeLoadingBox}>
+                  <ActivityIndicator size="small" color="#FFB43B" />
+                  <Text style={styles.resumeLoadingText}>Loading resume status...</Text>
+                </View>
+              ) : isUploadingResume ? (
+                <View style={styles.resumeUploadingBox}>
+                  <ActivityIndicator size="small" color="#FFB43B" />
+                  <Text style={styles.resumeUploadingText}>Uploading resume to secure storage...</Text>
+                </View>
+              ) : resumeUrl ? (
+                <View style={styles.resumeCardUploaded}>
+                  <View style={styles.resumeIconBox}>
+                    <Ionicons name="document-text" size={24} color="#FFB43B" />
+                  </View>
+                  <View style={styles.resumeInfoCol}>
+                    <Text style={styles.resumeFileName} numberOfLines={1}>
+                      Kasambahay_Resume.pdf
+                    </Text>
+                    <Text style={styles.resumeDateText}>
+                      {resumeUploadedAt
+                        ? `Uploaded on ${new Date(resumeUploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                        : 'PDF Document attached'}
+                    </Text>
+                  </View>
+                  <View style={styles.resumeActionsRow}>
+                    <Pressable style={styles.resumeViewBtn} onPress={handleViewResume}>
+                      <Ionicons name="eye-outline" size={13} color="#333" />
+                      <Text style={styles.resumeViewBtnText}>View</Text>
+                    </Pressable>
+                    <Pressable style={styles.resumeReplaceBtn} onPress={handlePickAndUploadResume}>
+                      <Ionicons name="cloud-upload-outline" size={13} color="#FFB43B" />
+                      <Text style={styles.resumeReplaceBtnText}>Replace</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <Pressable style={styles.emptyResumeContainer} onPress={handlePickAndUploadResume}>
+                  <View style={styles.emptyResumeIconCircle}>
+                    <Ionicons name="document-attach-outline" size={20} color="#FFB43B" />
+                  </View>
+                  <View style={{ marginLeft: 12, flex: 1 }}>
+                    <Text style={styles.emptyResumeTitle}>Upload your resume</Text>
+                    <Text style={styles.emptyResumeSubtitle}>Submit your CV or bio document in PDF (max 10MB)</Text>
+                  </View>
+                  <Ionicons name="cloud-upload-outline" size={20} color="#FFB43B" />
+                </Pressable>
+              )}
             </View>
 
             {/* About Section */}
@@ -857,6 +1020,162 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 11,
     fontWeight: '700',
+  },
+  resumeSection: {
+    paddingHorizontal: 24,
+    marginTop: 20,
+  },
+  resumeHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  resumeStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F8F0',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  resumeStatusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#27AE60',
+    marginLeft: 3,
+  },
+  resumeLoadingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    backgroundColor: '#FFFDF9',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#FFE8C8',
+  },
+  resumeLoadingText: {
+    marginLeft: 10,
+    fontSize: 12,
+    color: '#888',
+    fontWeight: '500',
+  },
+  resumeUploadingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    backgroundColor: '#FFF8ED',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#FFE2B8',
+  },
+  resumeUploadingText: {
+    marginLeft: 10,
+    fontSize: 12,
+    color: '#FFB43B',
+    fontWeight: '600',
+  },
+  resumeCardUploaded: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFDF9',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FFE8C8',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  resumeIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#FFF2DE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  resumeInfoCol: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  resumeFileName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  resumeDateText: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 2,
+  },
+  resumeActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  resumeViewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F0F0',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  resumeViewBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#333',
+    marginLeft: 3,
+  },
+  resumeReplaceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF4E5',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FFE2B8',
+  },
+  resumeReplaceBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFB43B',
+    marginLeft: 3,
+  },
+  emptyResumeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFDF9',
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#FFE8C8',
+    borderStyle: 'dashed',
+    marginTop: 4,
+  },
+  emptyResumeIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF2DE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyResumeTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  emptyResumeSubtitle: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 2,
   },
   aboutSection: {
     paddingHorizontal: 24,
