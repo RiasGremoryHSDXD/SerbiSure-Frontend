@@ -8,6 +8,7 @@ import {
   Pressable,
   Modal,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -201,6 +202,25 @@ export function UserProfileModal({
               </View>
             ) : null}
           </View>
+
+          {/* Resume / CV Section (for Kasambahay) */}
+          {profile?.resume_url ? (
+            <View style={styles.sectionContainer}>
+              <View style={styles.resumeHeaderRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="document-text" size={17} color="#FFB43B" style={{ marginRight: 6 }} />
+                  <Text style={[styles.sectionHeading, { marginBottom: 0 }]}>Resume / CV</Text>
+                </View>
+                <Pressable
+                  style={styles.viewResumeBtn}
+                  onPress={() => profile.resume_url && Linking.openURL(profile.resume_url)}
+                >
+                  <Ionicons name="eye-outline" size={13} color="#333" style={{ marginRight: 4 }} />
+                  <Text style={styles.viewResumeBtnText}>View PDF</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
 
           {/* About / Bio Section */}
           <View style={styles.sectionContainer}>
@@ -631,5 +651,25 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  resumeHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  viewResumeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF4E5',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FFE2B8',
+  },
+  viewResumeBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#333',
   },
 });
