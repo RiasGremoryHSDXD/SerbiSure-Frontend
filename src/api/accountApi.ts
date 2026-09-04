@@ -70,3 +70,46 @@ export async function updateUserAbout(token: string, bio: string): Promise<strin
     throw error;
   }
 }
+
+export interface PublicProfile {
+  id: string;
+  first_name?: string;
+  last_name?: string;
+  full_name: string;
+  account_type: string;
+  verification_status: string;
+  profile_link: string | null;
+  user_about: string;
+  user_tags: string[];
+  city: string | null;
+  province: string | null;
+  date_joined: string;
+}
+
+/**
+ * Fetch the public profile of any user by their UUID.
+ * GET /api/v1/accounts/public-profile/<userId>/
+ */
+export async function fetchPublicProfile(token: string, userId: string): Promise<PublicProfile> {
+  try {
+    const res = await fetchWithTimeout(`${ACCOUNTS_BASE}/public-profile/${userId}/`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson?.detail || `Failed to fetch profile (${res.status})`);
+    }
+
+    const data: PublicProfile = await res.json();
+    return data;
+  } catch (error: any) {
+    console.warn('[accountApi] fetchPublicProfile error:', error?.message || error);
+    throw error;
+  }
+}
+

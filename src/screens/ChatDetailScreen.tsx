@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { BookingModal } from './BookingModal';
+import { UserProfileModal } from './UserProfileModal';
 
 import { useUser } from '../context/UserContext';
 import { fetchChatThread, sendChatMessage, markChatMessageRead } from '../api/chatApi';
@@ -141,6 +142,7 @@ export function ChatDetailScreen({
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
   const [reactingMessageId, setReactingMessageId] = useState<string | null>(null);
   const [bookingModalVisible, setBookingModalVisible] = useState(false);
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [bookingReadOnly, setBookingReadOnly] = useState(false);
   const [activeBookingMsgId, setActiveBookingMsgId] = useState<string | null>(null);
   const [activeBookingDetails, setActiveBookingDetails] = useState<any>(null);
@@ -426,18 +428,29 @@ export function ChatDetailScreen({
             <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
           </Pressable>
 
-          <View style={styles.headerInfo}>
+          <Pressable
+            style={styles.headerInfo}
+            onPress={() => {
+              if (partnerId) {
+                setProfileModalVisible(true);
+              }
+            }}
+            hitSlop={8}
+          >
             <View style={styles.avatarWrapper}>
               <Image source={{ uri: resolvedAvatar }} style={styles.headerAvatar} />
               {isOnline ? <View style={styles.onlineDot} /> : null}
             </View>
             <View style={styles.headerTextCol}>
-              <Text style={styles.contactName}>{contactName}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={styles.contactName}>{contactName}</Text>
+                <Ionicons name="chevron-forward" size={13} color="#8E8E93" />
+              </View>
               <Text style={styles.contactSub}>
                 {isOnline ? 'Online now' : 'Offline'} · {contactRole}
               </Text>
             </View>
-          </View>
+          </Pressable>
 
           <Pressable
             style={styles.bookingHeaderBtn}
@@ -528,7 +541,16 @@ export function ChatDetailScreen({
               if (item.sender === 'other') {
                 return (
                   <View key={item.id} style={styles.leftMessageRow}>
-                    <Image source={{ uri: item.avatar || contactAvatar }} style={styles.msgAvatar} />
+                    <Pressable
+                      onPress={() => {
+                        if (partnerId) {
+                          setProfileModalVisible(true);
+                        }
+                      }}
+                      hitSlop={6}
+                    >
+                      <Image source={{ uri: item.avatar || contactAvatar || resolvedAvatar }} style={styles.msgAvatar} />
+                    </Pressable>
                     <View style={styles.leftMessageCol}>
                       {reactingMessageId === item.id ? (
                         <SmoothReactionPill align="left" onSelect={handleSelectReaction} />
@@ -689,6 +711,17 @@ export function ChatDetailScreen({
             handleKasambahayConfirm(activeBookingMsgId);
           }
         }}
+      />
+
+      {/* Counterparty Public Profile Modal */}
+      <UserProfileModal
+        visible={profileModalVisible}
+        onClose={() => setProfileModalVisible(false)}
+        userId={partnerId}
+        token={effectiveToken}
+        prefilledName={contactName}
+        prefilledAvatar={resolvedAvatar}
+        prefilledRole={contactRole}
       />
     </Modal>
   );
