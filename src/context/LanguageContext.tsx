@@ -25,6 +25,8 @@ export interface Translations {
   aboutTitle: string;
   recentReviews: string;
   viewAll: string;
+  noReviewsYet: string;
+  noReviewsSubtitle: string;
   workerSentiment: string;
   clientSentiment: string;
   positive: string;
@@ -63,6 +65,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     aboutTitle: 'About',
     recentReviews: 'Recent Reviews',
     viewAll: 'View All',
+    noReviewsYet: 'No reviews yet',
+    noReviewsSubtitle: 'Reviews from completed bookings will appear here.',
     workerSentiment: 'Worker Sentiment',
     clientSentiment: 'Client Sentiment',
     positive: 'Positive',
@@ -97,6 +101,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     aboutTitle: 'Tungkol kay',
     recentReviews: 'Mga Huling Rebyu',
     viewAll: 'Ipakita Lahat',
+    noReviewsYet: 'Wala pang rebyu',
+    noReviewsSubtitle: 'Dito lalabas ang mga rebyu mula sa natapos na mga booking.',
     workerSentiment: 'Saloobin ng Manggagawa',
     clientSentiment: 'Saloobin ng Kliyente',
     positive: 'Positibo',
@@ -131,6 +137,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     aboutTitle: 'Tungkol kang',
     recentReviews: 'Mga Bag-ong Rebyu',
     viewAll: 'Ipakita Tanan',
+    noReviewsYet: 'Wala pay rebyu',
+    noReviewsSubtitle: 'Dinhi makita ang mga rebyu gikan sa nahuman nga mga booking.',
     workerSentiment: 'Saloobin sa Trabahante',
     clientSentiment: 'Saloobin sa Kliyente',
     positive: 'Positibo',

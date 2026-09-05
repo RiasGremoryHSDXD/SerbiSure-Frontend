@@ -7,6 +7,8 @@ import { useLanguage, type Language } from '../../context/LanguageContext';
 import { useUser } from '../../context/UserContext';
 import { fetchReceivedReviews, fetchReviewSummary, ReviewItem, ReviewSummaryData } from '../../api/reviewApi';
 import { fetchUserAbout, updateUserAbout, fetchKasambahayResume, uploadKasambahayResume } from '../../api/accountApi';
+import { fetchVerificationStatus, type VerificationStatusResponse } from '../../api/verificationApi';
+import { VerificationStatusModal } from '../VerificationStatusModal';
 
 // Safely require expo-document-picker to avoid crashing if native module is not yet compiled in APK
 let DocumentPicker: typeof import('expo-document-picker') | null = null;
@@ -53,6 +55,54 @@ export function ProfileScreen({
   const [isLoadingResume, setIsLoadingResume] = useState(false);
   const [isUploadingResume, setIsUploadingResume] = useState(false);
 
+  const [isVerificationModalVisible, setIsVerificationModalVisible] = useState(false);
+  const [verificationData, setVerificationData] = useState<VerificationStatusResponse | null>(null);
+  const [isLoadingVerification, setIsLoadingVerification] = useState(false);
+
+  const loadVerificationStatus = () => {
+    if (user.token) {
+      setIsLoadingVerification(true);
+      fetchVerificationStatus(user.token)
+        .then((data) => {
+          setVerificationData(data);
+          if (data) {
+            let derivedStatus = data.overall_status;
+            if (data.documents && data.documents.length > 0) {
+              const verifiedTypes = new Set(
+                data.documents.filter((d) => d.verification_status === 'Verified').map((d) => d.document_type)
+              );
+              if (verifiedTypes.has('nbi_clearance') && verifiedTypes.has('police_clearance')) {
+                derivedStatus = 'Verified';
+              }
+            }
+            if (derivedStatus) {
+              updateUser({ verificationStatus: derivedStatus });
+            }
+          }
+        })
+        .catch((err) => console.warn('[KasambahayProfile] verification status error:', err))
+        .finally(() => setIsLoadingVerification(false));
+    }
+  };
+
+  const effectiveVerificationStatus = React.useMemo(() => {
+    if (verificationData?.documents && verificationData.documents.length > 0) {
+      const verifiedTypes = new Set(
+        verificationData.documents
+          .filter((d) => d.verification_status === 'Verified')
+          .map((d) => d.document_type)
+      );
+      if (verifiedTypes.has('nbi_clearance') && verifiedTypes.has('police_clearance')) {
+        return 'Verified';
+      }
+      const docStatuses = new Set(verificationData.documents.map((d) => d.verification_status));
+      if (docStatuses.has('Rejected')) return 'Rejected';
+      if (docStatuses.has('Pending') || verifiedTypes.size > 0) return 'Pending';
+    }
+    return verificationData?.overall_status || user.verificationStatus || 'Unverified';
+  }, [verificationData, user.verificationStatus]);
+
+
   React.useEffect(() => {
     if (avatarUri) {
       setLocalAvatar(avatarUri);
@@ -90,9 +140,7 @@ export function ProfileScreen({
 
       fetchReceivedReviews(user.token)
         .then((items) => {
-          if (items && items.length > 0) {
-            setReviews(items);
-          }
+          setReviews(items || []);
         })
         .catch((err) => console.warn('[KasambahayProfile] Received reviews error:', err));
 
@@ -103,13 +151,18 @@ export function ProfileScreen({
           })
           .catch((err) => console.warn('[KasambahayProfile] Review summary error:', err));
       }
+
+      loadVerificationStatus();
     }
   }, [user.token, user.id]);
 
+  const totalReviews = summary?.total_reviews ?? reviews.length;
   const positivePercentage =
     summary && summary.total_reviews > 0
       ? Math.round((summary.sentiment_breakdown.Positive / summary.total_reviews) * 100)
-      : 86;
+      : reviews.length > 0
+      ? Math.round((reviews.filter((r) => r.nlp_sentiment === 'Positive').length / reviews.length) * 100)
+      : null;
 
   const handlePickImage = async () => {
     try {
@@ -256,6 +309,25 @@ export function ProfileScreen({
 
               <View style={styles.personalNameRow}>
                 <Text style={styles.personalName}>{getFullName()}</Text>
+                {verificationData?.overall_status === 'Verified' ? (
+                  <Ionicons name="shield-checkmark" size={17} color="#27AE60" style={{ marginLeft: 6 }} />
+                ) : verificationData?.overall_status === 'Pending' ? (
+                  <Pressable
+                    style={styles.pendingInlineBadge}
+                    onPress={() => setIsVerificationModalVisible(true)}
+                  >
+                    <Ionicons name="time" size={12} color="#D68910" />
+                    <Text style={styles.pendingInlineBadgeText}>Pending Review</Text>
+                  </Pressable>
+                ) : verificationData?.overall_status === 'Rejected' ? (
+                  <Pressable
+                    style={styles.rejectedInlineBadge}
+                    onPress={() => setIsVerificationModalVisible(true)}
+                  >
+                    <Ionicons name="alert-circle" size={12} color="#C0392B" />
+                    <Text style={styles.rejectedInlineBadgeText}>Action Needed</Text>
+                  </Pressable>
+                ) : null}
               </View>
               <Text style={styles.personalRole}>{user.accountType || 'Housekeeper & Cook'}</Text>
 
@@ -269,9 +341,24 @@ export function ProfileScreen({
               <View style={styles.sentimentRow}>
                 <Text style={styles.sentimentLabel}>{t.clientSentiment}</Text>
                 <View style={styles.sentimentBarBg}>
-                  <View style={[styles.sentimentBarFill, { width: `${Math.min(100, Math.max(10, positivePercentage))}%` }]} />
+                  <View
+                    style={[
+                      styles.sentimentBarFill,
+                      {
+                        width: positivePercentage !== null ? `${Math.min(100, Math.max(10, positivePercentage))}%` : '0%',
+                        backgroundColor: positivePercentage !== null ? '#4CAF50' : '#E0E0E0',
+                      },
+                    ]}
+                  />
                 </View>
-                <Text style={styles.sentimentScore}>{positivePercentage}% {t.positive}</Text>
+                <Text
+                  style={[
+                    styles.sentimentScore,
+                    positivePercentage === null && { color: '#9CA3AF', fontSize: 11, fontWeight: '500' },
+                  ]}
+                >
+                  {positivePercentage !== null ? `${positivePercentage}% ${t.positive}` : t.noReviewsYet}
+                </Text>
               </View>
 
               <View style={styles.tagsContainer}>
@@ -396,7 +483,7 @@ export function ProfileScreen({
             <View style={styles.reviewsSection}>
               <View style={styles.reviewsHeader}>
                 <Text style={[styles.sectionTitle, { flex: 1, marginRight: 12, marginBottom: 0 }]} numberOfLines={1} adjustsFontSizeToFit>{t.recentReviews}</Text>
-                <Text style={[styles.viewAllText, { flexShrink: 0 }]}>{t.viewAll} {summary?.total_reviews ?? (reviews.length || 32)}</Text>
+                <Text style={[styles.viewAllText, { flexShrink: 0 }]}>{t.viewAll} {totalReviews}</Text>
               </View>
 
               {reviews.length > 0 ? (
@@ -426,21 +513,12 @@ export function ProfileScreen({
                   </View>
                 ))
               ) : (
-                <View style={styles.reviewCard}>
-                  <View style={styles.reviewCardHeader}>
-                    <View style={styles.starsRow}>
-                      {[1, 2, 3, 4, 5].map((i) => (
-                        <Ionicons key={i} name="star" size={14} color="#FFB43B" style={{ marginRight: 2 }} />
-                      ))}
-                    </View>
-                    <View style={styles.positiveBadge}>
-                      <Text style={styles.positiveBadgeText}>{t.positive}</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.reviewText}>
-                    "Daven is an amazing cook! His meal prep has been an absolute lifesaver for our busy workweeks. He is organized, hygienic, and cooks delicious, healthy meals exactly to our liking. If you need someone to take over the kitchen and save you hours of cooking time, he is highly recommended!"
+                <View style={[styles.reviewCard, styles.emptyReviewsCard]}>
+                  <Ionicons name="chatbubbles-outline" size={32} color="#D1D5DB" />
+                  <Text style={styles.emptyReviewsTitle}>{t.noReviewsYet}</Text>
+                  <Text style={styles.emptyReviewsSubtitle}>
+                    {t.noReviewsSubtitle}
                   </Text>
-                  <Text style={styles.reviewAuthor}>— Maria A., C., Oct 2025</Text>
                 </View>
               )}
             </View>
@@ -472,6 +550,41 @@ export function ProfileScreen({
                 </View>
               </View>
             </View>
+
+            {/* Verification Notice Banner */}
+            {verificationData?.overall_status === 'Pending' ? (
+              <Pressable
+                style={styles.verificationNoticeBanner}
+                onPress={() => setIsVerificationModalVisible(true)}
+              >
+                <View style={styles.verificationNoticeIconBox}>
+                  <Ionicons name="time" size={18} color="#D68910" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.verificationNoticeTitle}>Document Verification Pending</Text>
+                  <Text style={styles.verificationNoticeSub}>
+                    Your uploaded clearances are under review by officials. Tap to check status.
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#D68910" />
+              </Pressable>
+            ) : verificationData?.overall_status === 'Rejected' ? (
+              <Pressable
+                style={[styles.verificationNoticeBanner, styles.verificationNoticeBannerRejected]}
+                onPress={() => setIsVerificationModalVisible(true)}
+              >
+                <View style={[styles.verificationNoticeIconBox, styles.verificationNoticeIconBoxRejected]}>
+                  <Ionicons name="alert-circle" size={18} color="#C0392B" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={[styles.verificationNoticeTitle, { color: '#C0392B' }]}>Verification Needs Attention</Text>
+                  <Text style={styles.verificationNoticeSub}>
+                    A document was rejected. Tap to review official feedback and re-upload.
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#C0392B" />
+              </Pressable>
+            ) : null}
 
             {/* Settings Card (White Rounded Sheet like Homeowner) */}
             <View style={styles.settingsCard}>
@@ -512,7 +625,49 @@ export function ProfileScreen({
               <View style={styles.divider} />
               <SettingsItem icon="lock-closed-outline" label={t.passwordsSecurity} />
               <View style={styles.divider} />
-              <SettingsItem icon="checkmark-circle-outline" label={t.getVerified} iconColor="#4CAF50" />
+              <SettingsItem
+                icon="checkmark-circle-outline"
+                label={t.getVerified}
+                iconColor={
+                  effectiveVerificationStatus === 'Verified'
+                    ? '#27AE60'
+                    : effectiveVerificationStatus === 'Rejected'
+                    ? '#E74C3C'
+                    : effectiveVerificationStatus === 'Pending'
+                    ? '#F39C12'
+                    : '#4CAF50'
+                }
+                rightComponent={
+                  effectiveVerificationStatus ? (
+                    <View
+                      style={[
+                        styles.verificationStatusBadge,
+                        effectiveVerificationStatus === 'Verified' && styles.verificationBadgeVerified,
+                        effectiveVerificationStatus === 'Pending' && styles.verificationBadgePending,
+                        effectiveVerificationStatus === 'Rejected' && styles.verificationBadgeRejected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.verificationStatusBadgeText,
+                          effectiveVerificationStatus === 'Verified' && styles.verificationBadgeTextVerified,
+                          effectiveVerificationStatus === 'Pending' && styles.verificationBadgeTextPending,
+                          effectiveVerificationStatus === 'Rejected' && styles.verificationBadgeTextRejected,
+                        ]}
+                      >
+                        {effectiveVerificationStatus === 'Pending'
+                          ? '⏳ Under Review'
+                          : effectiveVerificationStatus === 'Verified'
+                          ? 'Verified'
+                          : effectiveVerificationStatus === 'Rejected'
+                          ? 'Action Needed'
+                          : 'Get Verified'}
+                      </Text>
+                    </View>
+                  ) : undefined
+                }
+                onPress={() => setIsVerificationModalVisible(true)}
+              />
 
               <View style={styles.sectionSpacing} />
 
@@ -677,6 +832,17 @@ export function ProfileScreen({
           </View>
         </View>
       </Modal>
+
+      {/* Verification Status Modal */}
+      <VerificationStatusModal
+        visible={isVerificationModalVisible}
+        onClose={() => setIsVerificationModalVisible(false)}
+        statusData={verificationData}
+        loading={isLoadingVerification}
+        token={user.token}
+        onRefresh={loadVerificationStatus}
+        role="kasambahay"
+      />
     </View>
   );
 }
@@ -1385,5 +1551,127 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#888',
     fontWeight: '600',
+  },
+  emptyReviewsCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 16,
+  },
+  emptyReviewsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 8,
+  },
+  emptyReviewsSubtitle: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 4,
+    maxWidth: 240,
+    lineHeight: 18,
+  },
+  pendingInlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    marginLeft: 8,
+    gap: 4,
+  },
+  pendingInlineBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#B45309',
+  },
+  rejectedInlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    marginLeft: 8,
+    gap: 4,
+  },
+  rejectedInlineBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#B91C1C',
+  },
+  verificationNoticeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBF0',
+    borderRadius: 14,
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    shadowColor: '#D97706',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  verificationNoticeBannerRejected: {
+    backgroundColor: '#FFF5F5',
+    borderColor: '#FECACA',
+    shadowColor: '#DC2626',
+  },
+  verificationNoticeIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verificationNoticeIconBoxRejected: {
+    backgroundColor: '#FEE2E2',
+  },
+  verificationNoticeTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#92400E',
+    marginBottom: 2,
+  },
+  verificationNoticeSub: {
+    fontSize: 11,
+    color: '#78350F',
+    lineHeight: 14,
+  },
+  verificationStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+  },
+  verificationBadgeVerified: {
+    backgroundColor: '#DCFCE7',
+  },
+  verificationBadgePending: {
+    backgroundColor: '#FEF3C7',
+  },
+  verificationBadgeRejected: {
+    backgroundColor: '#FEE2E2',
+  },
+  verificationStatusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4B5563',
+  },
+  verificationBadgeTextVerified: {
+    color: '#15803D',
+  },
+  verificationBadgeTextPending: {
+    color: '#B45309',
+  },
+  verificationBadgeTextRejected: {
+    color: '#B91C1C',
   },
 });
