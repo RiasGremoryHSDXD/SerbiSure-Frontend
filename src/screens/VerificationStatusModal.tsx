@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Modal,
   StyleSheet,
@@ -8,6 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -15,6 +16,8 @@ import {
   VerificationStatusResponse,
   deleteRejectedDocument,
 } from '../api/verificationApi';
+import { IDPhotoModal } from './IDPhotoModal';
+import { API_BASE_URL, fetchWithTimeout } from '../config/api';
 
 interface VerificationStatusModalProps {
   visible: boolean;
@@ -24,6 +27,7 @@ interface VerificationStatusModalProps {
   token?: string | null;
   onRefresh?: () => void;
   onOpenUpload?: (docType?: string) => void;
+  role?: 'homeowner' | 'kasambahay';
 }
 
 const DOCUMENT_NAMES: Record<string, string> = {
@@ -33,6 +37,70 @@ const DOCUMENT_NAMES: Record<string, string> = {
   national_id_back: 'National ID (Back)',
 };
 
+function getFileName(uri: string | null, defaultName: string) {
+  if (!uri) return defaultName;
+  const raw = uri.split('/').pop()?.split('?')[0];
+  if (raw && (raw.endsWith('.jpg') || raw.endsWith('.png') || raw.endsWith('.jpeg') || raw.endsWith('.pdf'))) {
+    return raw;
+  }
+  return defaultName;
+}
+
+function UploadBox({
+  title,
+  subtitle = 'Tap or upload image',
+  meta = 'JPG, PNG, PDF (Max 5MB)',
+  image,
+  defaultFilename,
+  onPress,
+  onRemove,
+}: {
+  title: string;
+  subtitle?: string;
+  meta?: string;
+  image: string | null;
+  defaultFilename: string;
+  onPress: () => void;
+  onRemove?: () => void;
+}) {
+  return (
+    <Pressable
+      style={[styles.uploadBox, !!image && styles.uploadBoxHasImage]}
+      onPress={onPress}
+    >
+      {image ? (
+        <View style={styles.attachmentContainer}>
+          <Image source={{ uri: image }} style={styles.uploadPreview} resizeMode="cover" />
+          <View style={styles.previewMetaRow}>
+            <Text style={styles.fileNameTextItalic} numberOfLines={1}>
+              {getFileName(image, defaultFilename)}
+            </Text>
+            {onRemove ? (
+              <Pressable
+                hitSlop={8}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onRemove();
+                }}
+                style={styles.removeImageBtn}
+              >
+                <Ionicons name="close-circle" size={18} color="#E74C3C" />
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+      ) : (
+        <>
+          <Ionicons name="cloud-upload" size={26} color="#FFB43B" style={styles.uploadIcon} />
+          <Text style={styles.uploadTitle}>{title}</Text>
+          <Text style={styles.uploadSubtitle}>{subtitle}</Text>
+          <Text style={styles.uploadMeta}>{meta}</Text>
+        </>
+      )}
+    </Pressable>
+  );
+}
+
 export function VerificationStatusModal({
   visible,
   onClose,
@@ -41,8 +109,48 @@ export function VerificationStatusModal({
   token,
   onRefresh,
   onOpenUpload,
+  role,
 }: VerificationStatusModalProps) {
-  const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [idPhotoVisible, setIdPhotoVisible] = useState(false);
+  const [activeBox, setActiveBox] = useState<'nbi' | 'police' | 'national_front' | 'national_back' | null>(null);
+  const [nbiImage, setNbiImage] = useState<string | null>(null);
+  const [policeImage, setPoliceImage] = useState<string | null>(null);
+  const [nationalFrontImage, setNationalFrontImage] = useState<string | null>(null);
+  const [nationalBackImage, setNationalBackImage] = useState<string | null>(null);
+  const [uploadLoading, setUploadLoading] = useState(false);
+
+  const effectiveRole: 'homeowner' | 'kasambahay' =
+    role ?? (statusData?.account_type === 'Homeowner' ? 'homeowner' : 'kasambahay');
+
+  const handleClose = () => {
+    setNbiImage(null);
+    setPoliceImage(null);
+    setNationalFrontImage(null);
+    setNationalBackImage(null);
+    setActiveBox(null);
+    setIdPhotoVisible(false);
+    onClose();
+  };
+
+  const handleBoxPress = (box: 'nbi' | 'police' | 'national_front' | 'national_back') => {
+    setActiveBox(box);
+    setIdPhotoVisible(true);
+  };
+
+  const handlePickedImage = (uri: string) => {
+    if (activeBox === 'nbi') setNbiImage(uri);
+    else if (activeBox === 'police') setPoliceImage(uri);
+    else if (activeBox === 'national_front') setNationalFrontImage(uri);
+    else if (activeBox === 'national_back') setNationalBackImage(uri);
+  };
+
+  const handleReupload = (docType: string) => {
+    if (docType === 'nbi_clearance') handleBoxPress('nbi');
+    else if (docType === 'police_clearance') handleBoxPress('police');
+    else if (docType === 'national_id_front') handleBoxPress('national_front');
+    else if (docType === 'national_id_back') handleBoxPress('national_back');
+  };
 
   const handleDeleteRejected = (document: DocumentStatusItem) => {
     if (!token) return;
@@ -71,6 +179,98 @@ export function VerificationStatusModal({
         },
       ]
     );
+  };
+
+  // Active documents (Pending or Verified) don't need re-upload
+  const activeTypes = new Set(
+    statusData?.documents
+      ?.filter((d) => d.verification_status === 'Pending' || d.verification_status === 'Verified')
+      .map((d) => d.document_type) ?? []
+  );
+
+  const needsNbi = effectiveRole === 'kasambahay' && (!activeTypes.has('nbi_clearance') || !!nbiImage);
+  const needsPolice = effectiveRole === 'kasambahay' && (!activeTypes.has('police_clearance') || !!policeImage);
+  const needsFront = effectiveRole === 'homeowner' && (!activeTypes.has('national_id_front') || !!nationalFrontImage);
+  const needsBack = effectiveRole === 'homeowner' && (!activeTypes.has('national_id_back') || !!nationalBackImage);
+
+  const hasAnyNeeds = needsNbi || needsPolice || needsFront || needsBack;
+  const hasAnySelected = !!(nbiImage || policeImage || nationalFrontImage || nationalBackImage);
+
+  const handleUploadAll = async () => {
+    if (!token) {
+      Alert.alert('Authentication Error', 'You must be logged in to upload documents.');
+      return;
+    }
+
+    const uploads: { type: string; uri: string }[] = [];
+
+    if (effectiveRole === 'homeowner') {
+      if (needsFront && !nationalFrontImage) {
+        Alert.alert('Missing Document', 'Please upload the front of your National ID.');
+        return;
+      }
+      if (needsBack && !nationalBackImage) {
+        Alert.alert('Missing Document', 'Please upload the back of your National ID.');
+        return;
+      }
+      if (nationalFrontImage) uploads.push({ type: 'national_id_front', uri: nationalFrontImage });
+      if (nationalBackImage) uploads.push({ type: 'national_id_back', uri: nationalBackImage });
+    } else {
+      if (needsNbi && !nbiImage && needsPolice && !policeImage) {
+        Alert.alert('Missing Documents', 'Please upload at least one clearance document.');
+        return;
+      }
+      if (nbiImage) uploads.push({ type: 'nbi_clearance', uri: nbiImage });
+      if (policeImage) uploads.push({ type: 'police_clearance', uri: policeImage });
+    }
+
+    if (uploads.length === 0) {
+      Alert.alert('No Documents', 'Please select at least one document to upload.');
+      return;
+    }
+
+    setUploadLoading(true);
+    try {
+      for (const upload of uploads) {
+        const formData = new FormData();
+        formData.append('document_type', upload.type);
+
+        const filename = upload.uri.split('/').pop() || 'image.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : `image`;
+
+        formData.append('document_image', {
+          uri: upload.uri,
+          name: filename,
+          type,
+        } as any);
+
+        const response = await fetchWithTimeout(`${API_BASE_URL}/api/v1/verifications/upload/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Failed to upload ${DOCUMENT_NAMES[upload.type] || upload.type}`);
+        }
+      }
+
+      Alert.alert('Success', 'Documents submitted successfully!');
+      setNbiImage(null);
+      setPoliceImage(null);
+      setNationalFrontImage(null);
+      setNationalBackImage(null);
+      onRefresh?.();
+    } catch (error: any) {
+      Alert.alert('Upload Failed', error.message || 'An unexpected error occurred during upload.');
+    } finally {
+      setUploadLoading(false);
+    }
   };
 
   const resolveEffectiveStatus = (): 'Verified' | 'Pending' | 'Rejected' | 'Unverified' => {
@@ -232,10 +432,7 @@ export function VerificationStatusModal({
           <View style={styles.docActionsRow}>
             <Pressable
               style={styles.reuploadBtn}
-              onPress={() => {
-                onClose();
-                onOpenUpload?.(doc.document_type);
-              }}
+              onPress={() => handleReupload(doc.document_type)}
             >
               <Ionicons name="cloud-upload-outline" size={15} color="#FFF" />
               <Text style={styles.reuploadBtnText}>Re-upload Document</Text>
@@ -258,64 +455,131 @@ export function VerificationStatusModal({
     );
   };
 
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={styles.modalContent}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Ionicons name="shield-checkmark" size={22} color="#FFB43B" style={{ marginRight: 8 }} />
-              <Text style={styles.headerTitle}>Document Verification</Text>
-            </View>
-            <Pressable onPress={onClose} hitSlop={8}>
-              <Ionicons name="close" size={24} color="#333" />
-            </Pressable>
-          </View>
+  const renderUploadSection = () => {
+    if (!hasAnyNeeds && !hasAnySelected) return null;
 
-          <ScrollView style={styles.scrollBody} showsVerticalScrollIndicator={false}>
-            {loading ? (
-              <View style={styles.loadingBox}>
-                <ActivityIndicator size="large" color="#FFB43B" />
-                <Text style={styles.loadingText}>Loading verification status...</Text>
-              </View>
+    return (
+      <View style={styles.uploadSection}>
+        <Text style={styles.uploadSectionHeader}>Upload Documents</Text>
+
+        {needsNbi ? (
+          <UploadBox
+            title="NBI Clearance"
+            subtitle="Click or drag file to upload"
+            image={nbiImage}
+            defaultFilename="nbi_clearance.jpg"
+            onPress={() => handleBoxPress('nbi')}
+            onRemove={() => setNbiImage(null)}
+          />
+        ) : null}
+
+        {needsPolice ? (
+          <UploadBox
+            title="Police Clearance"
+            subtitle="Click or drag file to upload"
+            image={policeImage}
+            defaultFilename="police_clearance.jpg"
+            onPress={() => handleBoxPress('police')}
+            onRemove={() => setPoliceImage(null)}
+          />
+        ) : null}
+
+        {needsFront ? (
+          <UploadBox
+            title="National ID (Front)"
+            subtitle="Tap or upload image"
+            image={nationalFrontImage}
+            defaultFilename="national_id_front.jpg"
+            onPress={() => handleBoxPress('national_front')}
+            onRemove={() => setNationalFrontImage(null)}
+          />
+        ) : null}
+
+        {needsBack ? (
+          <UploadBox
+            title="National ID (Back)"
+            subtitle="Tap or upload image"
+            image={nationalBackImage}
+            defaultFilename="national_id_back.jpg"
+            onPress={() => handleBoxPress('national_back')}
+            onRemove={() => setNationalBackImage(null)}
+          />
+        ) : null}
+
+        {hasAnySelected ? (
+          <Pressable
+            style={[styles.submitBtn, uploadLoading && styles.submitBtnDisabled]}
+            onPress={handleUploadAll}
+            disabled={uploadLoading}
+          >
+            {uploadLoading ? (
+              <ActivityIndicator color="#FFF" size="small" />
             ) : (
-              <>
-                {renderStatusBanner()}
-
-                <Text style={styles.sectionHeader}>Submitted Credentials</Text>
-
-                {statusData?.documents && statusData.documents.length > 0 ? (
-                  statusData.documents.map(renderDocumentItem)
-                ) : (
-                  <View style={styles.emptyDocBox}>
-                    <Ionicons name="documents-outline" size={32} color="#BBB" />
-                    <Text style={styles.emptyDocText}>No documents uploaded yet.</Text>
-                    <Pressable
-                      style={styles.startUploadBtn}
-                      onPress={() => {
-                        onClose();
-                        onOpenUpload?.();
-                      }}
-                    >
-                      <Ionicons name="cloud-upload-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
-                      <Text style={styles.startUploadBtnText}>Upload Documents</Text>
-                    </Pressable>
-                  </View>
-                )}
-              </>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="cloud-upload-outline" size={16} color="#FFF" />
+                <Text style={styles.submitBtnText}>Submit Documents</Text>
+              </View>
             )}
-          </ScrollView>
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  };
 
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Pressable style={styles.closeFooterBtn} onPress={onClose}>
-              <Text style={styles.closeFooterBtnText}>Close</Text>
-            </Pressable>
+  return (
+    <>
+      <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
+        <View style={styles.overlay}>
+          <View style={styles.modalContent}>
+            {/* Header */}
+            <View style={styles.header}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="shield-checkmark" size={22} color="#FFB43B" style={{ marginRight: 8 }} />
+                <Text style={styles.headerTitle}>Document Verification</Text>
+              </View>
+              <Pressable onPress={handleClose} hitSlop={8}>
+                <Ionicons name="close" size={24} color="#333" />
+              </Pressable>
+            </View>
+
+            <ScrollView style={styles.scrollBody} showsVerticalScrollIndicator={false}>
+              {loading ? (
+                <View style={styles.loadingBox}>
+                  <ActivityIndicator size="large" color="#FFB43B" />
+                  <Text style={styles.loadingText}>Loading verification status...</Text>
+                </View>
+              ) : (
+                <>
+                  {renderStatusBanner()}
+
+                  {statusData?.documents && statusData.documents.length > 0 ? (
+                    <>
+                      <Text style={styles.sectionHeader}>Submitted Credentials</Text>
+                      {statusData.documents.map(renderDocumentItem)}
+                    </>
+                  ) : null}
+
+                  {renderUploadSection()}
+                </>
+              )}
+            </ScrollView>
+
+            {/* Footer */}
+            <View style={styles.footer}>
+              <Pressable style={styles.closeFooterBtn} onPress={handleClose}>
+                <Text style={styles.closeFooterBtnText}>Close</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
-      </View>
-    </Modal>
+      </Modal>
+
+      <IDPhotoModal
+        visible={idPhotoVisible}
+        onClose={() => setIdPhotoVisible(false)}
+        onPickedImage={handlePickedImage}
+      />
+    </>
   );
 }
 
@@ -534,33 +798,91 @@ const styles = StyleSheet.create({
     borderColor: '#FFCCC7',
     backgroundColor: '#FFF',
   },
-  emptyDocBox: {
-    paddingVertical: 28,
-    alignItems: 'center',
-    backgroundColor: '#FAFAF8',
+  uploadSection: {
+    marginTop: 6,
+  },
+  uploadSectionHeader: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 10,
+    marginTop: 4,
+  },
+  uploadBox: {
+    borderWidth: 1.5,
+    borderColor: '#777',
+    borderStyle: 'dotted',
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#EEE',
-    borderStyle: 'dashed',
-  },
-  emptyDocText: {
-    fontSize: 13,
-    color: '#888',
-    marginTop: 8,
-    marginBottom: 14,
-  },
-  startUploadBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFB43B',
+    paddingVertical: 18,
     paddingHorizontal: 16,
-    paddingVertical: 9,
+    alignItems: 'center',
+    marginBottom: 12,
+    backgroundColor: '#FAFAF8',
+  },
+  uploadBoxHasImage: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: '#F5F4F0',
+  },
+  uploadIcon: {
+    marginBottom: 6,
+  },
+  uploadTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#000',
+    marginBottom: 3,
+  },
+  uploadSubtitle: {
+    fontSize: 11,
+    color: '#555',
+    marginBottom: 2,
+  },
+  uploadMeta: {
+    fontSize: 9,
+    color: '#999',
+  },
+  attachmentContainer: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  uploadPreview: {
+    width: '100%',
+    height: 105,
     borderRadius: 8,
   },
-  startUploadBtnText: {
-    fontSize: 13,
+  previewMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+    paddingHorizontal: 8,
+  },
+  removeImageBtn: {
+    marginLeft: 8,
+  },
+  fileNameTextItalic: {
+    fontStyle: 'italic',
+    fontSize: 11,
+    color: '#666666',
+    textAlign: 'center',
+  },
+  submitBtn: {
+    backgroundColor: '#FFB43B',
+    height: 42,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  submitBtnDisabled: {
+    opacity: 0.7,
+  },
+  submitBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '600',
-    color: '#FFF',
   },
   footer: {
     paddingHorizontal: 20,

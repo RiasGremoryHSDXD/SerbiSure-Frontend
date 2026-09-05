@@ -639,6 +639,7 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
         loading={isLoadingVerification}
         token={user.token}
         onRefresh={loadVerificationStatus}
+        role="homeowner"
       />
     </View>
   );

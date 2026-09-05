@@ -841,6 +841,7 @@ export function ProfileScreen({
         loading={isLoadingVerification}
         token={user.token}
         onRefresh={loadVerificationStatus}
+        role="kasambahay"
       />
     </View>
   );
