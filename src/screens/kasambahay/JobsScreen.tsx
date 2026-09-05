@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { chatStore } from '../../store/chatStore';
 import { ChatDetailScreen } from '../ChatDetailScreen';
+import { FilterModal, FeedFilters, DEFAULT_FILTERS } from '../FilterModal';
 import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
 
 import { useUser } from '../../context/UserContext';
@@ -38,7 +39,7 @@ export interface JobOpening {
   avatar: string;
 }
 
-const FILTER_TABS = ['Stay-in', 'Part-time', 'Nearby'];
+const FILTER_TABS = ['All', 'Stay-in', 'Part-time', 'Cleaning', 'Cooking', 'Caregiver'];
 
 // Module-level cache: lives OUTSIDE the component so it survives tab switches.
 let jobFeedCache: JobOpening[] | null = null;
@@ -80,7 +81,9 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
     }
   }, [isLoading]);
 
-  const [activeFilter, setActiveFilter] = useState('Stay-in');
+  const [activeFilter, setActiveFilter] = useState('All');
+  const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FILTERS);
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeChat, setActiveChat] = useState<{
     visible: boolean;
@@ -97,23 +100,53 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
     avatar: '',
   });
 
-  // forceRefresh=true skips the cache and hits the API fresh (used for pull-to-refresh)
-  const fetchFeed = async (forceRefresh = false) => {
+  const buildFeedUrl = (targetFilters: FeedFilters) => {
+    const params = new URLSearchParams();
+    if (targetFilters.categories.length > 0) {
+      params.append('category', targetFilters.categories.join(','));
+    }
+    if (targetFilters.bookingType) {
+      params.append('booking_type', targetFilters.bookingType);
+    }
+    if (targetFilters.maxRate !== null) {
+      params.append('max_rate', String(targetFilters.maxRate));
+    }
+    if (targetFilters.location.trim()) {
+      params.append('location', targetFilters.location.trim());
+    }
+    if (targetFilters.sortBy && targetFilters.sortBy !== 'newest') {
+      params.append('sort', targetFilters.sortBy);
+    }
+    const qs = params.toString();
+    return qs ? `${API_BASE_URL}/api/v1/booking/feed/?${qs}` : `${API_BASE_URL}/api/v1/booking/feed/`;
+  };
+
+  // forceRefresh=true skips the cache and hits the API fresh (used for pull-to-refresh & filters)
+  const fetchFeed = async (forceRefresh = false, activeFilters: FeedFilters = filters) => {
     if (!effectiveToken) {
       setIsLoading(false);
       return;
     }
 
-    // If we have cached data and this is NOT a manual refresh, use the cache!
-    if (!forceRefresh && jobFeedCache !== null) {
+    const hasActiveFilters =
+      activeFilters.categories.length > 0 ||
+      activeFilters.bookingType !== null ||
+      activeFilters.maxRate !== null ||
+      activeFilters.location.trim() !== '' ||
+      activeFilters.sortBy !== 'newest';
+
+    // If we have cached data and this is NOT a manual refresh and NO active filters, use cache
+    if (!forceRefresh && !hasActiveFilters && jobFeedCache !== null) {
       setJobs(jobFeedCache);
       jobsRef.current = jobFeedCache;
       setIsLoading(false);
       return;
     }
 
+    setIsLoading(true);
     try {
-      const response = await fetchWithTimeout(`${API_BASE_URL}/api/v1/booking/feed/`, {
+      const url = buildFeedUrl(activeFilters);
+      const response = await fetchWithTimeout(url, {
         headers: { Authorization: `Bearer ${effectiveToken}` },
       });
 
@@ -129,24 +162,29 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
             item.profile_link ||
             `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Homeowner')}&background=FFB43B&color=fff`;
 
+          const typeLabel = item.booking_type === 'long_term' ? 'Stay-in' : 'Part-time';
+
           return {
             id: item.booking_id,
             partnerId: item.poster_id,
             employerName: item.name || 'Homeowner',
             title: categories.join(' & ') || 'Household Service',
             location: item.service_address || 'Cagayan de Oro',
-            description: `Looking for ${categories.join(', ')} services at ${item.service_address || 'residence'}.`,
+            description: `Looking for ${categories.join(', ')} (${typeLabel}) at ${item.service_address || 'residence'}.`,
             price: `P ${item.daily_rate || '0'}`,
             unit: 'per day',
-            tags: ['Verified Employer', ...categories],
+            tags: ['Verified Employer', typeLabel, ...categories],
             image: avatarUrl,
             avatar: avatarUrl,
           };
         });
 
-        jobFeedCache = liveJobs;
+        if (!hasActiveFilters) {
+          jobFeedCache = liveJobs;
+        }
         setJobs(liveJobs);
         jobsRef.current = liveJobs;
+        position.setValue({ x: 0, y: 0 });
       }
     } catch (error) {
       console.warn('[JobsScreen] Failed to load feed from backend', error);
@@ -155,15 +193,60 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
     }
   };
 
+  const handleChipPress = (tab: string) => {
+    setActiveFilter(tab);
+    if (tab === 'All') {
+      const updated: FeedFilters = { ...filters, categories: [], bookingType: null };
+      setFilters(updated);
+      fetchFeed(true, updated);
+    } else if (tab === 'Stay-in') {
+      const updated: FeedFilters = { ...filters, bookingType: 'long_term', categories: [] };
+      setFilters(updated);
+      fetchFeed(true, updated);
+    } else if (tab === 'Part-time') {
+      const updated: FeedFilters = { ...filters, bookingType: 'short_term', categories: [] };
+      setFilters(updated);
+      fetchFeed(true, updated);
+    } else {
+      const updated: FeedFilters = { ...filters, categories: [tab], bookingType: null };
+      setFilters(updated);
+      fetchFeed(true, updated);
+    }
+  };
+
+  const handleApplyFilters = (newFilters: FeedFilters) => {
+    setFilters(newFilters);
+    const firstCat = newFilters.categories[0];
+    if (newFilters.bookingType === 'long_term' && newFilters.categories.length === 0) {
+      setActiveFilter('Stay-in');
+    } else if (newFilters.bookingType === 'short_term' && newFilters.categories.length === 0) {
+      setActiveFilter('Part-time');
+    } else if (newFilters.categories.length === 1 && firstCat && FILTER_TABS.includes(firstCat)) {
+      setActiveFilter(firstCat);
+    } else if (newFilters.categories.length === 0 && !newFilters.bookingType) {
+      setActiveFilter('All');
+    } else {
+      setActiveFilter('');
+    }
+    fetchFeed(true, newFilters);
+  };
+
+  const activeAdvancedFilterCount =
+    filters.categories.length +
+    (filters.bookingType !== null ? 1 : 0) +
+    (filters.maxRate !== null ? 1 : 0) +
+    (filters.location.trim() !== '' ? 1 : 0) +
+    (filters.sortBy !== 'newest' ? 1 : 0);
+
   // Pull-to-refresh handler — forces a fresh API call and resets the swipe deck
   const handlePullToRefresh = async () => {
     setIsRefreshing(true);
     position.setValue({ x: 0, y: 0 });
-    await fetchFeed(true); // forceRefresh=true bypasses the cache
+    await fetchFeed(true, filters);
     setIsRefreshing(false);
   };
 
-  // Only fetches on first load (or when token changes). Uses cache on tab switches.
+  // Only fetches on first load (or when token changes)
   useEffect(() => {
     fetchFeed();
   }, [effectiveToken]);
@@ -351,6 +434,9 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
               : 'No more opportunities left nearby'}
           </Text>
         </View>
+        <Pressable onPress={() => setIsFilterModalVisible(true)} hitSlop={8}>
+          <Ionicons name="options-outline" size={28} color="#333" />
+        </Pressable>
       </View>
 
       {/* Filter Chips Bar */}
@@ -360,16 +446,35 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
         style={styles.filterScroll}
         contentContainerStyle={styles.filterContent}
       >
-        <Pressable style={[styles.filterChip, styles.filterChipOutline]}>
-          <Ionicons name="funnel-outline" size={14} color="#FFB43B" style={{ marginRight: 6 }} />
-          <Text style={[styles.filterText, { color: '#FFB43B', fontWeight: '700' }]}>Filters</Text>
+        <Pressable
+          style={[
+            styles.filterChip,
+            styles.filterChipOutline,
+            activeAdvancedFilterCount > 0 && styles.filterChipActiveOutline,
+          ]}
+          onPress={() => setIsFilterModalVisible(true)}
+        >
+          <Ionicons
+            name="funnel-outline"
+            size={14}
+            color={activeAdvancedFilterCount > 0 ? '#FFFFFF' : '#FFB43B'}
+            style={{ marginRight: 6 }}
+          />
+          <Text
+            style={[
+              styles.filterText,
+              { color: activeAdvancedFilterCount > 0 ? '#FFFFFF' : '#FFB43B', fontWeight: '700' },
+            ]}
+          >
+            Filters {activeAdvancedFilterCount > 0 ? `(${activeAdvancedFilterCount})` : ''}
+          </Text>
         </Pressable>
         <View style={styles.filterDivider} />
         {FILTER_TABS.map((tab) => (
           <Pressable
             key={tab}
             style={[styles.filterChip, activeFilter === tab && styles.filterChipActive]}
-            onPress={() => setActiveFilter(tab)}
+            onPress={() => handleChipPress(tab)}
           >
             <Text style={[styles.filterText, activeFilter === tab && styles.filterTextActive]}>{tab}</Text>
           </Pressable>
@@ -653,6 +758,15 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
         initialMessage={activeChat.initialMessage}
         userRole="kasambahay"
       />
+
+      {/* Advanced Filter & Sort Modal */}
+      <FilterModal
+        visible={isFilterModalVisible}
+        onClose={() => setIsFilterModalVisible(false)}
+        onApply={handleApplyFilters}
+        initialFilters={filters}
+        mode="kasambahay"
+      />
     </View>
     </ScrollView>
   );
@@ -725,6 +839,10 @@ const styles = StyleSheet.create({
     borderColor: '#FFB43B',
   },
   filterChipOutline: {
+    borderColor: '#FFB43B',
+  },
+  filterChipActiveOutline: {
+    backgroundColor: '#FFB43B',
     borderColor: '#FFB43B',
   },
   filterText: {
