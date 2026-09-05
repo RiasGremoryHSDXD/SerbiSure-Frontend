@@ -25,4 +25,6 @@ export { ProfileScreen as KasambahayProfileScreen } from './kasambahay/ProfileSc
 // Common Chat & Profile Modals
 export { ChatDetailScreen } from './ChatDetailScreen';
 export { UserProfileModal } from './UserProfileModal';
+export { FilterModal, DEFAULT_FILTERS } from './FilterModal';
+export type { FeedFilters } from './FilterModal';
 
