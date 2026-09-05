@@ -9,6 +9,10 @@ import { fetchReceivedReviews, fetchReviewSummary, ReviewItem, ReviewSummaryData
 import { fetchUserAbout, updateUserAbout, fetchKasambahayResume, uploadKasambahayResume } from '../../api/accountApi';
 import { fetchVerificationStatus, type VerificationStatusResponse } from '../../api/verificationApi';
 import { VerificationStatusModal } from '../VerificationStatusModal';
+import { PasswordSecurityModal } from '../PasswordSecurityModal';
+import { NotificationsModal } from '../NotificationsModal';
+import { AboutUsModal } from '../AboutUsModal';
+import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
 
 // Safely require expo-document-picker to avoid crashing if native module is not yet compiled in APK
 let DocumentPicker: typeof import('expo-document-picker') | null = null;
@@ -56,6 +60,10 @@ export function ProfileScreen({
   const [isUploadingResume, setIsUploadingResume] = useState(false);
 
   const [isVerificationModalVisible, setIsVerificationModalVisible] = useState(false);
+  const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
+  const [isNotificationsModalVisible, setIsNotificationsModalVisible] = useState(false);
+  const [isAboutUsModalVisible, setIsAboutUsModalVisible] = useState(false);
+  const [isPrivacyPolicyModalVisible, setIsPrivacyPolicyModalVisible] = useState(false);
   const [verificationData, setVerificationData] = useState<VerificationStatusResponse | null>(null);
   const [isLoadingVerification, setIsLoadingVerification] = useState(false);
 
@@ -623,7 +631,11 @@ export function ProfileScreen({
                 onPress={() => setCurrentView('personal_info')}
               />
               <View style={styles.divider} />
-              <SettingsItem icon="lock-closed-outline" label={t.passwordsSecurity} />
+              <SettingsItem
+                icon="lock-closed-outline"
+                label={t.passwordsSecurity}
+                onPress={() => setIsPasswordModalVisible(true)}
+              />
               <View style={styles.divider} />
               <SettingsItem
                 icon="checkmark-circle-outline"
@@ -671,7 +683,11 @@ export function ProfileScreen({
 
               <View style={styles.sectionSpacing} />
 
-              <SettingsItem icon="notifications-outline" label={t.notifications} />
+              <SettingsItem
+                icon="notifications-outline"
+                label={t.notifications}
+                onPress={() => setIsNotificationsModalVisible(true)}
+              />
               <View style={styles.divider} />
               <SettingsItem
                 icon="globe-outline"
@@ -718,9 +734,17 @@ export function ProfileScreen({
 
               <View style={styles.sectionSpacing} />
 
-              <SettingsItem icon="help-circle-outline" label={t.aboutUs} />
+              <SettingsItem
+                icon="help-circle-outline"
+                label={t.aboutUs}
+                onPress={() => setIsAboutUsModalVisible(true)}
+              />
               <View style={styles.divider} />
-              <SettingsItem icon="shield-checkmark-outline" label={t.privacyPolicy} />
+              <SettingsItem
+                icon="shield-checkmark-outline"
+                label={t.privacyPolicy}
+                onPress={() => setIsPrivacyPolicyModalVisible(true)}
+              />
 
               <View style={styles.sectionSpacing} />
 
@@ -842,6 +866,32 @@ export function ProfileScreen({
         token={user.token}
         onRefresh={loadVerificationStatus}
         role="kasambahay"
+      />
+
+      {/* Password & Security Modal */}
+      <PasswordSecurityModal
+        visible={isPasswordModalVisible}
+        onClose={() => setIsPasswordModalVisible(false)}
+        token={user.token}
+      />
+
+      {/* Notifications Modal */}
+      <NotificationsModal
+        visible={isNotificationsModalVisible}
+        onClose={() => setIsNotificationsModalVisible(false)}
+        token={user.token}
+      />
+
+      {/* About Us Modal */}
+      <AboutUsModal
+        visible={isAboutUsModalVisible}
+        onClose={() => setIsAboutUsModalVisible(false)}
+      />
+
+      {/* Privacy Policy Modal */}
+      <PrivacyPolicyModal
+        visible={isPrivacyPolicyModalVisible}
+        onClose={() => setIsPrivacyPolicyModalVisible(false)}
       />
     </View>
   );

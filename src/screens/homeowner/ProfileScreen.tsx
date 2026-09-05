@@ -9,6 +9,10 @@ import { fetchReceivedReviews, fetchReviewSummary, ReviewItem, ReviewSummaryData
 import { fetchUserAbout, updateUserAbout } from '../../api/accountApi';
 import { fetchVerificationStatus, type VerificationStatusResponse } from '../../api/verificationApi';
 import { VerificationStatusModal } from '../VerificationStatusModal';
+import { PasswordSecurityModal } from '../PasswordSecurityModal';
+import { NotificationsModal } from '../NotificationsModal';
+import { AboutUsModal } from '../AboutUsModal';
+import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
 
 const logoSource = require('../../../assets/serbisure-logo.png');
 
@@ -38,6 +42,10 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
   const [isSavingBio, setIsSavingBio] = useState(false);
 
   const [isVerificationModalVisible, setIsVerificationModalVisible] = useState(false);
+  const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
+  const [isNotificationsModalVisible, setIsNotificationsModalVisible] = useState(false);
+  const [isAboutUsModalVisible, setIsAboutUsModalVisible] = useState(false);
+  const [isPrivacyPolicyModalVisible, setIsPrivacyPolicyModalVisible] = useState(false);
   const [verificationData, setVerificationData] = useState<VerificationStatusResponse | null>(null);
   const [isLoadingVerification, setIsLoadingVerification] = useState(false);
 
@@ -426,7 +434,11 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                 onPress={() => setCurrentView('personal_info')}
               />
               <View style={styles.divider} />
-              <SettingsItem icon="lock-closed-outline" label={t.passwordsSecurity} />
+              <SettingsItem
+                icon="lock-closed-outline"
+                label={t.passwordsSecurity}
+                onPress={() => setIsPasswordModalVisible(true)}
+              />
               <View style={styles.divider} />
               <SettingsItem
                 icon="checkmark-circle-outline"
@@ -474,7 +486,11 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
 
               <View style={styles.sectionSpacing} />
 
-              <SettingsItem icon="notifications-outline" label={t.notifications} />
+              <SettingsItem
+                icon="notifications-outline"
+                label={t.notifications}
+                onPress={() => setIsNotificationsModalVisible(true)}
+              />
               <View style={styles.divider} />
               <SettingsItem
                 icon="globe-outline"
@@ -521,9 +537,17 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
 
               <View style={styles.sectionSpacing} />
 
-              <SettingsItem icon="help-circle-outline" label={t.aboutUs} />
+              <SettingsItem
+                icon="help-circle-outline"
+                label={t.aboutUs}
+                onPress={() => setIsAboutUsModalVisible(true)}
+              />
               <View style={styles.divider} />
-              <SettingsItem icon="shield-checkmark-outline" label={t.privacyPolicy} />
+              <SettingsItem
+                icon="shield-checkmark-outline"
+                label={t.privacyPolicy}
+                onPress={() => setIsPrivacyPolicyModalVisible(true)}
+              />
 
               <View style={styles.sectionSpacing} />
 
@@ -640,6 +664,32 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
         token={user.token}
         onRefresh={loadVerificationStatus}
         role="homeowner"
+      />
+
+      {/* Password & Security Modal */}
+      <PasswordSecurityModal
+        visible={isPasswordModalVisible}
+        onClose={() => setIsPasswordModalVisible(false)}
+        token={user.token}
+      />
+
+      {/* Notifications Modal */}
+      <NotificationsModal
+        visible={isNotificationsModalVisible}
+        onClose={() => setIsNotificationsModalVisible(false)}
+        token={user.token}
+      />
+
+      {/* About Us Modal */}
+      <AboutUsModal
+        visible={isAboutUsModalVisible}
+        onClose={() => setIsAboutUsModalVisible(false)}
+      />
+
+      {/* Privacy Policy Modal */}
+      <PrivacyPolicyModal
+        visible={isPrivacyPolicyModalVisible}
+        onClose={() => setIsPrivacyPolicyModalVisible(false)}
       />
     </View>
   );

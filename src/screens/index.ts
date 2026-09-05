@@ -27,4 +27,8 @@ export { ChatDetailScreen } from './ChatDetailScreen';
 export { UserProfileModal } from './UserProfileModal';
 export { FilterModal, DEFAULT_FILTERS } from './FilterModal';
 export type { FeedFilters } from './FilterModal';
+export { PasswordSecurityModal } from './PasswordSecurityModal';
+export { NotificationsModal } from './NotificationsModal';
+export { AboutUsModal } from './AboutUsModal';
+export { PrivacyPolicyModal } from './PrivacyPolicyModal';
 
