@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-const logoSource = require('../../../assets/serbisure-logo.png');
+const logoSource = require('../../assets/serbisure-logo.png');
 
 interface AboutUsModalProps {
   visible: boolean;
