@@ -202,4 +202,42 @@ export async function uploadKasambahayResume(
   }
 }
 
+/**
+ * Change the authenticated user's password.
+ * POST /api/v1/accounts/change-password/
+ */
+export async function changePassword(
+  token: string,
+  currentPassword: string,
+  newPassword: string,
+  confirmPassword: string
+): Promise<{ message: string }> {
+  try {
+    const res = await fetchWithTimeout(`${ACCOUNTS_BASE}/change-password/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+        confirm_password: confirmPassword,
+      }),
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson?.error || errJson?.detail || `Failed to change password (${res.status})`);
+    }
+
+    const data = await res.json();
+    return data;
+  } catch (error: any) {
+    console.warn('[accountApi] changePassword error:', error?.message || error);
+    throw error;
+  }
+}
+
+
 
