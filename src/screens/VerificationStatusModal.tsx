@@ -73,8 +73,37 @@ export function VerificationStatusModal({
     );
   };
 
+  const resolveEffectiveStatus = (): 'Verified' | 'Pending' | 'Rejected' | 'Unverified' => {
+    if (!statusData) return 'Unverified';
+
+    // Derive directly from submitted documents list
+    if (statusData.documents && statusData.documents.length > 0) {
+      const verifiedTypes = new Set(
+        statusData.documents
+          .filter((d) => d.verification_status === 'Verified')
+          .map((d) => d.document_type)
+      );
+
+      if (statusData.account_type === 'Homeowner') {
+        if (verifiedTypes.has('national_id_front') && verifiedTypes.has('national_id_back')) {
+          return 'Verified';
+        }
+      } else if (statusData.account_type === 'Kasambahay') {
+        if (verifiedTypes.has('nbi_clearance') && verifiedTypes.has('police_clearance')) {
+          return 'Verified';
+        }
+      }
+
+      const docStatuses = new Set(statusData.documents.map((d) => d.verification_status));
+      if (docStatuses.has('Rejected')) return 'Rejected';
+      if (docStatuses.has('Pending') || verifiedTypes.size > 0) return 'Pending';
+    }
+
+    return (statusData.overall_status as any) || 'Unverified';
+  };
+
   const renderStatusBanner = () => {
-    const status = statusData?.overall_status || 'Unverified';
+    const status = resolveEffectiveStatus();
 
     if (status === 'Verified') {
       return (
