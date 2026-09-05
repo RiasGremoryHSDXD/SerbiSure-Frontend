@@ -110,9 +110,7 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
 
       fetchReceivedReviews(user.token)
         .then((items) => {
-          if (items && items.length > 0) {
-            setReviews(items);
-          }
+          setReviews(items || []);
         })
         .catch((err) => console.warn('[ProfileScreen] Received reviews error:', err));
 
@@ -128,10 +126,13 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
     }
   }, [user.token, user.id]);
 
+  const totalReviews = summary?.total_reviews ?? reviews.length;
   const positivePercentage =
     summary && summary.total_reviews > 0
       ? Math.round((summary.sentiment_breakdown.Positive / summary.total_reviews) * 100)
-      : 86;
+      : reviews.length > 0
+      ? Math.round((reviews.filter((r) => r.nlp_sentiment === 'Positive').length / reviews.length) * 100)
+      : null;
 
   const handlePickImage = async () => {
     try {
@@ -241,9 +242,24 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
               <View style={styles.sentimentRow}>
                 <Text style={styles.sentimentLabel}>{t.workerSentiment}</Text>
                 <View style={styles.sentimentBarBg}>
-                  <View style={[styles.sentimentBarFill, { width: `${Math.min(100, Math.max(10, positivePercentage))}%` }]} />
+                  <View
+                    style={[
+                      styles.sentimentBarFill,
+                      {
+                        width: positivePercentage !== null ? `${Math.min(100, Math.max(10, positivePercentage))}%` : '0%',
+                        backgroundColor: positivePercentage !== null ? '#4CAF50' : '#E0E0E0',
+                      },
+                    ]}
+                  />
                 </View>
-                <Text style={styles.sentimentScore}>{positivePercentage}% {t.positive}</Text>
+                <Text
+                  style={[
+                    styles.sentimentScore,
+                    positivePercentage === null && { color: '#9CA3AF', fontSize: 11, fontWeight: '500' },
+                  ]}
+                >
+                  {positivePercentage !== null ? `${positivePercentage}% ${t.positive}` : t.noReviewsYet}
+                </Text>
               </View>
 
               <View style={styles.tagsContainer}>
@@ -298,7 +314,7 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
             <View style={styles.reviewsSection}>
               <View style={styles.reviewsHeader}>
                 <Text style={[styles.sectionTitle, { flex: 1, marginRight: 12, marginBottom: 0 }]} numberOfLines={1} adjustsFontSizeToFit>{t.recentReviews}</Text>
-                <Text style={[styles.viewAllText, { flexShrink: 0 }]}>{t.viewAll} {summary?.total_reviews ?? (reviews.length || 3)}</Text>
+                <Text style={[styles.viewAllText, { flexShrink: 0 }]}>{t.viewAll} {totalReviews}</Text>
               </View>
 
               {reviews.length > 0 ? (
@@ -328,19 +344,12 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                   </View>
                 ))
               ) : (
-                <View style={styles.reviewCard}>
-                  <View style={styles.reviewCardHeader}>
-                    <View style={styles.starsRow}>
-                      {[1, 2, 3, 4, 5].map(i => <Ionicons key={i} name="star" size={14} color="#FFB43B" style={{ marginRight: 2 }} />)}
-                    </View>
-                    <View style={styles.positiveBadge}>
-                      <Text style={styles.positiveBadgeText}>{t.positive}</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.reviewText}>
-                    "The homeowner is kind and supportive. As an employer, they are respectful, organized, and clear with instructions. Working in their home with their two kids and pet has been a positive experience, and they create a safe and comfortable environment for staff. They are highly recommended as an employer."
+                <View style={[styles.reviewCard, styles.emptyReviewsCard]}>
+                  <Ionicons name="chatbubbles-outline" size={32} color="#D1D5DB" />
+                  <Text style={styles.emptyReviewsTitle}>{t.noReviewsYet}</Text>
+                  <Text style={styles.emptyReviewsSubtitle}>
+                    {t.noReviewsSubtitle}
                   </Text>
-                  <Text style={styles.reviewAuthor}>— Clara A., D., Oct 2026</Text>
                 </View>
               )}
             </View>
@@ -1133,6 +1142,26 @@ const styles = StyleSheet.create({
   reviewAuthor: {
     fontSize: 12,
     color: '#888',
+  },
+  emptyReviewsCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 16,
+  },
+  emptyReviewsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 8,
+  },
+  emptyReviewsSubtitle: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 4,
+    maxWidth: 240,
+    lineHeight: 18,
   },
   pendingInlineBadge: {
     flexDirection: 'row',
