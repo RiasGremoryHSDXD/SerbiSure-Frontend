@@ -239,5 +239,83 @@ export async function changePassword(
   }
 }
 
+/**
+ * Search users by query keyword, role, location, or tag (Tier 2-2).
+ * GET /api/v1/accounts/search/
+ */
+export async function searchUsers(
+  token: string,
+  params: { q?: string; role?: string; location?: string; tag?: string }
+): Promise<{ users: PublicProfile[]; count: number }> {
+  try {
+    const qs = new URLSearchParams();
+    if (params.q) qs.append('q', params.q);
+    if (params.role) qs.append('role', params.role);
+    if (params.location) qs.append('location', params.location);
+    if (params.tag) qs.append('tag', params.tag);
+
+    const res = await fetchWithTimeout(`${ACCOUNTS_BASE}/search/?${qs.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return { users: [], count: 0 };
+    return await res.json();
+  } catch (error: any) {
+    console.warn('[accountApi] searchUsers error:', error?.message || error);
+    return { users: [], count: 0 };
+  }
+}
+
+/**
+ * Deactivate / delete account with password verification (Tier 3-5).
+ * POST /api/v1/accounts/delete-account/
+ */
+export async function deleteAccount(
+  token: string,
+  password: string
+): Promise<{ message: string }> {
+  try {
+    const res = await fetchWithTimeout(`${ACCOUNTS_BASE}/delete-account/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ password }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || data.detail || `Failed to delete account (${res.status})`);
+    }
+    return data;
+  } catch (error: any) {
+    console.warn('[accountApi] deleteAccount error:', error?.message || error);
+    throw error;
+  }
+}
+
+/**
+ * Export full user data archive (Tier 3-5).
+ * GET /api/v1/accounts/export-data/
+ */
+export async function exportUserData(
+  token: string
+): Promise<any> {
+  try {
+    const res = await fetchWithTimeout(`${ACCOUNTS_BASE}/export-data/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to export user data (${res.status})`);
+    }
+    return await res.json();
+  } catch (error: any) {
+    console.warn('[accountApi] exportUserData error:', error?.message || error);
+    throw error;
+  }
+}
+
+
 
 

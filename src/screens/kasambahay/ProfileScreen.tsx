@@ -5,14 +5,16 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useLanguage, type Language } from '../../context/LanguageContext';
 import { useUser } from '../../context/UserContext';
-import { fetchReceivedReviews, fetchReviewSummary, ReviewItem, ReviewSummaryData } from '../../api/reviewApi';
+import { fetchReceivedReviews, fetchReviewSummary, fetchReviewAnalytics, ReviewItem, ReviewSummaryData, ReviewAnalyticsData } from '../../api/reviewApi';
 import { fetchUserAbout, updateUserAbout, fetchKasambahayResume, uploadKasambahayResume } from '../../api/accountApi';
 import { fetchVerificationStatus, type VerificationStatusResponse } from '../../api/verificationApi';
+import { fetchNotifications } from '../../api/notificationsApi';
 import { VerificationStatusModal } from '../VerificationStatusModal';
 import { PasswordSecurityModal } from '../PasswordSecurityModal';
 import { NotificationsModal } from '../NotificationsModal';
 import { AboutUsModal } from '../AboutUsModal';
 import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
+import { MyBookingsModal } from '../MyBookingsModal';
 
 // Safely require expo-document-picker to avoid crashing if native module is not yet compiled in APK
 let DocumentPicker: typeof import('expo-document-picker') | null = null;
@@ -64,6 +66,10 @@ export function ProfileScreen({
   const [isNotificationsModalVisible, setIsNotificationsModalVisible] = useState(false);
   const [isAboutUsModalVisible, setIsAboutUsModalVisible] = useState(false);
   const [isPrivacyPolicyModalVisible, setIsPrivacyPolicyModalVisible] = useState(false);
+  const [isMyBookingsModalVisible, setIsMyBookingsModalVisible] = useState(false);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [analyticsData, setAnalyticsData] = useState<ReviewAnalyticsData | null>(null);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
   const [verificationData, setVerificationData] = useState<VerificationStatusResponse | null>(null);
   const [isLoadingVerification, setIsLoadingVerification] = useState(false);
 
@@ -159,6 +165,20 @@ export function ProfileScreen({
           })
           .catch((err) => console.warn('[KasambahayProfile] Review summary error:', err));
       }
+
+      fetchNotifications(user.token)
+        .then((res) => {
+          setUnreadNotifCount(res?.unread_count ?? 0);
+        })
+        .catch(() => {});
+
+      setIsLoadingAnalytics(true);
+      fetchReviewAnalytics(user.token)
+        .then((analytics) => {
+          if (analytics) setAnalyticsData(analytics);
+        })
+        .catch((err) => console.warn('[KasambahayProfile] Analytics error:', err))
+        .finally(() => setIsLoadingAnalytics(false));
 
       loadVerificationStatus();
     }
@@ -487,6 +507,78 @@ export function ProfileScreen({
               )}
             </View>
 
+            {/* Reputation & Performance Analytics Card (T2-5) */}
+            <View style={styles.analyticsCard}>
+              <View style={styles.analyticsCardHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="stats-chart" size={18} color="#FFB43B" style={{ marginRight: 8 }} />
+                  <Text style={styles.analyticsTitle}>Reputation & Performance</Text>
+                </View>
+                <View style={styles.trustBadge}>
+                  <Ionicons name="shield-checkmark" size={13} color="#27AE60" />
+                  <Text style={styles.trustBadgeText}>Platform Verified</Text>
+                </View>
+              </View>
+
+              <View style={styles.analyticsMetricsRow}>
+                <View style={styles.analyticsMetricBox}>
+                  <Text style={styles.analyticsMetricVal}>
+                    {analyticsData ? analyticsData.average_rating.toFixed(1) : (summary?.average_rating ? summary.average_rating.toFixed(1) : '5.0')}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                    <Ionicons name="star" size={12} color="#FFB43B" />
+                    <Text style={styles.analyticsMetricLabel}> Rating</Text>
+                  </View>
+                </View>
+
+                <View style={styles.analyticsMetricDivider} />
+
+                <View style={styles.analyticsMetricBox}>
+                  <Text style={styles.analyticsMetricVal}>
+                    {analyticsData ? analyticsData.total_jobs_completed : '0'}
+                  </Text>
+                  <Text style={styles.analyticsMetricLabel}>Jobs Done</Text>
+                </View>
+
+                <View style={styles.analyticsMetricDivider} />
+
+                <View style={styles.analyticsMetricBox}>
+                  <Text style={styles.analyticsMetricVal}>
+                    {analyticsData ? `${analyticsData.positive_percentage}%` : (positivePercentage !== null ? `${positivePercentage}%` : '100%')}
+                  </Text>
+                  <Text style={styles.analyticsMetricLabel}>Positive</Text>
+                </View>
+
+                <View style={styles.analyticsMetricDivider} />
+
+                <View style={styles.analyticsMetricBox}>
+                  <Text style={styles.analyticsMetricVal}>
+                    {summary?.total_reviews ? '0%' : '0%'}
+                  </Text>
+                  <Text style={styles.analyticsMetricLabel}>Cancel Rate</Text>
+                </View>
+              </View>
+
+              {/* Rating Breakdown Bars */}
+              {analyticsData && analyticsData.total_reviews > 0 && (
+                <View style={styles.ratingBarsContainer}>
+                  {[5, 4, 3, 2, 1].map((stars) => {
+                    const count = analyticsData.rating_breakdown[String(stars) as '1'|'2'|'3'|'4'|'5'] || 0;
+                    const pct = analyticsData.total_reviews > 0 ? (count / analyticsData.total_reviews) * 100 : 0;
+                    return (
+                      <View key={stars} style={styles.ratingBarRow}>
+                        <Text style={styles.ratingBarLabel}>{stars} ★</Text>
+                        <View style={styles.ratingBarTrack}>
+                          <View style={[styles.ratingBarFill, { width: `${pct}%` }]} />
+                        </View>
+                        <Text style={styles.ratingBarCount}>{count}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+
             {/* Reviews Section */}
             <View style={styles.reviewsSection}>
               <View style={styles.reviewsHeader}>
@@ -681,12 +773,30 @@ export function ProfileScreen({
                 onPress={() => setIsVerificationModalVisible(true)}
               />
 
-              <View style={styles.sectionSpacing} />
+              <SettingsItem
+                icon="briefcase-outline"
+                label="My Jobs & Contracts"
+                onPress={() => setIsMyBookingsModalVisible(true)}
+              />
+              <View style={styles.divider} />
 
               <SettingsItem
                 icon="notifications-outline"
                 label={t.notifications}
-                onPress={() => setIsNotificationsModalVisible(true)}
+                rightComponent={
+                  unreadNotifCount > 0 ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <View style={{ backgroundColor: '#E74C3C', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, marginRight: 6 }}>
+                        <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '700' }}>{unreadNotifCount}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color="#FFB43B" />
+                    </View>
+                  ) : undefined
+                }
+                onPress={() => {
+                  setIsNotificationsModalVisible(true);
+                  setUnreadNotifCount(0);
+                }}
               />
               <View style={styles.divider} />
               <SettingsItem
@@ -892,6 +1002,14 @@ export function ProfileScreen({
       <PrivacyPolicyModal
         visible={isPrivacyPolicyModalVisible}
         onClose={() => setIsPrivacyPolicyModalVisible(false)}
+      />
+
+      {/* My Bookings / Jobs Modal */}
+      <MyBookingsModal
+        visible={isMyBookingsModalVisible}
+        onClose={() => setIsMyBookingsModalVisible(false)}
+        token={user.token || ''}
+        accountType="Kasambahay"
       />
     </View>
   );
@@ -1723,5 +1841,107 @@ const styles = StyleSheet.create({
   },
   verificationBadgeTextRejected: {
     color: '#B91C1C',
+  },
+  analyticsCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 24,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  analyticsCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  analyticsTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#222',
+  },
+  trustBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F8F0',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  trustBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#27AE60',
+    marginLeft: 4,
+  },
+  analyticsMetricsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: '#FBF8F3',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+  },
+  analyticsMetricBox: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  analyticsMetricVal: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1F2937',
+  },
+  analyticsMetricLabel: {
+    fontSize: 10,
+    color: '#6B7280',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  analyticsMetricDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#E5E7EB',
+  },
+  ratingBarsContainer: {
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    paddingTop: 10,
+  },
+  ratingBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 2,
+  },
+  ratingBarLabel: {
+    fontSize: 11,
+    color: '#4B5563',
+    width: 28,
+    fontWeight: '600',
+  },
+  ratingBarTrack: {
+    flex: 1,
+    height: 6,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    marginHorizontal: 8,
+    overflow: 'hidden',
+  },
+  ratingBarFill: {
+    height: '100%',
+    backgroundColor: '#FFB43B',
+    borderRadius: 3,
+  },
+  ratingBarCount: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    width: 24,
+    textAlign: 'right',
   },
 });

@@ -17,6 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { chatStore } from '../../store/chatStore';
 import { ChatDetailScreen } from '../ChatDetailScreen';
 import { FilterModal, FeedFilters, DEFAULT_FILTERS } from '../FilterModal';
+import { RecommendationsSection } from '../RecommendationsSection';
+import { UserProfileModal } from '../UserProfileModal';
 import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
 import { useUser } from '../../context/UserContext';
 
@@ -101,6 +103,24 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
     role: '',
     avatar: '',
   });
+
+  const [selectedUserForModal, setSelectedUserForModal] = useState<{
+    id: number | string;
+    name: string;
+    role?: string;
+    avatar?: string;
+  } | null>(null);
+  const [isUserProfileModalVisible, setIsUserProfileModalVisible] = useState(false);
+
+  const handleOpenProfile = (target: any) => {
+    setSelectedUserForModal({
+      id: target.partnerId || target.id,
+      name: target.name || 'Kasambahay',
+      role: target.role || 'Kasambahay',
+      avatar: target.avatar || target.image,
+    });
+    setIsUserProfileModalVisible(true);
+  };
 
   const buildFeedUrl = (targetFilters: FeedFilters) => {
     const params = new URLSearchParams();
@@ -423,6 +443,21 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
         </Pressable>
       </View>
 
+      {/* Smart Recommendations Carousel (T3-2) */}
+      <RecommendationsSection
+        token={effectiveToken}
+        accountType="Homeowner"
+        onSelectWorker={(worker) => {
+          setSelectedUserForModal({
+            id: worker.id,
+            name: worker.name,
+            role: worker.role,
+            avatar: worker.avatar,
+          });
+          setIsUserProfileModalVisible(true);
+        }}
+      />
+
       {/* Filter Chips Bar */}
       <ScrollView
         horizontal
@@ -533,9 +568,28 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
                   imageStyle={styles.mainCardImage}
                 >
                   <View style={styles.cardGradient}>
-                    <View style={styles.cardInfoTop} />
+                    <View style={styles.cardInfoTop}>
+                      <Pressable
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: 'rgba(0,0,0,0.5)',
+                          alignSelf: 'flex-start',
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                          borderRadius: 20,
+                        }}
+                        onPress={() => handleOpenProfile(card0)}
+                      >
+                        <Image source={{ uri: card0.avatar }} style={{ width: 20, height: 20, borderRadius: 10, marginRight: 6 }} />
+                        <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>View Profile</Text>
+                        <Ionicons name="chevron-forward" size={12} color="#FFB43B" style={{ marginLeft: 2 }} />
+                      </Pressable>
+                    </View>
                     <View style={styles.cardInfoBottom}>
-                      <Text style={styles.workerName}>{card0.name}</Text>
+                      <Pressable onPress={() => handleOpenProfile(card0)}>
+                        <Text style={styles.workerName}>{card0.name}</Text>
+                      </Pressable>
                       <Text style={styles.workerLocation}>{card0.location}</Text>
                       <Text style={styles.workerRole}>
                         {card0.role} • <Text style={{ fontWeight: '800' }}>{card0.years}</Text>
@@ -691,6 +745,19 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
         initialFilters={filters}
         mode="homeowner"
       />
+
+      {/* Counterparty Public Profile Modal (T1-5) */}
+      {selectedUserForModal && (
+        <UserProfileModal
+          visible={isUserProfileModalVisible}
+          onClose={() => setIsUserProfileModalVisible(false)}
+          userId={String(selectedUserForModal.id)}
+          prefilledName={selectedUserForModal.name}
+          prefilledRole={selectedUserForModal.role}
+          prefilledAvatar={selectedUserForModal.avatar}
+          token={effectiveToken || ''}
+        />
+      )}
     </View>
     </ScrollView>
   );

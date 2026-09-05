@@ -13,6 +13,8 @@ import { PasswordSecurityModal } from '../PasswordSecurityModal';
 import { NotificationsModal } from '../NotificationsModal';
 import { AboutUsModal } from '../AboutUsModal';
 import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
+import { MyBookingsModal } from '../MyBookingsModal';
+import { fetchNotifications } from '../../api/notificationsApi';
 
 const logoSource = require('../../../assets/serbisure-logo.png');
 
@@ -46,6 +48,8 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
   const [isNotificationsModalVisible, setIsNotificationsModalVisible] = useState(false);
   const [isAboutUsModalVisible, setIsAboutUsModalVisible] = useState(false);
   const [isPrivacyPolicyModalVisible, setIsPrivacyPolicyModalVisible] = useState(false);
+  const [isMyBookingsModalVisible, setIsMyBookingsModalVisible] = useState(false);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [verificationData, setVerificationData] = useState<VerificationStatusResponse | null>(null);
   const [isLoadingVerification, setIsLoadingVerification] = useState(false);
 
@@ -129,6 +133,12 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
           })
           .catch((err) => console.warn('[ProfileScreen] Review summary error:', err));
       }
+
+      fetchNotifications(user.token)
+        .then((res) => {
+          setUnreadNotifCount(res?.unread_count ?? 0);
+        })
+        .catch(() => {});
 
       loadVerificationStatus();
     }
@@ -484,12 +494,30 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                 onPress={() => setIsVerificationModalVisible(true)}
               />
 
-              <View style={styles.sectionSpacing} />
+              <SettingsItem
+                icon="calendar-outline"
+                label="My Bookings & Hires"
+                onPress={() => setIsMyBookingsModalVisible(true)}
+              />
+              <View style={styles.divider} />
 
               <SettingsItem
                 icon="notifications-outline"
                 label={t.notifications}
-                onPress={() => setIsNotificationsModalVisible(true)}
+                rightComponent={
+                  unreadNotifCount > 0 ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <View style={{ backgroundColor: '#E74C3C', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, marginRight: 6 }}>
+                        <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '700' }}>{unreadNotifCount}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color="#FFB43B" />
+                    </View>
+                  ) : undefined
+                }
+                onPress={() => {
+                  setIsNotificationsModalVisible(true);
+                  setUnreadNotifCount(0);
+                }}
               />
               <View style={styles.divider} />
               <SettingsItem
@@ -690,6 +718,14 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
       <PrivacyPolicyModal
         visible={isPrivacyPolicyModalVisible}
         onClose={() => setIsPrivacyPolicyModalVisible(false)}
+      />
+
+      {/* My Bookings Modal */}
+      <MyBookingsModal
+        visible={isMyBookingsModalVisible}
+        onClose={() => setIsMyBookingsModalVisible(false)}
+        token={user.token || ''}
+        accountType="Homeowner"
       />
     </View>
   );
