@@ -65,14 +65,43 @@ export function ProfileScreen({
       fetchVerificationStatus(user.token)
         .then((data) => {
           setVerificationData(data);
-          if (data?.overall_status) {
-            updateUser({ verificationStatus: data.overall_status });
+          if (data) {
+            let derivedStatus = data.overall_status;
+            if (data.documents && data.documents.length > 0) {
+              const verifiedTypes = new Set(
+                data.documents.filter((d) => d.verification_status === 'Verified').map((d) => d.document_type)
+              );
+              if (verifiedTypes.has('nbi_clearance') && verifiedTypes.has('police_clearance')) {
+                derivedStatus = 'Verified';
+              }
+            }
+            if (derivedStatus) {
+              updateUser({ verificationStatus: derivedStatus });
+            }
           }
         })
         .catch((err) => console.warn('[KasambahayProfile] verification status error:', err))
         .finally(() => setIsLoadingVerification(false));
     }
   };
+
+  const effectiveVerificationStatus = React.useMemo(() => {
+    if (verificationData?.documents && verificationData.documents.length > 0) {
+      const verifiedTypes = new Set(
+        verificationData.documents
+          .filter((d) => d.verification_status === 'Verified')
+          .map((d) => d.document_type)
+      );
+      if (verifiedTypes.has('nbi_clearance') && verifiedTypes.has('police_clearance')) {
+        return 'Verified';
+      }
+      const docStatuses = new Set(verificationData.documents.map((d) => d.verification_status));
+      if (docStatuses.has('Rejected')) return 'Rejected';
+      if (docStatuses.has('Pending') || verifiedTypes.size > 0) return 'Pending';
+    }
+    return verificationData?.overall_status || user.verificationStatus || 'Unverified';
+  }, [verificationData, user.verificationStatus]);
+
 
   React.useEffect(() => {
     if (avatarUri) {
@@ -593,37 +622,37 @@ export function ProfileScreen({
                 icon="checkmark-circle-outline"
                 label={t.getVerified}
                 iconColor={
-                  verificationData?.overall_status === 'Verified'
+                  effectiveVerificationStatus === 'Verified'
                     ? '#27AE60'
-                    : verificationData?.overall_status === 'Rejected'
+                    : effectiveVerificationStatus === 'Rejected'
                     ? '#E74C3C'
-                    : verificationData?.overall_status === 'Pending'
+                    : effectiveVerificationStatus === 'Pending'
                     ? '#F39C12'
                     : '#4CAF50'
                 }
                 rightComponent={
-                  verificationData?.overall_status ? (
+                  effectiveVerificationStatus ? (
                     <View
                       style={[
                         styles.verificationStatusBadge,
-                        verificationData.overall_status === 'Verified' && styles.verificationBadgeVerified,
-                        verificationData.overall_status === 'Pending' && styles.verificationBadgePending,
-                        verificationData.overall_status === 'Rejected' && styles.verificationBadgeRejected,
+                        effectiveVerificationStatus === 'Verified' && styles.verificationBadgeVerified,
+                        effectiveVerificationStatus === 'Pending' && styles.verificationBadgePending,
+                        effectiveVerificationStatus === 'Rejected' && styles.verificationBadgeRejected,
                       ]}
                     >
                       <Text
                         style={[
                           styles.verificationStatusBadgeText,
-                          verificationData.overall_status === 'Verified' && styles.verificationBadgeTextVerified,
-                          verificationData.overall_status === 'Pending' && styles.verificationBadgeTextPending,
-                          verificationData.overall_status === 'Rejected' && styles.verificationBadgeTextRejected,
+                          effectiveVerificationStatus === 'Verified' && styles.verificationBadgeTextVerified,
+                          effectiveVerificationStatus === 'Pending' && styles.verificationBadgeTextPending,
+                          effectiveVerificationStatus === 'Rejected' && styles.verificationBadgeTextRejected,
                         ]}
                       >
-                        {verificationData.overall_status === 'Pending'
+                        {effectiveVerificationStatus === 'Pending'
                           ? '⏳ Under Review'
-                          : verificationData.overall_status === 'Verified'
+                          : effectiveVerificationStatus === 'Verified'
                           ? 'Verified'
-                          : verificationData.overall_status === 'Rejected'
+                          : effectiveVerificationStatus === 'Rejected'
                           ? 'Action Needed'
                           : 'Get Verified'}
                       </Text>
