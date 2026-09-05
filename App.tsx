@@ -95,7 +95,8 @@ export default function App() {
                 setFlowState('registration3');
               }}
               onBack={() => setFlowState('registration1')}
-              onCancel={() => setFlowState('landing')}
+              onCancel={() => setFlowState('registration3')}
+              onSkip={() => setFlowState('registration3')}
             />
           )}
 
@@ -106,7 +107,7 @@ export default function App() {
               token={accessToken}
               onBack={() => setFlowState('registration2')}
               onNext={() => setFlowState('dashboard')}
-              onCancel={() => setFlowState('landing')}
+              onCancel={() => setFlowState('dashboard')}
               onSkip={() => setFlowState('dashboard')}
             />
           )}
