@@ -170,6 +170,24 @@ export function UserProfileModal({
                   <Text style={styles.metaText}>{memberSince}</Text>
                 </View>
               ) : null}
+              {profile?.contact_number ? (
+                <Pressable
+                  style={styles.metaItem}
+                  onPress={() => profile.contact_number && Linking.openURL(`tel:${profile.contact_number}`)}
+                >
+                  <Ionicons name="call-outline" size={14} color="#059669" />
+                  <Text style={[styles.metaText, { color: '#059669', fontWeight: '600' }]}>
+                    {profile.contact_number}
+                  </Text>
+                </Pressable>
+              ) : (
+                <View style={styles.metaItem}>
+                  <Ionicons name="eye-off-outline" size={13} color="#9CA3AF" />
+                  <Text style={[styles.metaText, { color: '#9CA3AF', fontStyle: 'italic' }]}>
+                    Phone Private
+                  </Text>
+                </View>
+              )}
             </View>
 
             {/* Client Sentiment Bar */}

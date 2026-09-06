@@ -1,12 +1,31 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, Image, ScrollView, Pressable, Alert, Modal, TextInput, ActivityIndicator } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  Image,
+  ScrollView,
+  Pressable,
+  Alert,
+  Modal,
+  TextInput,
+  ActivityIndicator,
+  Switch,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useLanguage, type Language } from '../../context/LanguageContext';
 import { useUser } from '../../context/UserContext';
 import { fetchReceivedReviews, fetchReviewSummary, ReviewItem, ReviewSummaryData } from '../../api/reviewApi';
-import { fetchUserAbout, updateUserAbout } from '../../api/accountApi';
+import {
+  fetchUserAbout,
+  updateUserAbout,
+  fetchUserTags,
+  updateUserTags,
+  fetchContactPrivacy,
+  updateContactPrivacy,
+} from '../../api/accountApi';
 import { fetchVerificationStatus, type VerificationStatusResponse } from '../../api/verificationApi';
 import { VerificationStatusModal } from '../VerificationStatusModal';
 import { PasswordSecurityModal } from '../PasswordSecurityModal';
@@ -14,6 +33,7 @@ import { NotificationsModal } from '../NotificationsModal';
 import { AboutUsModal } from '../AboutUsModal';
 import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
 import { MyBookingsModal } from '../MyBookingsModal';
+import { ManageTagsModal } from '../ManageTagsModal';
 import { fetchNotifications } from '../../api/notificationsApi';
 
 const logoSource = require('../../../assets/serbisure-logo.png');
@@ -52,6 +72,11 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [verificationData, setVerificationData] = useState<VerificationStatusResponse | null>(null);
   const [isLoadingVerification, setIsLoadingVerification] = useState(false);
+
+  const [tags, setTags] = useState<string[]>(user.userTags || []);
+  const [isManageTagsModalVisible, setIsManageTagsModalVisible] = useState(false);
+  const [showContactNumber, setShowContactNumber] = useState<boolean>(user.showContactNumber ?? false);
+  const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
 
   const loadVerificationStatus = () => {
     if (user.token) {
@@ -140,9 +165,46 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
         })
         .catch(() => {});
 
+      fetchUserTags(user.token)
+        .then((userTags) => {
+          setTags(userTags);
+          updateUser({ userTags });
+        })
+        .catch((err) => console.warn('[HomeownerProfile] fetch tags error:', err));
+
+      fetchContactPrivacy(user.token)
+        .then((show) => {
+          setShowContactNumber(show);
+          updateUser({ showContactNumber: show });
+        })
+        .catch((err) => console.warn('[HomeownerProfile] fetch contact privacy error:', err));
+
       loadVerificationStatus();
     }
   }, [user.token, user.id]);
+
+  const handleSaveTags = async (newTags: string[]) => {
+    if (!user.token) return;
+    const saved = await updateUserTags(user.token, newTags);
+    setTags(saved);
+    updateUser({ userTags: saved });
+  };
+
+  const handleToggleContactPrivacy = async (value: boolean) => {
+    if (!user.token || isUpdatingPrivacy) return;
+    setShowContactNumber(value);
+    setIsUpdatingPrivacy(true);
+    try {
+      const updated = await updateContactPrivacy(user.token, value);
+      setShowContactNumber(updated);
+      updateUser({ showContactNumber: updated });
+    } catch (err: any) {
+      setShowContactNumber(!value);
+      Alert.alert('Error', err?.message || 'Failed to update contact privacy setting.');
+    } finally {
+      setIsUpdatingPrivacy(false);
+    }
+  };
 
   const totalReviews = summary?.total_reviews ?? reviews.length;
   const positivePercentage =
@@ -255,6 +317,44 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                 <Text style={styles.locationText}>Cagayan de Oro, Misamis Oriental</Text>
               </View>
 
+              {/* Email & Phone Contact Information */}
+              <View style={styles.contactDetailsContainer}>
+                {user.email ? (
+                  <View style={styles.contactItemRow}>
+                    <Ionicons name="mail-outline" size={13} color="#78350F" />
+                    <Text style={styles.contactItemText}>{user.email}</Text>
+                  </View>
+                ) : null}
+                {user.contactNumber ? (
+                  <View style={styles.contactItemRow}>
+                    <Ionicons name="call-outline" size={13} color="#78350F" />
+                    <Text style={styles.contactItemText}>{user.contactNumber}</Text>
+                    <Pressable
+                      style={[
+                        styles.privacyStatusBadge,
+                        showContactNumber ? styles.privacyBadgePublic : styles.privacyBadgePrivate,
+                      ]}
+                      onPress={() => handleToggleContactPrivacy(!showContactNumber)}
+                      disabled={isUpdatingPrivacy}
+                    >
+                      <Ionicons
+                        name={showContactNumber ? 'eye-outline' : 'eye-off-outline'}
+                        size={11}
+                        color={showContactNumber ? '#065F46' : '#6B7280'}
+                      />
+                      <Text
+                        style={[
+                          styles.privacyStatusBadgeText,
+                          showContactNumber ? styles.privacyBadgeTextPublic : styles.privacyBadgeTextPrivate,
+                        ]}
+                      >
+                        {showContactNumber ? 'Public' : 'Private'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+
               <View style={styles.sentimentDivider} />
 
               <View style={styles.sentimentRow}>
@@ -280,11 +380,37 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                 </Text>
               </View>
 
+              {/* Profile Tags Section */}
+              <View style={styles.tagsHeaderRow}>
+                <Text style={styles.tagsHeaderTitle}>Profile Tags</Text>
+                <Pressable
+                  style={styles.manageTagsButton}
+                  onPress={() => setIsManageTagsModalVisible(true)}
+                  hitSlop={8}
+                >
+                  <Ionicons name="pricetag-outline" size={12} color="#92400E" />
+                  <Text style={styles.manageTagsButtonText}>
+                    {tags && tags.length > 0 ? 'Edit Tags' : '+ Add Tags'}
+                  </Text>
+                </Pressable>
+              </View>
+
               <View style={styles.tagsContainer}>
-                <View style={styles.pillTag}><Text style={styles.pillTagText}>Non-Smoker</Text></View>
-                <View style={styles.pillTag}><Text style={styles.pillTagText}>Respectful</Text></View>
-                <View style={styles.pillTag}><Text style={styles.pillTagText}>Pet Owner</Text></View>
-                <View style={styles.pillTag}><Text style={styles.pillTagText}>Family-Oriented</Text></View>
+                {tags && tags.length > 0 ? (
+                  tags.map((tagItem, idx) => (
+                    <View key={`${tagItem}-${idx}`} style={styles.pillTag}>
+                      <Text style={styles.pillTagText}>{tagItem}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Pressable
+                    style={styles.emptyTagsNotice}
+                    onPress={() => setIsManageTagsModalVisible(true)}
+                  >
+                    <Ionicons name="add-circle-outline" size={16} color="#B45309" />
+                    <Text style={styles.emptyTagsNoticeText}>Add tags to describe your household & preferences</Text>
+                  </Pressable>
+                )}
               </View>
             </View>
 
@@ -395,7 +521,31 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                     <Ionicons name="checkmark-circle" size={18} color="#27AE60" style={{ marginLeft: 6 }} />
                   )}
                 </View>
-                <Text style={styles.profilePhone}>+63 951 885 9238</Text>
+                {user.email ? (
+                  <View style={styles.headerEmailRow}>
+                    <Ionicons name="mail-outline" size={12} color="#6B7280" />
+                    <Text style={styles.headerEmailText} numberOfLines={1}>{user.email}</Text>
+                  </View>
+                ) : null}
+                <View style={styles.headerPhoneRow}>
+                  <Ionicons name="call-outline" size={12} color="#6B7280" />
+                  <Text style={styles.profilePhone}>{user.contactNumber || 'No phone registered'}</Text>
+                  <View
+                    style={[
+                      styles.miniPrivacyBadge,
+                      showContactNumber ? styles.miniPrivacyPublic : styles.miniPrivacyPrivate,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.miniPrivacyText,
+                        showContactNumber ? styles.miniPrivacyTextPublic : styles.miniPrivacyTextPrivate,
+                      ]}
+                    >
+                      {showContactNumber ? 'Public' : 'Private'}
+                    </Text>
+                  </View>
+                </View>
                 <View style={styles.roleBadge}>
                   <Text style={styles.roleText}>{(user.accountType || 'HOMEOWNER').toUpperCase()}</Text>
                 </View>
@@ -518,6 +668,21 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                   setIsNotificationsModalVisible(true);
                   setUnreadNotifCount(0);
                 }}
+              />
+              <View style={styles.divider} />
+              <SettingsItem
+                icon={showContactNumber ? "eye-outline" : "eye-off-outline"}
+                label="Show Contact Number"
+                rightComponent={
+                  <Switch
+                    value={showContactNumber}
+                    onValueChange={handleToggleContactPrivacy}
+                    trackColor={{ false: '#E5E7EB', true: '#FDE68A' }}
+                    thumbColor={showContactNumber ? '#FFB43B' : '#9CA3AF'}
+                    disabled={isUpdatingPrivacy}
+                  />
+                }
+                onPress={() => handleToggleContactPrivacy(!showContactNumber)}
               />
               <View style={styles.divider} />
               <SettingsItem
@@ -726,6 +891,15 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
         onClose={() => setIsMyBookingsModalVisible(false)}
         token={user.token || ''}
         accountType="Homeowner"
+      />
+
+      {/* Manage Tags Modal */}
+      <ManageTagsModal
+        visible={isManageTagsModalVisible}
+        onClose={() => setIsManageTagsModalVisible(false)}
+        currentTags={tags}
+        onSave={handleSaveTags}
+        accountType={user.accountType}
       />
     </View>
   );
@@ -1002,6 +1176,137 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#4CAF50',
+  },
+  contactDetailsContainer: {
+    marginTop: 8,
+    marginBottom: 4,
+    gap: 4,
+  },
+  contactItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  contactItemText: {
+    fontSize: 12,
+    color: '#555',
+    fontWeight: '500',
+  },
+  privacyStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    gap: 3,
+    marginLeft: 6,
+  },
+  privacyBadgePublic: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  privacyBadgePrivate: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  privacyStatusBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+  },
+  privacyBadgeTextPublic: {
+    color: '#065F46',
+  },
+  privacyBadgeTextPrivate: {
+    color: '#6B7280',
+  },
+  tagsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  tagsHeaderTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  manageTagsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    gap: 4,
+  },
+  manageTagsButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#92400E',
+  },
+  emptyTagsNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#FDE68A',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    gap: 6,
+    width: '100%',
+  },
+  emptyTagsNoticeText: {
+    fontSize: 11.5,
+    color: '#92400E',
+    fontWeight: '500',
+  },
+  headerEmailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  headerEmailText: {
+    fontSize: 12,
+    color: '#4B5563',
+    fontWeight: '500',
+  },
+  headerPhoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  miniPrivacyBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 8,
+    marginLeft: 4,
+  },
+  miniPrivacyPublic: {
+    backgroundColor: '#ECFDF5',
+  },
+  miniPrivacyPrivate: {
+    backgroundColor: '#F3F4F6',
+  },
+  miniPrivacyText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  miniPrivacyTextPublic: {
+    color: '#059669',
+  },
+  miniPrivacyTextPrivate: {
+    color: '#6B7280',
   },
   tagsContainer: {
     flexDirection: 'row',

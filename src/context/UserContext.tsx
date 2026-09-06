@@ -6,6 +6,10 @@ type UserData = {
   firstName: string;
   middleName: string;
   lastName: string;
+  email?: string;
+  contactNumber?: string;
+  showContactNumber?: boolean;
+  userTags?: string[];
   profileLink?: string | null;
   accountType?: string;
   userAbout?: string;
@@ -28,6 +32,10 @@ const defaultUser: UserData = {
   firstName: 'Daven Austhine',
   middleName: 'Santos',
   lastName: 'Sumagang',
+  email: '',
+  contactNumber: '',
+  showContactNumber: false,
+  userTags: [],
 };
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -77,16 +85,20 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
           firstName: decoded.first_name || '',
           middleName: decoded.middle_name || '',
           lastName: decoded.last_name || '',
+          email: decoded.email || '',
+          contactNumber: decoded.contact_number || '',
+          showContactNumber: decoded.show_contact_number ?? false,
+          userTags: Array.isArray(decoded.user_tags) ? decoded.user_tags : [],
           profileLink: decoded.profile_link || null,
           accountType: decoded.account_type || ''
-        })
+        });
       }
       else {
-        setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', profileLink: null, accountType: '' })
+        setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', email: '', contactNumber: '', showContactNumber: false, userTags: [], profileLink: null, accountType: '' });
       }
     }
     else {
-      setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', accountType: '' })
+      setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', email: '', contactNumber: '', showContactNumber: false, userTags: [], accountType: '' });
     }
   }, [token])
 
