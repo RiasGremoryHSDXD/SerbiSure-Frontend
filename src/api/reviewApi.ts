@@ -215,3 +215,49 @@ export async function fetchUserReviews(token: string, userId: string): Promise<R
   if (Array.isArray(json?.results)) return json.results;
   return [];
 }
+
+export interface ReviewAnalyticsData {
+  user_id: string;
+  user_name: string;
+  account_type: string;
+  total_jobs_completed: number;
+  total_reviews: number;
+  average_rating: number;
+  positive_percentage: number;
+  sentiment_breakdown: {
+    Positive: number;
+    Neutral: number;
+    Negative: number;
+  };
+  rating_breakdown: {
+    '5': number;
+    '4': number;
+    '3': number;
+    '2': number;
+    '1': number;
+  };
+  recent_reviews: ReviewItem[];
+}
+
+/**
+ * GET /api/v1/reviews/analytics/
+ * Retrieves reputation analytics for the authenticated user (Tier 2-5).
+ */
+export async function fetchReviewAnalytics(token: string): Promise<ReviewAnalyticsData | null> {
+  try {
+    const res = await fetchWithTimeout(`${REVIEW_BASE}/analytics/`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data || null;
+  } catch (err) {
+    console.warn('[reviewApi] fetchReviewAnalytics failed:', err);
+    return null;
+  }
+}
+

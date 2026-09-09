@@ -5,14 +5,26 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useLanguage, type Language } from '../../context/LanguageContext';
 import { useUser } from '../../context/UserContext';
-import { fetchReceivedReviews, fetchReviewSummary, ReviewItem, ReviewSummaryData } from '../../api/reviewApi';
-import { fetchUserAbout, updateUserAbout, fetchKasambahayResume, uploadKasambahayResume } from '../../api/accountApi';
+import { fetchReceivedReviews, fetchReviewSummary, fetchReviewAnalytics, ReviewItem, ReviewSummaryData, ReviewAnalyticsData } from '../../api/reviewApi';
+import {
+  fetchUserAbout,
+  updateUserAbout,
+  fetchKasambahayResume,
+  uploadKasambahayResume,
+  fetchUserTags,
+  updateUserTags,
+  fetchContactPrivacy,
+  updateContactPrivacy,
+} from '../../api/accountApi';
 import { fetchVerificationStatus, type VerificationStatusResponse } from '../../api/verificationApi';
+import { fetchNotifications } from '../../api/notificationsApi';
 import { VerificationStatusModal } from '../VerificationStatusModal';
 import { PasswordSecurityModal } from '../PasswordSecurityModal';
 import { NotificationsModal } from '../NotificationsModal';
 import { AboutUsModal } from '../AboutUsModal';
 import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
+import { MyBookingsModal } from '../MyBookingsModal';
+import { ManageTagsModal } from '../ManageTagsModal';
 
 // Safely require expo-document-picker to avoid crashing if native module is not yet compiled in APK
 let DocumentPicker: typeof import('expo-document-picker') | null = null;
@@ -64,8 +76,17 @@ export function ProfileScreen({
   const [isNotificationsModalVisible, setIsNotificationsModalVisible] = useState(false);
   const [isAboutUsModalVisible, setIsAboutUsModalVisible] = useState(false);
   const [isPrivacyPolicyModalVisible, setIsPrivacyPolicyModalVisible] = useState(false);
+  const [isMyBookingsModalVisible, setIsMyBookingsModalVisible] = useState(false);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [analyticsData, setAnalyticsData] = useState<ReviewAnalyticsData | null>(null);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
   const [verificationData, setVerificationData] = useState<VerificationStatusResponse | null>(null);
   const [isLoadingVerification, setIsLoadingVerification] = useState(false);
+
+  const [tags, setTags] = useState<string[]>(user.userTags || []);
+  const [isManageTagsModalVisible, setIsManageTagsModalVisible] = useState(false);
+  const [showContactNumber, setShowContactNumber] = useState<boolean>(user.showContactNumber ?? false);
+  const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
 
   const loadVerificationStatus = () => {
     if (user.token) {
@@ -160,9 +181,60 @@ export function ProfileScreen({
           .catch((err) => console.warn('[KasambahayProfile] Review summary error:', err));
       }
 
+      fetchNotifications(user.token)
+        .then((res) => {
+          setUnreadNotifCount(res?.unread_count ?? 0);
+        })
+        .catch(() => {});
+
+      setIsLoadingAnalytics(true);
+      fetchReviewAnalytics(user.token)
+        .then((analytics) => {
+          if (analytics) setAnalyticsData(analytics);
+        })
+        .catch((err) => console.warn('[KasambahayProfile] Analytics error:', err))
+        .finally(() => setIsLoadingAnalytics(false));
+
+      fetchUserTags(user.token)
+        .then((userTags) => {
+          setTags(userTags);
+          updateUser({ userTags });
+        })
+        .catch((err) => console.warn('[KasambahayProfile] fetch tags error:', err));
+
+      fetchContactPrivacy(user.token)
+        .then((show) => {
+          setShowContactNumber(show);
+          updateUser({ showContactNumber: show });
+        })
+        .catch((err) => console.warn('[KasambahayProfile] fetch contact privacy error:', err));
+
       loadVerificationStatus();
     }
   }, [user.token, user.id]);
+
+  const handleSaveTags = async (newTags: string[]) => {
+    if (!user.token) return;
+    const saved = await updateUserTags(user.token, newTags);
+    setTags(saved);
+    updateUser({ userTags: saved });
+  };
+
+  const handleToggleContactPrivacy = async (value: boolean) => {
+    if (!user.token || isUpdatingPrivacy) return;
+    setShowContactNumber(value);
+    setIsUpdatingPrivacy(true);
+    try {
+      const updated = await updateContactPrivacy(user.token, value);
+      setShowContactNumber(updated);
+      updateUser({ showContactNumber: updated });
+    } catch (err: any) {
+      setShowContactNumber(!value);
+      Alert.alert('Error', err?.message || 'Failed to update contact privacy setting.');
+    } finally {
+      setIsUpdatingPrivacy(false);
+    }
+  };
 
   const totalReviews = summary?.total_reviews ?? reviews.length;
   const positivePercentage =
@@ -344,6 +416,44 @@ export function ProfileScreen({
                 <Text style={styles.locationText}>Cagayan de Oro, Misamis Oriental</Text>
               </View>
 
+              {/* Email & Phone Contact Information */}
+              <View style={styles.contactDetailsContainer}>
+                {user.email ? (
+                  <View style={styles.contactItemRow}>
+                    <Ionicons name="mail-outline" size={13} color="#78350F" />
+                    <Text style={styles.contactItemText}>{user.email}</Text>
+                  </View>
+                ) : null}
+                {user.contactNumber ? (
+                  <View style={styles.contactItemRow}>
+                    <Ionicons name="call-outline" size={13} color="#78350F" />
+                    <Text style={styles.contactItemText}>{user.contactNumber}</Text>
+                    <Pressable
+                      style={[
+                        styles.privacyStatusBadge,
+                        showContactNumber ? styles.privacyBadgePublic : styles.privacyBadgePrivate,
+                      ]}
+                      onPress={() => handleToggleContactPrivacy(!showContactNumber)}
+                      disabled={isUpdatingPrivacy}
+                    >
+                      <Ionicons
+                        name={showContactNumber ? 'eye-outline' : 'eye-off-outline'}
+                        size={11}
+                        color={showContactNumber ? '#065F46' : '#6B7280'}
+                      />
+                      <Text
+                        style={[
+                          styles.privacyStatusBadgeText,
+                          showContactNumber ? styles.privacyBadgeTextPublic : styles.privacyBadgeTextPrivate,
+                        ]}
+                      >
+                        {showContactNumber ? 'Public' : 'Private'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+
               <View style={styles.sentimentDivider} />
 
               <View style={styles.sentimentRow}>
@@ -369,12 +479,37 @@ export function ProfileScreen({
                 </Text>
               </View>
 
+              {/* Profile Tags Section */}
+              <View style={styles.tagsHeaderRow}>
+                <Text style={styles.tagsHeaderTitle}>Profile Tags</Text>
+                <Pressable
+                  style={styles.manageTagsButton}
+                  onPress={() => setIsManageTagsModalVisible(true)}
+                  hitSlop={8}
+                >
+                  <Ionicons name="pricetag-outline" size={12} color="#92400E" />
+                  <Text style={styles.manageTagsButtonText}>
+                    {tags && tags.length > 0 ? 'Edit Tags' : '+ Add Tags'}
+                  </Text>
+                </Pressable>
+              </View>
+
               <View style={styles.tagsContainer}>
-                <View style={styles.pillTag}><Text style={styles.pillTagText}>Cleaning</Text></View>
-                <View style={styles.pillTag}><Text style={styles.pillTagText}>Cook</Text></View>
-                <View style={styles.pillTag}><Text style={styles.pillTagText}>Childcare</Text></View>
-                <View style={styles.pillTag}><Text style={styles.pillTagText}>Meal Prep</Text></View>
-                <View style={styles.pillTag}><Text style={styles.pillTagText}>Pet Friendly</Text></View>
+                {tags && tags.length > 0 ? (
+                  tags.map((tagItem, idx) => (
+                    <View key={`${tagItem}-${idx}`} style={styles.pillTag}>
+                      <Text style={styles.pillTagText}>{tagItem}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Pressable
+                    style={styles.emptyTagsNotice}
+                    onPress={() => setIsManageTagsModalVisible(true)}
+                  >
+                    <Ionicons name="add-circle-outline" size={16} color="#B45309" />
+                    <Text style={styles.emptyTagsNoticeText}>Add tags to showcase your skills & work preferences</Text>
+                  </Pressable>
+                )}
               </View>
             </View>
 
@@ -487,6 +622,78 @@ export function ProfileScreen({
               )}
             </View>
 
+            {/* Reputation & Performance Analytics Card (T2-5) */}
+            <View style={styles.analyticsCard}>
+              <View style={styles.analyticsCardHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="stats-chart" size={18} color="#FFB43B" style={{ marginRight: 8 }} />
+                  <Text style={styles.analyticsTitle}>Reputation & Performance</Text>
+                </View>
+                <View style={styles.trustBadge}>
+                  <Ionicons name="shield-checkmark" size={13} color="#27AE60" />
+                  <Text style={styles.trustBadgeText}>Platform Verified</Text>
+                </View>
+              </View>
+
+              <View style={styles.analyticsMetricsRow}>
+                <View style={styles.analyticsMetricBox}>
+                  <Text style={styles.analyticsMetricVal}>
+                    {analyticsData ? analyticsData.average_rating.toFixed(1) : (summary?.average_rating ? summary.average_rating.toFixed(1) : '5.0')}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                    <Ionicons name="star" size={12} color="#FFB43B" />
+                    <Text style={styles.analyticsMetricLabel}> Rating</Text>
+                  </View>
+                </View>
+
+                <View style={styles.analyticsMetricDivider} />
+
+                <View style={styles.analyticsMetricBox}>
+                  <Text style={styles.analyticsMetricVal}>
+                    {analyticsData ? analyticsData.total_jobs_completed : '0'}
+                  </Text>
+                  <Text style={styles.analyticsMetricLabel}>Jobs Done</Text>
+                </View>
+
+                <View style={styles.analyticsMetricDivider} />
+
+                <View style={styles.analyticsMetricBox}>
+                  <Text style={styles.analyticsMetricVal}>
+                    {analyticsData ? `${analyticsData.positive_percentage}%` : (positivePercentage !== null ? `${positivePercentage}%` : '100%')}
+                  </Text>
+                  <Text style={styles.analyticsMetricLabel}>Positive</Text>
+                </View>
+
+                <View style={styles.analyticsMetricDivider} />
+
+                <View style={styles.analyticsMetricBox}>
+                  <Text style={styles.analyticsMetricVal}>
+                    {summary?.total_reviews ? '0%' : '0%'}
+                  </Text>
+                  <Text style={styles.analyticsMetricLabel}>Cancel Rate</Text>
+                </View>
+              </View>
+
+              {/* Rating Breakdown Bars */}
+              {analyticsData && analyticsData.total_reviews > 0 && (
+                <View style={styles.ratingBarsContainer}>
+                  {[5, 4, 3, 2, 1].map((stars) => {
+                    const count = analyticsData.rating_breakdown[String(stars) as '1'|'2'|'3'|'4'|'5'] || 0;
+                    const pct = analyticsData.total_reviews > 0 ? (count / analyticsData.total_reviews) * 100 : 0;
+                    return (
+                      <View key={stars} style={styles.ratingBarRow}>
+                        <Text style={styles.ratingBarLabel}>{stars} ★</Text>
+                        <View style={styles.ratingBarTrack}>
+                          <View style={[styles.ratingBarFill, { width: `${pct}%` }]} />
+                        </View>
+                        <Text style={styles.ratingBarCount}>{count}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+
             {/* Reviews Section */}
             <View style={styles.reviewsSection}>
               <View style={styles.reviewsHeader}>
@@ -552,7 +759,31 @@ export function ProfileScreen({
                 <View style={styles.nameRow}>
                   <Text style={styles.profileName}>{getFullName()}</Text>
                 </View>
-                <Text style={styles.profilePhone}>+63 951 885 9238</Text>
+                {user.email ? (
+                  <View style={styles.headerEmailRow}>
+                    <Ionicons name="mail-outline" size={12} color="#6B7280" />
+                    <Text style={styles.headerEmailText} numberOfLines={1}>{user.email}</Text>
+                  </View>
+                ) : null}
+                <View style={styles.headerPhoneRow}>
+                  <Ionicons name="call-outline" size={12} color="#6B7280" />
+                  <Text style={styles.profilePhone}>{user.contactNumber || 'No phone registered'}</Text>
+                  <View
+                    style={[
+                      styles.miniPrivacyBadge,
+                      showContactNumber ? styles.miniPrivacyPublic : styles.miniPrivacyPrivate,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.miniPrivacyText,
+                        showContactNumber ? styles.miniPrivacyTextPublic : styles.miniPrivacyTextPrivate,
+                      ]}
+                    >
+                      {showContactNumber ? 'Public' : 'Private'}
+                    </Text>
+                  </View>
+                </View>
                 <View style={styles.roleBadge}>
                   <Text style={styles.roleText}>KASAMBAHAY</Text>
                 </View>
@@ -681,12 +912,45 @@ export function ProfileScreen({
                 onPress={() => setIsVerificationModalVisible(true)}
               />
 
-              <View style={styles.sectionSpacing} />
+              <SettingsItem
+                icon="briefcase-outline"
+                label="My Jobs & Contracts"
+                onPress={() => setIsMyBookingsModalVisible(true)}
+              />
+              <View style={styles.divider} />
 
               <SettingsItem
                 icon="notifications-outline"
                 label={t.notifications}
-                onPress={() => setIsNotificationsModalVisible(true)}
+                rightComponent={
+                  unreadNotifCount > 0 ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <View style={{ backgroundColor: '#E74C3C', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, marginRight: 6 }}>
+                        <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '700' }}>{unreadNotifCount}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color="#FFB43B" />
+                    </View>
+                  ) : undefined
+                }
+                onPress={() => {
+                  setIsNotificationsModalVisible(true);
+                  setUnreadNotifCount(0);
+                }}
+              />
+              <View style={styles.divider} />
+              <SettingsItem
+                icon={showContactNumber ? "eye-outline" : "eye-off-outline"}
+                label="Show Contact Number"
+                rightComponent={
+                  <Switch
+                    value={showContactNumber}
+                    onValueChange={handleToggleContactPrivacy}
+                    trackColor={{ false: '#E5E7EB', true: '#FDE68A' }}
+                    thumbColor={showContactNumber ? '#FFB43B' : '#9CA3AF'}
+                    disabled={isUpdatingPrivacy}
+                  />
+                }
+                onPress={() => handleToggleContactPrivacy(!showContactNumber)}
               />
               <View style={styles.divider} />
               <SettingsItem
@@ -892,6 +1156,23 @@ export function ProfileScreen({
       <PrivacyPolicyModal
         visible={isPrivacyPolicyModalVisible}
         onClose={() => setIsPrivacyPolicyModalVisible(false)}
+      />
+
+      {/* My Bookings / Jobs Modal */}
+      <MyBookingsModal
+        visible={isMyBookingsModalVisible}
+        onClose={() => setIsMyBookingsModalVisible(false)}
+        token={user.token || ''}
+        accountType="Kasambahay"
+      />
+
+      {/* Manage Tags Modal */}
+      <ManageTagsModal
+        visible={isManageTagsModalVisible}
+        onClose={() => setIsManageTagsModalVisible(false)}
+        currentTags={tags}
+        onSave={handleSaveTags}
+        accountType={user.accountType}
       />
     </View>
   );
@@ -1220,6 +1501,137 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#4CAF50',
+  },
+  contactDetailsContainer: {
+    marginTop: 8,
+    marginBottom: 4,
+    gap: 4,
+  },
+  contactItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  contactItemText: {
+    fontSize: 12,
+    color: '#555',
+    fontWeight: '500',
+  },
+  privacyStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    gap: 3,
+    marginLeft: 6,
+  },
+  privacyBadgePublic: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  privacyBadgePrivate: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  privacyStatusBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+  },
+  privacyBadgeTextPublic: {
+    color: '#065F46',
+  },
+  privacyBadgeTextPrivate: {
+    color: '#6B7280',
+  },
+  tagsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  tagsHeaderTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  manageTagsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    gap: 4,
+  },
+  manageTagsButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#92400E',
+  },
+  emptyTagsNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#FDE68A',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    gap: 6,
+    width: '100%',
+  },
+  emptyTagsNoticeText: {
+    fontSize: 11.5,
+    color: '#92400E',
+    fontWeight: '500',
+  },
+  headerEmailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  headerEmailText: {
+    fontSize: 12,
+    color: '#4B5563',
+    fontWeight: '500',
+  },
+  headerPhoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  miniPrivacyBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 8,
+    marginLeft: 4,
+  },
+  miniPrivacyPublic: {
+    backgroundColor: '#ECFDF5',
+  },
+  miniPrivacyPrivate: {
+    backgroundColor: '#F3F4F6',
+  },
+  miniPrivacyText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  miniPrivacyTextPublic: {
+    color: '#059669',
+  },
+  miniPrivacyTextPrivate: {
+    color: '#6B7280',
   },
   tagsContainer: {
     flexDirection: 'row',
@@ -1723,5 +2135,107 @@ const styles = StyleSheet.create({
   },
   verificationBadgeTextRejected: {
     color: '#B91C1C',
+  },
+  analyticsCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 24,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  analyticsCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  analyticsTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#222',
+  },
+  trustBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F8F0',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  trustBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#27AE60',
+    marginLeft: 4,
+  },
+  analyticsMetricsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: '#FBF8F3',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+  },
+  analyticsMetricBox: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  analyticsMetricVal: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1F2937',
+  },
+  analyticsMetricLabel: {
+    fontSize: 10,
+    color: '#6B7280',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  analyticsMetricDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#E5E7EB',
+  },
+  ratingBarsContainer: {
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    paddingTop: 10,
+  },
+  ratingBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 2,
+  },
+  ratingBarLabel: {
+    fontSize: 11,
+    color: '#4B5563',
+    width: 28,
+    fontWeight: '600',
+  },
+  ratingBarTrack: {
+    flex: 1,
+    height: 6,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    marginHorizontal: 8,
+    overflow: 'hidden',
+  },
+  ratingBarFill: {
+    height: '100%',
+    backgroundColor: '#FFB43B',
+    borderRadius: 3,
+  },
+  ratingBarCount: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    width: 24,
+    textAlign: 'right',
   },
 });

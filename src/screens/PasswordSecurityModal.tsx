@@ -283,6 +283,113 @@ export function PasswordSecurityModal({
                 </Text>
               </View>
             </View>
+
+            {/* Data Privacy & Account Deletion Controls (Tier 3-5) */}
+            <View style={styles.privacySection}>
+              <Text style={styles.privacySectionTitle}>DATA & PRIVACY</Text>
+
+              {/* Export Data Button */}
+              <Pressable
+                style={styles.privacyRowBtn}
+                onPress={async () => {
+                  if (!token) return;
+                  try {
+                    const { exportUserData } = require('../api/accountApi');
+                    const res = await exportUserData(token);
+                    const pCount = res?.user_data?.posted_bookings?.length || 0;
+                    const aCount = res?.user_data?.assigned_bookings?.length || 0;
+                    const rCount = (res?.user_data?.reviews_given?.length || 0) + (res?.user_data?.reviews_received?.length || 0);
+                    Alert.alert(
+                      'Personal Data Exported',
+                      `Your archive is ready!\n• Name: ${res?.user_data?.profile?.first_name} ${res?.user_data?.profile?.last_name}\n• Bookings: ${pCount + aCount}\n• Reviews: ${rCount}\n\nYour data has been compiled in accordance with Data Privacy compliance.`
+                    );
+                  } catch (e: any) {
+                    Alert.alert('Export Failed', e.message || 'Could not export data.');
+                  }
+                }}
+              >
+                <View style={styles.privacyIconWrap}>
+                  <Ionicons name="download-outline" size={18} color="#4B5563" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.privacyBtnText}>Download Personal Data Archive</Text>
+                  <Text style={styles.privacyBtnSubtext}>Export profile, bookings history, and reviews</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+              </Pressable>
+
+              {/* Delete Account Button */}
+              <Pressable
+                style={[styles.privacyRowBtn, styles.deleteAccountRow]}
+                onPress={() => {
+                  if (!token) return;
+                  Alert.prompt
+                    ? Alert.prompt(
+                        'Deactivate Account',
+                        'This will permanently deactivate your account and anonymize your personal data. Enter your current password to confirm:',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Deactivate',
+                            style: 'destructive',
+                            onPress: async (pwd?: string) => {
+                              if (!pwd) {
+                                Alert.alert('Error', 'Password is required.');
+                                return;
+                              }
+                              try {
+                                const { deleteAccount } = require('../api/accountApi');
+                                await deleteAccount(token, pwd);
+                                Alert.alert('Account Deactivated', 'Your account has been deactivated.', [
+                                  { text: 'OK', onPress: handleClose },
+                                ]);
+                              } catch (err: any) {
+                                Alert.alert('Deactivation Failed', err.message || 'Could not deactivate account.');
+                              }
+                            },
+                          },
+                        ],
+                        'secure-text'
+                      )
+                    : Alert.alert(
+                        'Deactivate Account',
+                        'To deactivate your account, please contact privacy support or confirm with your password.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Confirm with Password',
+                            style: 'destructive',
+                            onPress: async () => {
+                              if (!currentPassword) {
+                                Alert.alert('Password Required', 'Please enter your current password in the form above first, then tap Deactivate.');
+                                return;
+                              }
+                              try {
+                                const { deleteAccount } = require('../api/accountApi');
+                                await deleteAccount(token, currentPassword);
+                                Alert.alert('Account Deactivated', 'Your account has been deactivated.', [
+                                  { text: 'OK', onPress: handleClose },
+                                ]);
+                              } catch (err: any) {
+                                Alert.alert('Deactivation Failed', err.message || 'Could not deactivate account.');
+                              }
+                            },
+                          },
+                        ]
+                      );
+                }}
+              >
+                <View style={[styles.privacyIconWrap, { backgroundColor: '#FEE2E2' }]}>
+                  <Ionicons name="trash-outline" size={18} color="#DC2626" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.privacyBtnText, { color: '#DC2626' }]}>Deactivate & Delete Account</Text>
+                  <Text style={styles.privacyBtnSubtext}>Anonymize data and deactivate profile</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#DC2626" />
+              </Pressable>
+            </View>
+
           </ScrollView>
 
           {/* Action Buttons */}
@@ -506,4 +613,51 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFF',
   },
+  privacySection: {
+    marginTop: 14,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F0EAE1',
+  },
+  privacySectionTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#888',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+  },
+  privacyRowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  deleteAccountRow: {
+    backgroundColor: '#FFF5F5',
+    borderColor: '#FECACA',
+  },
+  privacyIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  privacyBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  privacyBtnSubtext: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 1,
+  },
 });
+

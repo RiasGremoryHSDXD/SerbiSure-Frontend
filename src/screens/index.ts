@@ -31,4 +31,9 @@ export { PasswordSecurityModal } from './PasswordSecurityModal';
 export { NotificationsModal } from './NotificationsModal';
 export { AboutUsModal } from './AboutUsModal';
 export { PrivacyPolicyModal } from './PrivacyPolicyModal';
+export { ReviewModal } from './ReviewModal';
+export { MyBookingsModal } from './MyBookingsModal';
+export { ProposalsModal } from './ProposalsModal';
+export { RecommendationsSection } from './RecommendationsSection';
+
 
