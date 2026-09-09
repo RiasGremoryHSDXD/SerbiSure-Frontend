@@ -1,9 +1,34 @@
 import { useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, TextInput, View, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import {
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  ActivityIndicator,
+  ScrollView,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL, fetchWithTimeout } from '../config/api';
 import { useUser } from '../context/UserContext';
+import { SearchablePickerModal } from '../ui/SearchablePickerModal';
+import {
+  getRegions,
+  getProvinces,
+  getCities,
+  getBarangays,
+  getZipCodeForCity,
+  Region,
+  Province,
+  CityMunicipality,
+  Barangay,
+  LocationItem,
+} from '../services/locationService';
 
 const logoSource = require('../../assets/serbisure-logo.png');
 
@@ -17,9 +42,11 @@ type RegistrationScreenProps = {
 export function RegistrationScreen({ role, onBack, onNext, onCancel }: RegistrationScreenProps) {
   const insets = useSafeAreaInsets();
   const { updateUser } = useUser();
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [privacyAccepted, setPrivacyAccepted] = useState(false);
 
+  // Sub-step inside registration: 1 = Personal Details, 2 = Location & Consent
+  const [subStep, setSubStep] = useState<1 | 2>(1);
+
+  // Step 1: Personal & Account info
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -29,6 +56,30 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Step 2: Location & Address info
+  const [selectedRegion, setSelectedRegion] = useState<Region | null>(null);
+  const [selectedProvince, setSelectedProvince] = useState<Province | null>(null);
+  const [selectedCity, setSelectedCity] = useState<CityMunicipality | null>(null);
+  const [selectedBarangay, setSelectedBarangay] = useState<Barangay | null>(null);
+  const [streetAddress, setStreetAddress] = useState('');
+  const [zipcode, setZipcode] = useState('');
+
+  // Location lists & loading states
+  const [regionsList, setRegionsList] = useState<Region[]>([]);
+  const [provincesList, setProvincesList] = useState<Province[]>([]);
+  const [citiesList, setCitiesList] = useState<CityMunicipality[]>([]);
+  const [barangaysList, setBarangaysList] = useState<Barangay[]>([]);
+  const [loadingLocations, setLoadingLocations] = useState(false);
+
+  // Active Picker Modal
+  const [activePicker, setActivePicker] = useState<'region' | 'province' | 'city' | 'barangay' | null>(null);
+
+  // Consent
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+
+  // Form submission loading
   const [loading, setLoading] = useState(false);
 
   const isHomeowner = role === 'homeowner';
@@ -74,9 +125,9 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
     setRawPhone(digits);
   };
 
-  const handleRegister = async () => {
+  // --- Step 1 Validation & Transition ---
+  const handleProceedToLocation = async () => {
     const cleanDigits = rawPhone.replace(/\D/g, '').replace(/^0+/, '');
-    const contactNumber = `+63${cleanDigits}`;
 
     if (!firstName.trim()) {
       Alert.alert("Missing Field", "Please enter your First Name.");
@@ -102,6 +153,190 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
       Alert.alert("Password Mismatch", "Password and Confirm Password do not match.");
       return;
     }
+
+    // Prefetch regions if not already fetched
+    if (regionsList.length === 0) {
+      loadRegions();
+    }
+
+    setSubStep(2);
+  };
+
+  // --- Location Pickers Logic ---
+  const loadRegions = async () => {
+    setLoadingLocations(true);
+    try {
+      const data = await getRegions();
+      setRegionsList(data);
+    } catch (err) {
+      console.warn('[RegistrationScreen] loadRegions error:', err);
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const handleOpenRegionPicker = async () => {
+    setActivePicker('region');
+    if (regionsList.length === 0) {
+      await loadRegions();
+    }
+  };
+
+  const handleSelectRegion = async (item: LocationItem) => {
+    const reg = item as Region;
+    setSelectedRegion(reg);
+    setSelectedProvince(null);
+    setSelectedCity(null);
+    setSelectedBarangay(null);
+    setProvincesList([]);
+    setCitiesList([]);
+    setBarangaysList([]);
+
+    setLoadingLocations(true);
+    try {
+      const provs = await getProvinces(reg.code);
+      setProvincesList(provs);
+      // Auto-select Metro Manila if NCR
+      const metroManila = provs.length === 1 && provs[0]?.name === 'Metro Manila' ? provs[0] : null;
+      if (metroManila) {
+        setSelectedProvince(metroManila);
+        const cities = await getCities(metroManila.code, reg.code);
+        setCitiesList(cities);
+      }
+    } catch (err) {
+      console.warn('[RegistrationScreen] handleSelectRegion error:', err);
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const handleOpenProvincePicker = async () => {
+    if (!selectedRegion) {
+      Alert.alert("Select Region First", "Please select your Region first.");
+      return;
+    }
+    setActivePicker('province');
+    if (provincesList.length === 0) {
+      setLoadingLocations(true);
+      try {
+        const provs = await getProvinces(selectedRegion.code);
+        setProvincesList(provs);
+      } finally {
+        setLoadingLocations(false);
+      }
+    }
+  };
+
+  const handleSelectProvince = async (item: LocationItem) => {
+    const prov = item as Province;
+    setSelectedProvince(prov);
+    setSelectedCity(null);
+    setSelectedBarangay(null);
+    setCitiesList([]);
+    setBarangaysList([]);
+
+    setLoadingLocations(true);
+    try {
+      const cities = await getCities(prov.code, selectedRegion?.code);
+      setCitiesList(cities);
+    } catch (err) {
+      console.warn('[RegistrationScreen] handleSelectProvince error:', err);
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const handleOpenCityPicker = async () => {
+    if (!selectedProvince) {
+      Alert.alert("Select Province First", "Please select your Province first.");
+      return;
+    }
+    setActivePicker('city');
+    if (citiesList.length === 0) {
+      setLoadingLocations(true);
+      try {
+        const cities = await getCities(selectedProvince.code, selectedRegion?.code);
+        setCitiesList(cities);
+      } finally {
+        setLoadingLocations(false);
+      }
+    }
+  };
+
+  const handleSelectCity = async (item: LocationItem) => {
+    const city = item as CityMunicipality;
+    setSelectedCity(city);
+    setSelectedBarangay(null);
+    setBarangaysList([]);
+
+    // Auto-suggest zip code (e.g. 9000 for CDO)
+    const suggestedZip = getZipCodeForCity(city.code, city.name);
+    if (suggestedZip) {
+      setZipcode(suggestedZip);
+    }
+
+    setLoadingLocations(true);
+    try {
+      const brgys = await getBarangays(city.code);
+      setBarangaysList(brgys);
+    } catch (err) {
+      console.warn('[RegistrationScreen] handleSelectCity error:', err);
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const handleOpenBarangayPicker = async () => {
+    if (!selectedCity) {
+      Alert.alert("Select City First", "Please select your City / Municipality first.");
+      return;
+    }
+    setActivePicker('barangay');
+    if (barangaysList.length === 0) {
+      setLoadingLocations(true);
+      try {
+        const brgys = await getBarangays(selectedCity.code);
+        setBarangaysList(brgys);
+      } finally {
+        setLoadingLocations(false);
+      }
+    }
+  };
+
+  const handleSelectBarangay = (item: LocationItem) => {
+    setSelectedBarangay(item as Barangay);
+  };
+
+  // --- Step 2 Final Submission ---
+  const handleRegister = async () => {
+    const cleanDigits = rawPhone.replace(/\D/g, '').replace(/^0+/, '');
+    const contactNumber = `+63${cleanDigits}`;
+
+    if (!selectedRegion) {
+      Alert.alert("Missing Location", "Please select your Region.");
+      return;
+    }
+    if (!selectedProvince) {
+      Alert.alert("Missing Location", "Please select your Province.");
+      return;
+    }
+    if (!selectedCity) {
+      Alert.alert("Missing Location", "Please select your City or Municipality.");
+      return;
+    }
+    if (!selectedBarangay) {
+      Alert.alert("Missing Location", "Please select your Barangay.");
+      return;
+    }
+    if (!streetAddress.trim()) {
+      Alert.alert("Missing Field", "Please enter your Street / House Number / Zone.");
+      return;
+    }
+    const cleanZip = zipcode.trim();
+    if (!cleanZip || !/^\d{4}$/.test(cleanZip)) {
+      Alert.alert("Invalid Zip Code", "Zip Code must be exactly 4 digits (e.g. 9000).");
+      return;
+    }
     if (!termsAccepted || !privacyAccepted) {
       Alert.alert("Consent Required", "Please accept both the Terms & Conditions and Data Privacy Policy.");
       return;
@@ -109,18 +344,28 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
 
     setLoading(true);
     try {
+      const brgyLabel = selectedBarangay.name.startsWith('Barangay')
+        ? selectedBarangay.name
+        : `Brgy. ${selectedBarangay.name}`;
+      const combinedStreet = `${brgyLabel}, ${streetAddress.trim()}`.slice(0, 100);
+
       const payload = {
-        first_name: firstName,
-        middle_name: middleName,
-        last_name: lastName,
-        email: email,
+        first_name: firstName.trim(),
+        middle_name: middleName.trim(),
+        last_name: lastName.trim(),
+        email: email.trim().toLowerCase(),
         password: password,
         account_type: isHomeowner ? "Homeowner" : "Kasambahay",
         contact_number: contactNumber,
+        country: "Philippines",
+        province: selectedProvince.name,
+        city: selectedCity.name,
+        street: combinedStreet,
+        zipcode: cleanZip,
       };
 
       const generateUUID = () => {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
           const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
           return v.toString(16);
         });
@@ -128,14 +373,25 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
 
       const idempotencyKey = generateUUID();
 
-      // Save user name globally in UserContext
-      updateUser({ firstName, middleName, lastName });
+      // Save user location & details globally in UserContext
+      updateUser({
+        firstName: firstName.trim(),
+        middleName: middleName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim().toLowerCase(),
+        contactNumber,
+        country: "Philippines",
+        province: selectedProvince.name,
+        city: selectedCity.name,
+        street: combinedStreet,
+        zipcode: cleanZip,
+      });
 
       const response = await fetchWithTimeout(`${API_BASE_URL}/api/v1/accounts/register/`, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          "Idempotency-Key": idempotencyKey 
+          "Idempotency-Key": idempotencyKey
         },
         body: JSON.stringify(payload)
       });
@@ -145,7 +401,6 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
         Alert.alert("Success", "Account created successfully!");
         if (onNext) onNext(data.access);
       } else {
-        // Show clean formatted validation errors instead of raw JSON string
         const cleanErrorMessage = formatDjangoError(data);
         Alert.alert("Registration Failed", cleanErrorMessage);
       }
@@ -156,15 +411,24 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
     }
   };
 
+  const handleHeaderBack = () => {
+    if (subStep === 2) {
+      setSubStep(1);
+    } else {
+      if (onBack) onBack();
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={[styles.root, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 14) }]}>
+        {/* Navigation Header */}
         <View style={styles.header}>
           <View style={styles.headerSide}>
-            <Pressable onPress={onBack}>
+            <Pressable onPress={handleHeaderBack} hitSlop={10}>
               <Ionicons name="arrow-back" size={26} color="#2A2925" />
             </Pressable>
           </View>
@@ -172,6 +436,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
           <View style={[styles.headerSide, styles.headerSideRight]} />
         </View>
 
+        {/* Title Block */}
         <View style={styles.titleBlock}>
           <Text style={styles.title}>{isHomeowner ? 'Join as Homeowner' : 'Join as Kasambahay'}</Text>
           <Text style={styles.subtitle}>
@@ -181,152 +446,348 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
           </Text>
         </View>
 
+        {/* Form Card */}
         <View style={styles.card}>
           <View style={styles.formContent}>
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 4, paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
-              <View style={styles.stepIndicator}>
-                <View style={[styles.stepDot, styles.stepDotActive]} />
-                <View style={styles.stepDot} />
-                <View style={styles.stepDot} />
-              </View>
-
-              <View style={styles.inputContainer}>
-                <Ionicons name="person" size={18} color="#000000" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="First Name"
-                  placeholderTextColor="#999"
-                  value={firstName}
-                  onChangeText={setFirstName}
-                />
-              </View>
-
-              <View style={styles.inputContainer}>
-                <Ionicons name="person" size={18} color="#000000" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Middle Name (Optional)"
-                  placeholderTextColor="#999"
-                  value={middleName}
-                  onChangeText={setMiddleName}
-                />
-              </View>
-
-              <View style={styles.inputContainer}>
-                <Ionicons name="person" size={18} color="#000000" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Last Name"
-                  placeholderTextColor="#999"
-                  value={lastName}
-                  onChangeText={setLastName}
-                />
-              </View>
-
-              <View style={styles.inputContainer}>
-                <View style={styles.countryCodeBadge}>
-                  <Text style={styles.flagEmoji}>🇵🇭</Text>
-                  <Text style={styles.countryCodeText}>+63</Text>
+            {/* Step Progress Indicator (2 Sub-Steps) */}
+            <View style={styles.subStepContainer}>
+              <View style={styles.subStepRow}>
+                <View style={[styles.subStepBadge, subStep >= 1 && styles.subStepBadgeActive]}>
+                  <Text style={[styles.subStepNumber, subStep >= 1 && styles.subStepNumberActive]}>1</Text>
                 </View>
-                <View style={styles.phoneVerticalLine} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="9123456789"
-                  placeholderTextColor="#999"
-                  keyboardType="phone-pad"
-                  maxLength={10}
-                  value={rawPhone}
-                  onChangeText={handlePhoneChange}
-                />
+                <View style={[styles.subStepLine, subStep === 2 && styles.subStepLineActive]} />
+                <View style={[styles.subStepBadge, subStep === 2 && styles.subStepBadgeActive]}>
+                  <Text style={[styles.subStepNumber, subStep === 2 && styles.subStepNumberActive]}>2</Text>
+                </View>
               </View>
+              <Text style={styles.subStepTitle}>
+                {subStep === 1 ? 'Step 1: Account Information' : 'Step 2: Where do you live?'}
+              </Text>
+              {subStep === 2 && (
+                <Text style={styles.subStepHelp}>
+                  We use your location to connect you with jobs and household services in your area.
+                </Text>
+              )}
+            </View>
 
-              <View style={styles.inputContainer}>
-                <Ionicons name="mail" size={18} color="#000000" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Email"
-                  placeholderTextColor="#999"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  value={email}
-                  onChangeText={setEmail}
-                />
-              </View>
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingTop: 4, paddingBottom: 16 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* SUB-STEP 1: PERSONAL & ACCOUNT DETAILS */}
+              {subStep === 1 && (
+                <View>
+                  <View style={styles.inputContainer}>
+                    <Ionicons name="person" size={18} color="#000000" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="First Name"
+                      placeholderTextColor="#999"
+                      value={firstName}
+                      onChangeText={setFirstName}
+                    />
+                  </View>
 
-              <View style={styles.inputContainer}>
-                <Ionicons name="lock-closed" size={18} color="#000000" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Password"
-                  placeholderTextColor="#999"
-                  secureTextEntry={!showPassword}
-                  value={password}
-                  onChangeText={setPassword}
-                />
-                <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-                  <Ionicons
-                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={18}
-                    color="#000000"
-                  />
-                </Pressable>
-              </View>
+                  <View style={styles.inputContainer}>
+                    <Ionicons name="person" size={18} color="#000000" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Middle Name (Optional)"
+                      placeholderTextColor="#999"
+                      value={middleName}
+                      onChangeText={setMiddleName}
+                    />
+                  </View>
 
-              <View style={styles.inputContainer}>
-                <Ionicons name="lock-closed" size={18} color="#000000" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Confirm Password"
-                  placeholderTextColor="#999"
-                  secureTextEntry={!showConfirmPassword}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                />
-                <Pressable onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeBtn}>
-                  <Ionicons
-                    name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={18}
-                    color="#000000"
-                  />
-                </Pressable>
-              </View>
+                  <View style={styles.inputContainer}>
+                    <Ionicons name="person" size={18} color="#000000" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Last Name"
+                      placeholderTextColor="#999"
+                      value={lastName}
+                      onChangeText={setLastName}
+                    />
+                  </View>
 
-              <View style={styles.checkboxGroup}>
-                <Pressable style={styles.checkboxRow} onPress={() => setTermsAccepted(!termsAccepted)}>
-                  <Ionicons
-                    name={termsAccepted ? "checkbox-outline" : "square-outline"}
-                    size={18}
-                    color="#000000"
-                  />
-                  <Text style={styles.checkboxText}>
-                    I consent to <Text style={styles.linkText}>Terms and Conditions</Text>.
-                  </Text>
-                </Pressable>
+                  <View style={styles.inputContainer}>
+                    <View style={styles.countryCodeBadge}>
+                      <Text style={styles.flagEmoji}>🇵🇭</Text>
+                      <Text style={styles.countryCodeText}>+63</Text>
+                    </View>
+                    <View style={styles.phoneVerticalLine} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="9123456789"
+                      placeholderTextColor="#999"
+                      keyboardType="phone-pad"
+                      maxLength={10}
+                      value={rawPhone}
+                      onChangeText={handlePhoneChange}
+                    />
+                  </View>
 
-                <Pressable style={styles.checkboxRow} onPress={() => setPrivacyAccepted(!privacyAccepted)}>
-                  <Ionicons
-                    name={privacyAccepted ? "checkbox-outline" : "square-outline"}
-                    size={18}
-                    color="#000000"
-                  />
-                  <Text style={styles.checkboxText}>
-                    I consent to <Text style={styles.linkText}>Data Privacy Policy</Text>.
-                  </Text>
-                </Pressable>
-              </View>
+                  <View style={styles.inputContainer}>
+                    <Ionicons name="mail" size={18} color="#000000" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Email"
+                      placeholderTextColor="#999"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      value={email}
+                      onChangeText={setEmail}
+                    />
+                  </View>
+
+                  <View style={styles.inputContainer}>
+                    <Ionicons name="lock-closed" size={18} color="#000000" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Password (min. 11 characters)"
+                      placeholderTextColor="#999"
+                      secureTextEntry={!showPassword}
+                      value={password}
+                      onChangeText={setPassword}
+                    />
+                    <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                      <Ionicons
+                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                        size={18}
+                        color="#000000"
+                      />
+                    </Pressable>
+                  </View>
+
+                  <View style={styles.inputContainer}>
+                    <Ionicons name="lock-closed" size={18} color="#000000" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Confirm Password"
+                      placeholderTextColor="#999"
+                      secureTextEntry={!showConfirmPassword}
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                    />
+                    <Pressable onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeBtn}>
+                      <Ionicons
+                        name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                        size={18}
+                        color="#000000"
+                      />
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+
+              {/* SUB-STEP 2: LOCATION & CONSENT */}
+              {subStep === 2 && (
+                <View>
+                  {/* Region Dropdown Button */}
+                  <Pressable style={styles.selectButton} onPress={handleOpenRegionPicker}>
+                    <Ionicons name="map-outline" size={18} color="#000000" style={styles.inputIcon} />
+                    <Text
+                      style={[styles.selectButtonText, !selectedRegion && styles.placeholderText]}
+                      numberOfLines={1}
+                    >
+                      {selectedRegion ? selectedRegion.displayName || selectedRegion.name : 'Select Region'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color="#666666" />
+                  </Pressable>
+
+                  {/* Province Dropdown Button */}
+                  <Pressable
+                    style={[styles.selectButton, !selectedRegion && styles.selectButtonDisabled]}
+                    onPress={handleOpenProvincePicker}
+                    disabled={!selectedRegion}
+                  >
+                    <Ionicons name="business-outline" size={18} color="#000000" style={styles.inputIcon} />
+                    <Text
+                      style={[styles.selectButtonText, !selectedProvince && styles.placeholderText]}
+                      numberOfLines={1}
+                    >
+                      {selectedProvince ? selectedProvince.displayName || selectedProvince.name : 'Select Province'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color="#666666" />
+                  </Pressable>
+
+                  {/* City / Municipality Dropdown Button */}
+                  <Pressable
+                    style={[styles.selectButton, !selectedProvince && styles.selectButtonDisabled]}
+                    onPress={handleOpenCityPicker}
+                    disabled={!selectedProvince}
+                  >
+                    <Ionicons name="location-outline" size={18} color="#000000" style={styles.inputIcon} />
+                    <Text
+                      style={[styles.selectButtonText, !selectedCity && styles.placeholderText]}
+                      numberOfLines={1}
+                    >
+                      {selectedCity ? selectedCity.displayName || selectedCity.name : 'Select City / Municipality'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color="#666666" />
+                  </Pressable>
+
+                  {/* Barangay Dropdown Button */}
+                  <Pressable
+                    style={[styles.selectButton, !selectedCity && styles.selectButtonDisabled]}
+                    onPress={handleOpenBarangayPicker}
+                    disabled={!selectedCity}
+                  >
+                    <Ionicons name="home-outline" size={18} color="#000000" style={styles.inputIcon} />
+                    <Text
+                      style={[styles.selectButtonText, !selectedBarangay && styles.placeholderText]}
+                      numberOfLines={1}
+                    >
+                      {selectedBarangay ? selectedBarangay.displayName || selectedBarangay.name : 'Select Barangay'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color="#666666" />
+                  </Pressable>
+
+                  {/* House No. / Street / Zone Input */}
+                  <View style={styles.inputContainer}>
+                    <Ionicons name="navigate-outline" size={18} color="#000000" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="House No. / Street / Zone / Subdivision"
+                      placeholderTextColor="#999"
+                      value={streetAddress}
+                      onChangeText={setStreetAddress}
+                      maxLength={70}
+                    />
+                  </View>
+
+                  {/* Zip Code Input */}
+                  <View style={styles.inputContainer}>
+                    <Ionicons name="mail-outline" size={18} color="#000000" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Zip Code (e.g. 9000)"
+                      placeholderTextColor="#999"
+                      keyboardType="number-pad"
+                      maxLength={4}
+                      value={zipcode}
+                      onChangeText={(t) => setZipcode(t.replace(/\D/g, '').slice(0, 4))}
+                    />
+                  </View>
+
+                  {/* Consent Checkboxes */}
+                  <View style={styles.checkboxGroup}>
+                    <Pressable style={styles.checkboxRow} onPress={() => setTermsAccepted(!termsAccepted)}>
+                      <Ionicons
+                        name={termsAccepted ? "checkbox-outline" : "square-outline"}
+                        size={18}
+                        color="#000000"
+                      />
+                      <Text style={styles.checkboxText}>
+                        I consent to <Text style={styles.linkText}>Terms and Conditions</Text>.
+                      </Text>
+                    </Pressable>
+
+                    <Pressable style={styles.checkboxRow} onPress={() => setPrivacyAccepted(!privacyAccepted)}>
+                      <Ionicons
+                        name={privacyAccepted ? "checkbox-outline" : "square-outline"}
+                        size={18}
+                        color="#000000"
+                      />
+                      <Text style={styles.checkboxText}>
+                        I consent to <Text style={styles.linkText}>Data Privacy Policy</Text>.
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
             </ScrollView>
 
+            {/* Fixed Footer Buttons */}
             <View style={styles.fixedFooter}>
               <View style={styles.divider} />
-              <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={handleRegister} disabled={loading}>
-                {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Next</Text>}
-              </Pressable>
-              <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]} onPress={onCancel}>
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
-              </Pressable>
+              {subStep === 1 ? (
+                <>
+                  <Pressable
+                    style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
+                    onPress={handleProceedToLocation}
+                  >
+                    <Text style={styles.primaryButtonText}>Next: Where do you live? ➔</Text>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
+                    onPress={onCancel}
+                  >
+                    <Text style={styles.secondaryButtonText}>Cancel</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <Pressable
+                    style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
+                    onPress={handleRegister}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.primaryButtonText}>Create Account</Text>
+                    )}
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
+                    onPress={() => setSubStep(1)}
+                    disabled={loading}
+                  >
+                    <Text style={styles.secondaryButtonText}>Back to Personal Info</Text>
+                  </Pressable>
+                </>
+              )}
             </View>
           </View>
         </View>
+
+        {/* Location Pickers Modals */}
+        <SearchablePickerModal
+          visible={activePicker === 'region'}
+          title="Select Region"
+          searchPlaceholder="Search region (e.g. Region X, NCR)..."
+          items={regionsList}
+          selectedCode={selectedRegion?.code}
+          loading={loadingLocations}
+          onSelect={handleSelectRegion}
+          onClose={() => setActivePicker(null)}
+        />
+
+        <SearchablePickerModal
+          visible={activePicker === 'province'}
+          title="Select Province"
+          searchPlaceholder="Search province (e.g. Misamis Oriental)..."
+          items={provincesList}
+          selectedCode={selectedProvince?.code}
+          loading={loadingLocations}
+          onSelect={handleSelectProvince}
+          onClose={() => setActivePicker(null)}
+        />
+
+        <SearchablePickerModal
+          visible={activePicker === 'city'}
+          title="Select City / Municipality"
+          searchPlaceholder="Search city (e.g. CDO, Cagayan, Manila)..."
+          items={citiesList}
+          selectedCode={selectedCity?.code}
+          loading={loadingLocations}
+          onSelect={handleSelectCity}
+          onClose={() => setActivePicker(null)}
+        />
+
+        <SearchablePickerModal
+          visible={activePicker === 'barangay'}
+          title="Select Barangay"
+          searchPlaceholder="Search barangay (e.g. Carmen, Nazareth, Bulua)..."
+          items={barangaysList}
+          selectedCode={selectedBarangay?.code}
+          loading={loadingLocations}
+          onSelect={handleSelectBarangay}
+          onClose={() => setActivePicker(null)}
+        />
       </View>
     </KeyboardAvoidingView>
   );
@@ -355,143 +816,86 @@ const styles = StyleSheet.create({
     height: 44,
     width: 44,
   },
-  skipText: {
-    color: '#FFB43B',
-    fontSize: 14,
-    fontWeight: '500',
-  },
   titleBlock: {
-    marginTop: 12,
+    marginTop: 8,
     paddingHorizontal: 24,
-    minHeight: 66,
+    minHeight: 58,
   },
   title: {
     color: '#000000',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
-    lineHeight: 29,
+    lineHeight: 27,
     marginBottom: 2,
   },
   subtitle: {
     color: '#444444',
-    fontSize: 13,
-    lineHeight: 17,
-  },
-  alertBox: {
-    flexDirection: 'row',
-    backgroundColor: '#FFECCB',
-    marginHorizontal: 24,
-    marginTop: 20,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'flex-start',
-  },
-  alertIcon: {
-    marginRight: 12,
-    marginTop: 2,
-  },
-  alertTextContainer: {
-    flex: 1,
-  },
-  alertTitle: {
-    fontSize: 14,
-    color: '#000',
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  alertDesc: {
-    fontSize: 13,
-    color: '#333',
-    lineHeight: 18,
+    fontSize: 12.5,
+    lineHeight: 16,
   },
   card: {
     alignSelf: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     flex: 1,
-    marginTop: 14,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    width: '88%',
-  },
-  homeownerContent: {
-    flex: 1,
-    justifyContent: 'space-between',
-  },
-  kasambahayContent: {
-    flex: 1,
-    justifyContent: 'space-between',
+    marginTop: 10,
+    paddingBottom: 12,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    width: '90%',
   },
   formContent: {
     flex: 1,
     justifyContent: 'space-between',
   },
-  dashIndicator: {
+  subStepContainer: {
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  subStepRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 24,
+    alignItems: 'center',
+    marginBottom: 6,
   },
-  dash: {
-    width: 20,
-    height: 3,
-    backgroundColor: '#D1D1D1',
-    borderRadius: 2,
-  },
-  dashActive: {
-    backgroundColor: '#FFB43B',
-  },
-  uploadBox: {
-    borderWidth: 1.5,
-    borderColor: '#333',
-    borderStyle: 'dashed',
-    borderRadius: 16,
+  subStepBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#E5E7EB',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 32,
-    marginBottom: 20,
   },
-  uploadTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#000',
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  uploadSubtitle: {
-    fontSize: 12,
-    color: '#444',
-    marginBottom: 16,
-  },
-  uploadInfo: {
-    fontSize: 10,
-    color: '#888',
-  },
-  stepIndicator: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 10,
-    marginTop: 4,
-  },
-  stepDot: {
-    width: 24,
-    height: 4,
-    backgroundColor: '#D9D9D9',
-    borderRadius: 2,
-  },
-  stepDotActive: {
+  subStepBadgeActive: {
     backgroundColor: '#FFB43B',
   },
-  formGroup: {
-    marginBottom: 10,
-  },
-  label: {
+  subStepNumber: {
     fontSize: 11,
-    fontWeight: '600',
-    color: '#000000',
-    marginBottom: 3,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  subStepNumberActive: {
+    color: '#FFFFFF',
+  },
+  subStepLine: {
+    width: 40,
+    height: 2,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 6,
+  },
+  subStepLineActive: {
+    backgroundColor: '#FFB43B',
+  },
+  subStepTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  subStepHelp: {
+    fontSize: 11,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 2,
+    paddingHorizontal: 8,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -500,7 +904,30 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 14,
     height: 44,
-    marginBottom: 12,
+    marginBottom: 10,
+  },
+  selectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F6F7F9',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    height: 44,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  selectButtonDisabled: {
+    opacity: 0.5,
+    backgroundColor: '#FAFAFA',
+  },
+  selectButtonText: {
+    flex: 1,
+    fontSize: 13.5,
+    color: '#111827',
+  },
+  placeholderText: {
+    color: '#9CA3AF',
   },
   inputIcon: {
     marginRight: 10,
@@ -514,7 +941,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   countryCodeText: {
-    fontSize: 14.5,
+    fontSize: 14,
     fontWeight: '700',
     color: '#111827',
   },
@@ -526,7 +953,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13.5,
     color: '#1A1A1A',
     height: '100%',
   },
@@ -536,50 +963,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  specializationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  specTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    paddingHorizontal: 12,
-    height: 32,
-    borderRadius: 16,
-  },
-  specTagActive: {
-    backgroundColor: '#FFECCB',
-  },
-  specTagEmoji: {
-    marginRight: 6,
-    fontSize: 14,
-  },
-  specTagText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#555',
-  },
-  specTagTextActive: {
-    color: '#000',
-  },
-  addSpecBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F5F5F5',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   fixedFooter: {
-    paddingTop: 8,
+    paddingTop: 4,
   },
   checkboxGroup: {
-    marginTop: 8,
-    marginBottom: 6,
+    marginTop: 6,
+    marginBottom: 4,
     paddingHorizontal: 4,
-    gap: 10,
+    gap: 8,
   },
   checkboxRow: {
     flexDirection: 'row',
@@ -596,18 +987,19 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: '#707070',
-    marginTop: 10,
+    backgroundColor: '#D1D5DB',
+    marginTop: 6,
     marginBottom: 10,
     width: '100%',
   },
   primaryButton: {
     alignItems: 'center',
     backgroundColor: '#FFB43B',
-    height: 38,
+    height: 40,
+    borderRadius: 8,
     justifyContent: 'center',
-    marginBottom: 12,
-    marginHorizontal: 18,
+    marginBottom: 8,
+    marginHorizontal: 12,
   },
   buttonPressed: {
     opacity: 0.78,
@@ -615,20 +1007,21 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   secondaryButton: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderColor: '#FFB43B',
     borderWidth: 1,
-    height: 36,
+    borderRadius: 8,
+    height: 38,
     justifyContent: 'center',
-    marginHorizontal: 18,
+    marginHorizontal: 12,
   },
   secondaryButtonText: {
-    color: '#FFA51F',
-    fontSize: 14,
-    fontWeight: '500',
+    color: '#D97706',
+    fontSize: 13.5,
+    fontWeight: '600',
   },
 });

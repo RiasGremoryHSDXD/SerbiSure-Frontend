@@ -16,6 +16,11 @@ type UserData = {
   resumeUrl?: string | null;
   resumeUploadedAt?: string | null;
   verificationStatus?: string;
+  street?: string;
+  city?: string;
+  province?: string;
+  zipcode?: string;
+  country?: string;
 };
 
 type UserContextType = {
@@ -36,6 +41,11 @@ const defaultUser: UserData = {
   contactNumber: '',
   showContactNumber: false,
   userTags: [],
+  street: '',
+  city: 'City of Cagayan De Oro',
+  province: 'Misamis Oriental',
+  zipcode: '9000',
+  country: 'Philippines',
 };
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -90,15 +100,20 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
           showContactNumber: decoded.show_contact_number ?? false,
           userTags: Array.isArray(decoded.user_tags) ? decoded.user_tags : [],
           profileLink: decoded.profile_link || null,
-          accountType: decoded.account_type || ''
+          accountType: decoded.account_type || '',
+          street: decoded.street || '',
+          city: decoded.city || '',
+          province: decoded.province || '',
+          zipcode: decoded.zipcode || '',
+          country: decoded.country || 'Philippines',
         });
       }
       else {
-        setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', email: '', contactNumber: '', showContactNumber: false, userTags: [], profileLink: null, accountType: '' });
+        setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', email: '', contactNumber: '', showContactNumber: false, userTags: [], profileLink: null, accountType: '', street: '', city: '', province: '', zipcode: '', country: '' });
       }
     }
     else {
-      setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', email: '', contactNumber: '', showContactNumber: false, userTags: [], accountType: '' });
+      setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', email: '', contactNumber: '', showContactNumber: false, userTags: [], accountType: '', street: '', city: '', province: '', zipcode: '', country: '' });
     }
   }, [token])
 

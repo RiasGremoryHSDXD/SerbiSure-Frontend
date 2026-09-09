@@ -314,7 +314,9 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
 
               <View style={styles.locationRow}>
                 <Ionicons name="location-outline" size={14} color="#555" />
-                <Text style={styles.locationText}>Cagayan de Oro, Misamis Oriental</Text>
+                <Text style={styles.locationText}>
+                  {[user.city, user.province].filter(Boolean).join(', ') || 'Cagayan de Oro, Misamis Oriental'}
+                </Text>
               </View>
 
               {/* Email & Phone Contact Information */}
@@ -458,7 +460,9 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
             <View style={styles.reviewsSection}>
               <View style={styles.reviewsHeader}>
                 <Text style={[styles.sectionTitle, { flex: 1, marginRight: 12, marginBottom: 0 }]} numberOfLines={1} adjustsFontSizeToFit>{t.recentReviews}</Text>
-                <Text style={[styles.viewAllText, { flexShrink: 0 }]}>{t.viewAll} {totalReviews}</Text>
+                {totalReviews >= 2 ? (
+                  <Text style={[styles.viewAllText, { flexShrink: 0 }]}>{t.viewAll} {totalReviews}</Text>
+                ) : null}
               </View>
 
               {reviews.length > 0 ? (
