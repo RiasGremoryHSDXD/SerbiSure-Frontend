@@ -1,51 +1,57 @@
 import React, { useState } from 'react';
 import { 
-  SlidersHorizontal, 
-  MessageSquare, 
   CheckCircle, 
   MapPin, 
-  Home, 
-  Mail, 
-  Phone, 
-  Calendar, 
   Star,
-  UserCheck
+  UserCheck,
+  RotateCw,
+  MessageSquare
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { AccountRole, UserProfile } from '../../types/admin';
 
 export const UserDirectory: React.FC = () => {
-  const { users } = useAdmin();
+  const { users, refreshUsers, isLoadingUsers, currentRole, selectedBarangay } = useAdmin();
   const [activeTab, setActiveTab] = useState<AccountRole>('HOMEOWNER');
-  const [selectedUserId, setSelectedUserId] = useState<string>('usr-homeowner-1'); // Default to Juan dela Cruz
+  const [selectedUserId, setSelectedUserId] = useState<string>('usr-homeowner-1');
+
+  // Strictly scope user directory to assigned barangay if logged in as local LGU officer
+  const scopedUsers = (currentRole === 'ADMIN' && selectedBarangay)
+    ? users.filter(u => (u.barangay || '').toLowerCase() === selectedBarangay.toLowerCase())
+    : users;
 
   // Filter users by active tab
-  const tabUsers = users.filter(u => u.role === activeTab);
+  const tabUsers = scopedUsers.filter(u => u.role === activeTab);
   
   // Active selected user or fallback to first
-  const selectedUser: UserProfile = tabUsers.find(u => u.id === selectedUserId) || tabUsers[0] || users[0];
+  const selectedUser: UserProfile = tabUsers.find(u => u.id === selectedUserId) || tabUsers[0] || scopedUsers[0];
 
   return (
-    <div className="space-y-6">
-      {/* Title & Filter Bar matching Mockup */}
+    <div className="space-y-8">
+      {/* Title & Filter Bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-          Users
-        </h1>
+        <div>
+          <h1 className="text-3xl font-black font-display text-[#0D0D11] tracking-tight">
+            Users
+          </h1>
+          <p className="text-xs text-zinc-400 font-medium mt-1">
+            Registered homeowners and verified kasambahays directory
+          </p>
+        </div>
 
-        <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
-          {/* Tab Pills Toggle */}
-          <div className="flex items-center bg-[#F1F3F7] p-1.5 rounded-2xl border border-slate-200/70">
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+          {/* Segmented Tab Switcher */}
+          <div className="flex items-center bg-[#EAEAE5] p-1 rounded-full">
             <button
               onClick={() => {
                 setActiveTab('HOMEOWNER');
                 const first = users.find(u => u.role === 'HOMEOWNER');
                 if (first) setSelectedUserId(first.id);
               }}
-              className={`px-6 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`px-5 py-2 rounded-full text-xs font-black font-display transition-all cursor-pointer ${
                 activeTab === 'HOMEOWNER'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-zinc-950 shadow-xs'
+                  : 'text-zinc-600 hover:text-zinc-900'
               }`}
             >
               Homeowners
@@ -56,30 +62,31 @@ export const UserDirectory: React.FC = () => {
                 const first = users.find(u => u.role === 'KASAMBAHAY');
                 if (first) setSelectedUserId(first.id);
               }}
-              className={`px-6 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`px-5 py-2 rounded-full text-xs font-black font-display transition-all cursor-pointer ${
                 activeTab === 'KASAMBAHAY'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-zinc-950 shadow-xs'
+                  : 'text-zinc-600 hover:text-zinc-900'
               }`}
             >
               Kasambahays
             </button>
           </div>
 
-          {/* Filters Button */}
-          <button 
-            onClick={() => alert('Filter options: Filter by Barangay, Verification Status, or Rating.')}
-            className="flex items-center gap-2 px-5 py-2.5 bg-[#F1F3F7] hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold transition-colors cursor-pointer border border-slate-200/70"
+          {/* Sync Refresh Button */}
+          <button
+            type="button"
+            onClick={() => refreshUsers()}
+            title="Sync Users with Backend"
+            className="p-2.5 rounded-full bg-white hover:bg-zinc-100 text-zinc-700 transition-colors cursor-pointer border-0"
           >
-            <SlidersHorizontal className="w-4 h-4 text-slate-600" />
-            <span>Filters</span>
+            <RotateCw className={`w-4 h-4 ${isLoadingUsers ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* Main Grid: Left Users List + Right Profile & Linked Workers */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: User Cards List */}
+      {/* Directory Grid: 2 Columns */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Left Column: User List */}
         <div className="lg:col-span-5 space-y-3">
           {tabUsers.map((user) => {
             const isSelected = selectedUser?.id === user.id;
@@ -87,33 +94,53 @@ export const UserDirectory: React.FC = () => {
               <div
                 key={user.id}
                 onClick={() => setSelectedUserId(user.id)}
-                className={`p-4 rounded-3xl cursor-pointer transition-all duration-200 flex items-center justify-between border ${
+                className={`p-3.5 rounded-3xl cursor-pointer transition-all duration-150 flex items-center justify-between ${
                   isSelected
-                    ? 'bg-[#FFF3D6] border-[#FDE68A] shadow-xs'
-                    : 'bg-white hover:bg-slate-50/80 border-slate-100'
+                    ? 'bg-[#F0F0EC] text-zinc-950 font-bold'
+                    : 'bg-white hover:bg-zinc-50 text-zinc-900'
                 }`}
               >
-                <div className="flex items-center gap-4">
-                  <img
-                    src={user.avatar}
-                    alt={user.name}
-                    className="w-14 h-14 rounded-full object-cover shadow-2xs shrink-0"
-                  />
-                  <div>
-                    <h4 className="text-base font-extrabold text-slate-900 leading-tight">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-12 h-12 min-w-[48px] min-h-[48px] max-w-[48px] max-h-[48px] rounded-full overflow-hidden shrink-0 bg-zinc-200 flex items-center justify-center">
+                    {user.avatar ? (
+                      <img
+                        src={user.avatar}
+                        alt={user.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <span className="font-black text-sm text-zinc-600 font-display">
+                        {user.name.slice(0, 2).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0 truncate">
+                    <h4 className="text-sm font-black font-display leading-snug truncate text-[#0D0D11]">
                       {user.name}
                     </h4>
-                    <span className="inline-block mt-1.5 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#22C55E] text-white shadow-2xs">
+                    <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                      isSelected ? 'bg-white text-zinc-700 font-bold' : 'bg-[#F0F0EC] text-zinc-600'
+                    }`}>
                       {user.role}
                     </span>
                   </div>
                 </div>
 
-                {/* Selected Chat Icon Badge matching Mockup */}
+                {/* Chat Action Icon on active state */}
                 {isSelected && (
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-[#F5A623]">
-                    <MessageSquare className="w-5 h-5 fill-[#F5A623]/20 text-[#F5A623]" />
-                  </div>
+                  <button
+                    type="button"
+                    title={`Message ${user.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                    className="w-8 h-8 rounded-full bg-[#FFF4ED] text-[#FFB380] hover:bg-[#FFE5D6] flex items-center justify-center shrink-0 mr-1 transition-transform active:scale-90 cursor-pointer border-0"
+                  >
+                    <MessageSquare className="w-4 h-4 fill-[#FFB380]/20" />
+                  </button>
                 )}
               </div>
             );
@@ -121,158 +148,171 @@ export const UserDirectory: React.FC = () => {
         </div>
 
         {/* Right Column: User Profile Details + Linked Kasambahays */}
-        <div className="lg:col-span-7 space-y-8">
-          {/* Main User Card matching Mockup */}
+        <div className="lg:col-span-7 space-y-6">
+          {/* Main User Card */}
           {selectedUser && (
-            <div className="bg-[#FAF9F6] rounded-3xl p-8 border border-slate-200/60 shadow-[0_4px_25px_rgba(0,0,0,0.02)] space-y-6">
+            <div className="bg-white rounded-3xl p-8 space-y-6">
               {/* Header: Avatar, Name with Verified Badge, Address */}
               <div className="flex items-center gap-5">
-                <img
-                  src={selectedUser.avatar}
-                  alt={selectedUser.name}
-                  className="w-20 h-20 rounded-full object-cover shadow-sm border-2 border-white"
-                />
+                <div className="w-16 h-16 min-w-[64px] min-h-[64px] max-w-[64px] max-h-[64px] rounded-full overflow-hidden shrink-0 bg-zinc-200 flex items-center justify-center">
+                  {selectedUser.avatar ? (
+                    <img
+                      src={selectedUser.avatar}
+                      alt={selectedUser.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <span className="font-black text-lg text-zinc-600 font-display">
+                      {selectedUser.name.slice(0, 2).toUpperCase()}
+                    </span>
+                  )}
+                </div>
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                    <h3 className="text-2xl font-black font-display text-[#0D0D11] tracking-tight">
                       {selectedUser.name}
                     </h3>
                     {selectedUser.verified && (
-                      <CheckCircle className="w-5 h-5 fill-[#22C55E] text-white" />
+                      <CheckCircle className="w-5 h-5 fill-emerald-600 text-white shrink-0" />
                     )}
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
-                    <MapPin className="w-3.5 h-3.5 text-[#F5A623]" />
+                  <div className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium">
+                    <MapPin className="w-3.5 h-3.5 text-[#FFB380] shrink-0" />
                     <span>{selectedUser.address}</span>
                   </div>
                 </div>
               </div>
 
-              {/* 4 Metadata Details Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-5 gap-x-8 pt-4 border-t border-slate-200/60">
+              {/* Clean Information Grid (Zero clunky grey boxes) */}
+              <div className="grid grid-cols-2 gap-y-6 gap-x-8 pt-6 border-t border-zinc-100">
                 {/* Role */}
-                <div className="space-y-1">
-                  <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                    ROLE
-                  </div>
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                    <Home className="w-4 h-4 text-[#F5A623]" />
-                    <span>{selectedUser.role === 'HOMEOWNER' ? 'Homeowner' : 'Kasambahay'}</span>
-                  </div>
+                <div>
+                  <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block font-display">
+                    Role
+                  </span>
+                  <span className="text-sm font-black text-[#0D0D11] font-display mt-1 block">
+                    {selectedUser.role === 'HOMEOWNER' ? 'Homeowner' : 'Kasambahay'}
+                  </span>
                 </div>
 
                 {/* Email Address */}
-                <div className="space-y-1">
-                  <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                    EMAIL ADDRESS
-                  </div>
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                    <Mail className="w-4 h-4 text-[#F5A623]" />
-                    <span className="font-mono text-xs">{selectedUser.email}</span>
-                  </div>
+                <div>
+                  <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block font-display">
+                    Email Address
+                  </span>
+                  <span className="text-sm font-semibold text-zinc-800 font-mono mt-1 block truncate">
+                    {selectedUser.email}
+                  </span>
                 </div>
 
                 {/* Contact Number */}
-                <div className="space-y-1">
-                  <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                    CONTACT NUMBER
-                  </div>
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                    <Phone className="w-4 h-4 text-[#F5A623]" />
-                    <span className="font-mono text-xs">{selectedUser.contactNumber}</span>
-                  </div>
+                <div>
+                  <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block font-display">
+                    Contact Number
+                  </span>
+                  <span className="text-sm font-semibold text-zinc-800 mt-1 block">
+                    {selectedUser.contactNumber}
+                  </span>
                 </div>
 
                 {/* Member Since */}
-                <div className="space-y-1">
-                  <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                    MEMBER SINCE
-                  </div>
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                    <Calendar className="w-4 h-4 text-[#F5A623]" />
-                    <span>{selectedUser.joinedDate}</span>
-                  </div>
+                <div>
+                  <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block font-display">
+                    Member Since
+                  </span>
+                  <span className="text-sm font-semibold text-zinc-800 mt-1 block">
+                    {selectedUser.joinedDate}
+                  </span>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Linked Kasambahays Section matching Mockup */}
+          {/* Linked Kasambahays Section */}
           {selectedUser && (
             <div className="space-y-4">
-              <h4 className="text-xl font-extrabold text-slate-900 tracking-tight">
+              <h4 className="text-lg font-black font-display text-[#0D0D11] tracking-tight">
                 {selectedUser.role === 'HOMEOWNER' ? 'Linked Kasambahays' : 'Skills & Endorsements'}
               </h4>
 
               {selectedUser.role === 'HOMEOWNER' ? (
                 selectedUser.linkedKasambahays && selectedUser.linkedKasambahays.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     {selectedUser.linkedKasambahays.map((worker) => (
                       <div
                         key={worker.id}
-                        className="bg-white rounded-3xl p-5 border border-slate-100 shadow-[0_4px_25px_rgba(0,0,0,0.02)] flex items-center justify-between hover:shadow-md transition-shadow"
+                        className="bg-white rounded-3xl p-5 flex items-center justify-between transition-all"
                       >
-                        <div className="flex items-center gap-3.5">
-                          <img
-                            src={worker.avatar}
-                            alt={worker.name}
-                            className="w-12 h-12 rounded-full object-cover shadow-2xs"
-                          />
-                          <div>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-11 h-11 min-w-[44px] min-h-[44px] max-w-[44px] max-h-[44px] rounded-full overflow-hidden shrink-0 bg-zinc-200 flex items-center justify-center">
+                            {worker.avatar ? (
+                              <img
+                                src={worker.avatar}
+                                alt={worker.name}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <span className="font-bold text-xs text-zinc-600">
+                                {worker.name.slice(0, 2).toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                          <div className="min-w-0">
                             <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-slate-900 text-sm">
+                              <span className="font-black font-display text-[#0D0D11] text-sm truncate">
                                 {worker.name}
                               </span>
                               {worker.verified && (
-                                <CheckCircle className="w-3.5 h-3.5 fill-[#22C55E] text-white" />
+                                <CheckCircle className="w-3.5 h-3.5 fill-emerald-600 text-white shrink-0" />
                               )}
                             </div>
-                            <div className="text-xs text-slate-500 mt-0.5">
+                            <div className="text-xs text-zinc-400 font-medium truncate">
                               {worker.role}
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex flex-col items-end gap-1.5">
-                          {/* Rating Badge */}
-                          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#DCFCE7] text-[#15803D] text-xs font-black">
-                            <Star className="w-3 h-3 fill-[#15803D]" />
+                        <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
+                          <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[11px] font-black font-display">
+                            <Star className="w-3 h-3 fill-emerald-600 text-emerald-600" />
                             <span>{worker.rating.toFixed(1)}</span>
                           </div>
-                          {/* View Profile Link */}
                           <button
                             onClick={() => {
                               setActiveTab('KASAMBAHAY');
-                              setSelectedUserId('usr-kasambahay-1');
+                              setSelectedUserId(worker.id || 'usr-kasambahay-1');
                             }}
-                            className="text-[11px] font-bold text-[#F5A623] hover:underline cursor-pointer"
+                            className="text-[11px] font-bold text-zinc-500 hover:text-zinc-950 transition-colors cursor-pointer"
                           >
-                            View Profile
+                            View
                           </button>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="p-8 bg-white rounded-3xl border border-slate-100 text-center text-slate-400 text-xs">
+                  <div className="p-8 bg-white rounded-3xl text-center text-zinc-400 text-xs font-medium">
                     No active linked Kasambahay contracts for this homeowner.
                   </div>
                 )
               ) : (
                 /* Kasambahay Skills & Compliance Profile */
-                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-4">
+                <div className="bg-white rounded-3xl p-6 space-y-4">
                   <div className="flex flex-wrap gap-2">
                     {selectedUser.skills?.map((skill) => (
                       <span
                         key={skill}
-                        className="px-3 py-1 bg-[#FFF4DC] text-[#B45309] text-xs font-bold rounded-xl"
+                        className="px-3.5 py-1.5 bg-[#F0F0EC] text-zinc-800 text-xs font-bold font-display rounded-full"
                       >
                         {skill}
                       </span>
                     ))}
                   </div>
-                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 bg-emerald-50 p-3 rounded-2xl">
-                    <UserCheck className="w-4 h-4 text-emerald-600" />
+                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 bg-emerald-50 p-3.5 rounded-2xl">
+                    <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>RA 10361 Batas Kasambahay Minimum Wage & Benefit Compliant</span>
                   </div>
                 </div>
