@@ -413,7 +413,9 @@ export function ProfileScreen({
 
               <View style={styles.locationRow}>
                 <Ionicons name="location-outline" size={14} color="#555" />
-                <Text style={styles.locationText}>Cagayan de Oro, Misamis Oriental</Text>
+                <Text style={styles.locationText}>
+                  {[user.city, user.province].filter(Boolean).join(', ') || 'Cagayan de Oro, Misamis Oriental'}
+                </Text>
               </View>
 
               {/* Email & Phone Contact Information */}
