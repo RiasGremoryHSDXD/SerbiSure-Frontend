@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { chatStore } from '../../store/chatStore';
 import { ChatDetailScreen } from '../ChatDetailScreen';
 import { FilterModal, FeedFilters, DEFAULT_FILTERS } from '../FilterModal';
-import { RecommendationsSection } from '../RecommendationsSection';
+
 import { UserProfileModal } from '../UserProfileModal';
 import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
 
@@ -458,21 +458,6 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
           <Ionicons name="options-outline" size={28} color="#333" />
         </Pressable>
       </View>
-
-      {/* Smart Recommendations Carousel (T3-2) */}
-      <RecommendationsSection
-        token={effectiveToken}
-        accountType="Kasambahay"
-        onSelectJob={(job) => {
-          setSelectedUserForModal({
-            id: job.id,
-            name: job.title,
-            role: 'Job Posting',
-            avatar: '',
-          });
-          setIsUserProfileModalVisible(true);
-        }}
-      />
 
       {/* Filter Chips Bar */}
       <ScrollView
