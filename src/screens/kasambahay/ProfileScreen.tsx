@@ -622,83 +622,87 @@ export function ProfileScreen({
               )}
             </View>
 
-            {/* Reputation & Performance Analytics Card (T2-5) */}
-            <View style={styles.analyticsCard}>
-              <View style={styles.analyticsCardHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Ionicons name="stats-chart" size={18} color="#FFB43B" style={{ marginRight: 8 }} />
-                  <Text style={styles.analyticsTitle}>Reputation & Performance</Text>
+            {/* Reputation & Performance Section (T2-5) */}
+            <View style={styles.reputationSection}>
+              <View style={styles.reputationHeaderRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1, marginRight: 8 }}>
+                  <Ionicons name="stats-chart" size={16} color="#FFB43B" style={{ marginRight: 6 }} />
+                  <Text style={[styles.sectionTitle, { marginBottom: 0, fontSize: 15.5, fontWeight: '700' }]} numberOfLines={1}>Reputation & Performance</Text>
                 </View>
                 <View style={styles.trustBadge}>
                   <Ionicons name="shield-checkmark" size={13} color="#27AE60" />
-                  <Text style={styles.trustBadgeText}>Platform Verified</Text>
+                  <Text style={styles.trustBadgeText}>Verified</Text>
                 </View>
               </View>
 
-              <View style={styles.analyticsMetricsRow}>
-                <View style={styles.analyticsMetricBox}>
-                  <Text style={styles.analyticsMetricVal}>
-                    {analyticsData ? analyticsData.average_rating.toFixed(1) : (summary?.average_rating ? summary.average_rating.toFixed(1) : '5.0')}
-                  </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                    <Ionicons name="star" size={12} color="#FFB43B" />
-                    <Text style={styles.analyticsMetricLabel}> Rating</Text>
+              <View style={styles.analyticsCard}>
+                <View style={styles.analyticsMetricsRow}>
+                  <View style={styles.analyticsMetricBox}>
+                    <Text style={styles.analyticsMetricVal}>
+                      {analyticsData ? analyticsData.average_rating.toFixed(1) : (summary?.average_rating ? summary.average_rating.toFixed(1) : '5.0')}
+                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                      <Ionicons name="star" size={12} color="#FFB43B" />
+                      <Text style={styles.analyticsMetricLabel}> Rating</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.analyticsMetricDivider} />
+
+                  <View style={styles.analyticsMetricBox}>
+                    <Text style={styles.analyticsMetricVal}>
+                      {analyticsData ? analyticsData.total_jobs_completed : '0'}
+                    </Text>
+                    <Text style={styles.analyticsMetricLabel}>Jobs Done</Text>
+                  </View>
+
+                  <View style={styles.analyticsMetricDivider} />
+
+                  <View style={styles.analyticsMetricBox}>
+                    <Text style={styles.analyticsMetricVal}>
+                      {analyticsData ? `${analyticsData.positive_percentage}%` : (positivePercentage !== null ? `${positivePercentage}%` : '100%')}
+                    </Text>
+                    <Text style={styles.analyticsMetricLabel}>Positive</Text>
+                  </View>
+
+                  <View style={styles.analyticsMetricDivider} />
+
+                  <View style={styles.analyticsMetricBox}>
+                    <Text style={styles.analyticsMetricVal}>
+                      {summary?.total_reviews ? '0%' : '0%'}
+                    </Text>
+                    <Text style={styles.analyticsMetricLabel}>Cancel Rate</Text>
                   </View>
                 </View>
 
-                <View style={styles.analyticsMetricDivider} />
-
-                <View style={styles.analyticsMetricBox}>
-                  <Text style={styles.analyticsMetricVal}>
-                    {analyticsData ? analyticsData.total_jobs_completed : '0'}
-                  </Text>
-                  <Text style={styles.analyticsMetricLabel}>Jobs Done</Text>
-                </View>
-
-                <View style={styles.analyticsMetricDivider} />
-
-                <View style={styles.analyticsMetricBox}>
-                  <Text style={styles.analyticsMetricVal}>
-                    {analyticsData ? `${analyticsData.positive_percentage}%` : (positivePercentage !== null ? `${positivePercentage}%` : '100%')}
-                  </Text>
-                  <Text style={styles.analyticsMetricLabel}>Positive</Text>
-                </View>
-
-                <View style={styles.analyticsMetricDivider} />
-
-                <View style={styles.analyticsMetricBox}>
-                  <Text style={styles.analyticsMetricVal}>
-                    {summary?.total_reviews ? '0%' : '0%'}
-                  </Text>
-                  <Text style={styles.analyticsMetricLabel}>Cancel Rate</Text>
-                </View>
-              </View>
-
-              {/* Rating Breakdown Bars */}
-              {analyticsData && analyticsData.total_reviews > 0 && (
-                <View style={styles.ratingBarsContainer}>
-                  {[5, 4, 3, 2, 1].map((stars) => {
-                    const count = analyticsData.rating_breakdown[String(stars) as '1'|'2'|'3'|'4'|'5'] || 0;
-                    const pct = analyticsData.total_reviews > 0 ? (count / analyticsData.total_reviews) * 100 : 0;
-                    return (
-                      <View key={stars} style={styles.ratingBarRow}>
-                        <Text style={styles.ratingBarLabel}>{stars} ★</Text>
-                        <View style={styles.ratingBarTrack}>
-                          <View style={[styles.ratingBarFill, { width: `${pct}%` }]} />
+                {/* Rating Breakdown Bars */}
+                {analyticsData && analyticsData.total_reviews > 0 && (
+                  <View style={styles.ratingBarsContainer}>
+                    {[5, 4, 3, 2, 1].map((stars) => {
+                      const count = analyticsData.rating_breakdown[String(stars) as '1'|'2'|'3'|'4'|'5'] || 0;
+                      const pct = analyticsData.total_reviews > 0 ? (count / analyticsData.total_reviews) * 100 : 0;
+                      return (
+                        <View key={stars} style={styles.ratingBarRow}>
+                          <Text style={styles.ratingBarLabel}>{stars} ★</Text>
+                          <View style={styles.ratingBarTrack}>
+                            <View style={[styles.ratingBarFill, { width: `${pct}%` }]} />
+                          </View>
+                          <Text style={styles.ratingBarCount}>{count}</Text>
                         </View>
-                        <Text style={styles.ratingBarCount}>{count}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
             </View>
 
             {/* Reviews Section */}
             <View style={styles.reviewsSection}>
               <View style={styles.reviewsHeader}>
                 <Text style={[styles.sectionTitle, { flex: 1, marginRight: 12, marginBottom: 0 }]} numberOfLines={1} adjustsFontSizeToFit>{t.recentReviews}</Text>
-                <Text style={[styles.viewAllText, { flexShrink: 0 }]}>{t.viewAll} {totalReviews}</Text>
+                {totalReviews >= 2 ? (
+                  <Text style={[styles.viewAllText, { flexShrink: 0 }]}>{t.viewAll} {totalReviews}</Text>
+                ) : null}
               </View>
 
               {reviews.length > 0 ? (
@@ -2136,17 +2140,27 @@ const styles = StyleSheet.create({
   verificationBadgeTextRejected: {
     color: '#B91C1C',
   },
+  reputationSection: {
+    paddingHorizontal: 24,
+    marginTop: 20,
+  },
+  reputationHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   analyticsCard: {
     backgroundColor: '#FFF',
     borderRadius: 16,
     padding: 16,
-    marginHorizontal: 24,
-    marginBottom: 16,
     shadowColor: '#000',
     shadowOpacity: 0.05,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 6,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
   },
   analyticsCardHeader: {
     flexDirection: 'row',
@@ -2166,6 +2180,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 12,
+    flexShrink: 0,
   },
   trustBadgeText: {
     fontSize: 10,

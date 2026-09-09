@@ -458,7 +458,9 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
             <View style={styles.reviewsSection}>
               <View style={styles.reviewsHeader}>
                 <Text style={[styles.sectionTitle, { flex: 1, marginRight: 12, marginBottom: 0 }]} numberOfLines={1} adjustsFontSizeToFit>{t.recentReviews}</Text>
-                <Text style={[styles.viewAllText, { flexShrink: 0 }]}>{t.viewAll} {totalReviews}</Text>
+                {totalReviews >= 2 ? (
+                  <Text style={[styles.viewAllText, { flexShrink: 0 }]}>{t.viewAll} {totalReviews}</Text>
+                ) : null}
               </View>
 
               {reviews.length > 0 ? (
