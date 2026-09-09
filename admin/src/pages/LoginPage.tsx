@@ -5,8 +5,8 @@ import { useAdmin } from '../context/AdminContext';
 export const LoginPage: React.FC = () => {
   const { login } = useAdmin();
   
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -21,45 +21,51 @@ export const LoginPage: React.FC = () => {
     setIsLoading(false);
 
     if (!res.success) {
-      setErrorMessage(res.error || 'Invalid credentials. Use admin / admin.');
+      setErrorMessage(res.error || 'Invalid credentials. Please verify your email/username and password.');
     }
   };
 
+  const setDemoCredentials = (email: string, pass: string) => {
+    setUsername(email);
+    setPassword(pass);
+    setErrorMessage(null);
+  };
+
   return (
-    <div className="min-h-screen w-full bg-white flex items-center justify-center p-4 sm:p-6 lg:p-10 font-sans select-none">
-      <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+    <div className="min-h-screen w-full bg-[#F6F5F2] flex items-center justify-center p-4 sm:p-8 lg:p-12 font-sans select-none">
+      <div className="w-full max-w-5xl bg-white rounded-[40px] p-6 sm:p-12 lg:p-16 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
         
-        {/* Left Side: Clean Minimal Login Form (5 cols) */}
-        <div className="lg:col-span-6 flex flex-col justify-center px-4 sm:px-8 lg:px-12 py-6">
+        {/* Left Side: Clean Minimal Login Form (6 cols) */}
+        <div className="lg:col-span-6 flex flex-col justify-center">
           
           {/* Logo & Brand Name */}
-          <div className="flex items-center gap-3.5 mb-8">
+          <div className="flex items-center gap-3 mb-8">
             <img 
-              src="/serbisure-logo.png" 
+              src="/serbisure_new_clean.png" 
               alt="SerbiSure" 
-              className="w-12 h-12 object-contain drop-shadow-sm"
+              className="w-12 h-12 object-contain shrink-0"
               onError={(e) => {
-                (e.target as HTMLElement).style.display = 'none';
+                (e.currentTarget as HTMLImageElement).src = '/serbisure-logo.png';
               }}
             />
-            <span className="text-2xl sm:text-3xl font-extrabold text-[#F5A623] tracking-tight">
-              Serbisure
+            <span className="text-2xl font-black font-display text-[#0D0D11] tracking-tight">
+              Serbi<span className="text-[#FFB380]">Sure</span><span className="text-[#FFB380]">.</span>
             </span>
           </div>
 
           {/* Heading */}
           <div className="mb-8">
-            <h1 className="text-4xl sm:text-5xl font-black text-slate-900 leading-tight tracking-tight">
-              Holla,<br />Welcome Back
+            <h1 className="text-4xl sm:text-5xl font-black font-display text-[#0D0D11] leading-tight tracking-tight">
+              Welcome<br />Back
             </h1>
-            <p className="text-slate-400 text-sm mt-3 font-normal">
-              Hey, welcome back to your admin dashboard
+            <p className="text-zinc-400 text-sm mt-2 font-medium">
+              Access your barangay administrative dashboard
             </p>
           </div>
 
           {/* Error Banner */}
           {errorMessage && (
-            <div className="mb-6 p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2.5 text-rose-700 text-xs">
+            <div className="mb-6 p-4 bg-rose-50 rounded-2xl flex items-center gap-2.5 text-rose-700 text-xs font-bold">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{errorMessage}</span>
             </div>
@@ -74,8 +80,8 @@ export const LoginPage: React.FC = () => {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Username or Email (admin)"
-                className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#F5A623]/40 focus:border-[#F5A623] transition-all shadow-2xs"
+                placeholder="Email or Username"
+                className="w-full px-5 py-4 bg-[#F0F0EC] rounded-full text-sm text-[#0D0D11] placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#FFB380]/40 transition-all font-medium border-0"
               />
             </div>
 
@@ -86,47 +92,36 @@ export const LoginPage: React.FC = () => {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password (admin)"
-                className="w-full pl-4 pr-11 py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#F5A623]/40 focus:border-[#F5A623] transition-all shadow-2xs"
+                placeholder="Password"
+                className="w-full pl-5 pr-12 py-4 bg-[#F0F0EC] rounded-full text-sm text-[#0D0D11] placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#FFB380]/40 transition-all font-medium border-0"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-1"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700 cursor-pointer p-1"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
 
-            {/* Remember Me & Demo Hint */}
-            <div className="flex items-center justify-between text-xs pt-1 px-0.5">
-              <label className="flex items-center gap-2 cursor-pointer text-slate-600 font-medium">
+            {/* Remember Me */}
+            <div className="flex items-center justify-between text-xs pt-1 px-1">
+              <label className="flex items-center gap-2 cursor-pointer text-zinc-600 font-semibold">
                 <input
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 rounded text-[#F5A623] focus:ring-[#F5A623] border-slate-300 cursor-pointer"
+                  className="w-4 h-4 rounded text-[#FFB380] focus:ring-[#FFB380] border-0 bg-[#F0F0EC] cursor-pointer"
                 />
                 <span>Remember me</span>
               </label>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setUsername('admin');
-                  setPassword('admin');
-                }}
-                className="text-slate-400 hover:text-[#F5A623] font-medium transition-colors cursor-pointer"
-              >
-                Mock: admin / admin
-              </button>
             </div>
 
             {/* Sign In Button */}
             <button
               type="submit"
               disabled={isLoading}
-              className="w-36 mt-4 py-3 px-6 bg-[#F5A623] hover:bg-[#E08E0B] text-white font-bold text-sm rounded-xl shadow-md shadow-amber-500/20 transition-all flex items-center justify-center cursor-pointer disabled:opacity-60"
+              className="w-full sm:w-44 mt-2 py-4 px-8 bg-[#FFB380] hover:bg-[#F5A066] text-white font-black font-display text-sm rounded-full transition-all flex items-center justify-center cursor-pointer disabled:opacity-60 border-0"
             >
               {isLoading ? (
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -134,13 +129,43 @@ export const LoginPage: React.FC = () => {
                 <span>Sign In</span>
               )}
             </button>
+
+            {/* Quick Portal Selector Pills */}
+            <div className="pt-6 mt-4">
+              <div className="text-[11px] font-black uppercase tracking-wider text-zinc-400 font-display mb-2.5">
+                Quick Select Portal
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDemoCredentials('serbisure@ustp.com', 'iloveserbisure123')}
+                  className="px-4 py-2 bg-[#FFF4ED] text-[#FFB380] hover:bg-[#FFE5DC] rounded-full text-xs font-black font-display transition-colors cursor-pointer border-0"
+                >
+                  Superadmin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDemoCredentials('pagatpat@lgu.com', 'ilovepagatpatlgu')}
+                  className="px-4 py-2 bg-[#F0F0EC] hover:bg-[#E5E5E0] text-zinc-700 rounded-full text-xs font-bold font-display transition-colors cursor-pointer border-0"
+                >
+                  Brgy. Pagatpat
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDemoCredentials('canitoan@lgu.com', 'ilovecanitoanlgu')}
+                  className="px-4 py-2 bg-[#F0F0EC] hover:bg-[#E5E5E0] text-zinc-700 rounded-full text-xs font-bold font-display transition-colors cursor-pointer border-0"
+                >
+                  Brgy. Canitoan
+                </button>
+              </div>
+            </div>
           </form>
 
         </div>
 
-        {/* Right Side: Hero Image (Clean, no overlays) (6 cols) */}
-        <div className="lg:col-span-6 flex items-center justify-center p-2">
-          <div className="w-full max-w-lg aspect-[4/5] rounded-[32px] overflow-hidden shadow-2xl bg-slate-100">
+        {/* Right Side: Hero Image (Clean, squircle) (6 cols) */}
+        <div className="lg:col-span-6 flex items-center justify-center">
+          <div className="w-full aspect-[4/5] rounded-[32px] overflow-hidden bg-[#F0F0EC]">
             <img
               src="/login-hero.jpg"
               alt="SerbiSure Kasambahay and Family"
