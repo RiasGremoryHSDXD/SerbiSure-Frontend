@@ -76,35 +76,36 @@ export const EmploymentTrendChart: React.FC = () => {
   const areaPath2 = `${linePath2} L ${points2[points2.length - 1].x} ${height - paddingY} L ${points2[0].x} ${height - paddingY} Z`;
 
   const hoveredPoint = points1[hoveredIdx];
+  const hoveredPoint2 = points2[hoveredIdx];
 
   return (
-    <div className="bg-white rounded-3xl p-6 sm:p-7 flex flex-col justify-between h-full relative">
+    <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-100/90 shadow-[0_4px_25px_rgba(0,0,0,0.02)] flex flex-col justify-between h-full relative">
       {/* Header & Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-lg font-black font-display text-[#0D0D11] tracking-tight">
-              Employment Trends
+            <h3 className="text-lg font-bold text-slate-900 tracking-tight">
+              Employment & Deployment Trends
             </h3>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-extrabold">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[11px] font-bold">
               <TrendingUp className="w-3 h-3" />
               +18.4%
             </span>
           </div>
-          <p className="text-xs text-zinc-400 mt-0.5 font-medium">
-            Active verified placements vs available workforce
+          <p className="text-xs text-slate-400 mt-0.5">
+            Tracking active placements vs available kasambahay workforce
           </p>
         </div>
 
         {/* Legend & Filter */}
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3 text-xs font-bold text-zinc-600">
+          <div className="flex items-center gap-3 text-xs font-semibold text-slate-600">
             <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#FFB380]" />
+              <span className="w-2.5 h-2.5 rounded-full bg-[#0284C7]" />
               <span>Employed</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#0D0D11]" />
+              <span className="w-2.5 h-2.5 rounded-full bg-[#F5A623]" />
               <span>Available</span>
             </div>
           </div>
@@ -112,10 +113,10 @@ export const EmploymentTrendChart: React.FC = () => {
           <div className="relative">
             <button
               onClick={() => setTimeframe(timeframe === 'Monthly' ? 'Quarterly' : 'Monthly')}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#F0F0EC] hover:bg-[#EAEAE5] rounded-full text-xs font-extrabold font-display text-zinc-800 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 transition-colors cursor-pointer"
             >
               <span>{timeframe}</span>
-              <ChevronDown className="w-3 h-3 text-zinc-400" />
+              <ChevronDown className="w-3 h-3 text-slate-400" />
             </button>
           </div>
         </div>
@@ -128,17 +129,22 @@ export const EmploymentTrendChart: React.FC = () => {
           className="w-full h-auto overflow-visible select-none"
         >
           <defs>
-            {/* Gradient for Employed Area (Apricot Peach) */}
+            {/* Gradient for Employed Area */}
             <linearGradient id="employedGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#FFB380" stopOpacity="0.28" />
-              <stop offset="100%" stopColor="#FFB380" stopOpacity="0.0" />
+              <stop offset="0%" stopColor="#0284C7" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#0284C7" stopOpacity="0.0" />
             </linearGradient>
 
-            {/* Gradient for Available Area (Ink Black) */}
+            {/* Gradient for Available Area */}
             <linearGradient id="availableGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#0D0D11" stopOpacity="0.08" />
-              <stop offset="100%" stopColor="#0D0D11" stopOpacity="0.0" />
+              <stop offset="0%" stopColor="#F5A623" stopOpacity="0.2" />
+              <stop offset="100%" stopColor="#F5A623" stopOpacity="0.0" />
             </linearGradient>
+
+            {/* Drop shadow for line */}
+            <filter id="glowEmployed" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor="#0284C7" floodOpacity="0.2" />
+            </filter>
           </defs>
 
           {/* Horizontal Grid lines */}
@@ -151,7 +157,7 @@ export const EmploymentTrendChart: React.FC = () => {
                   y1={y}
                   x2={width - paddingX}
                   y2={y}
-                  stroke="#F0F0EC"
+                  stroke="#F1F5F9"
                   strokeDasharray="4 4"
                   strokeWidth="1"
                 />
@@ -159,7 +165,7 @@ export const EmploymentTrendChart: React.FC = () => {
                   x={paddingX - 10}
                   y={y + 3}
                   textAnchor="end"
-                  className="text-[10px] fill-zinc-400 font-semibold"
+                  className="text-[10px] fill-slate-300 font-medium font-mono"
                 >
                   {val}
                 </text>
@@ -175,7 +181,7 @@ export const EmploymentTrendChart: React.FC = () => {
           <path
             d={linePath2}
             fill="none"
-            stroke="#0D0D11"
+            stroke="#F5A623"
             strokeWidth="2.5"
             strokeLinecap="round"
             className="transition-all duration-300"
@@ -183,9 +189,10 @@ export const EmploymentTrendChart: React.FC = () => {
           <path
             d={linePath1}
             fill="none"
-            stroke="#FFB380"
-            strokeWidth="3.5"
+            stroke="#0284C7"
+            strokeWidth="3"
             strokeLinecap="round"
+            filter="url(#glowEmployed)"
             className="transition-all duration-300"
           />
 
@@ -196,7 +203,7 @@ export const EmploymentTrendChart: React.FC = () => {
               y1={paddingY}
               x2={hoveredPoint.x}
               y2={height - paddingY}
-              stroke="#FFB380"
+              stroke="#0284C7"
               strokeWidth="1.5"
               strokeDasharray="3 3"
               opacity="0.6"
@@ -227,7 +234,7 @@ export const EmploymentTrendChart: React.FC = () => {
                   cy={points2[idx].y}
                   r={isHovered ? 5 : 3}
                   fill="#FFFFFF"
-                  stroke="#0D0D11"
+                  stroke="#F5A623"
                   strokeWidth="2"
                   className="transition-all duration-150"
                 />
@@ -237,8 +244,8 @@ export const EmploymentTrendChart: React.FC = () => {
                   cx={p.x}
                   cy={p.y}
                   r={isHovered ? 6 : 4}
-                  fill={isHovered ? "#FFB380" : "#FFFFFF"}
-                  stroke="#FFB380"
+                  fill={isHovered ? "#0284C7" : "#FFFFFF"}
+                  stroke="#0284C7"
                   strokeWidth={isHovered ? 3 : 2}
                   className="transition-all duration-150"
                 />
@@ -248,10 +255,10 @@ export const EmploymentTrendChart: React.FC = () => {
                   x={p.x}
                   y={height - 8}
                   textAnchor="middle"
-                  className={`text-[11px] font-extrabold font-display transition-all ${
+                  className={`text-[11px] font-semibold transition-all ${
                     isHovered 
-                      ? 'fill-[#0D0D11] font-black scale-110' 
-                      : 'fill-zinc-400'
+                      ? 'fill-slate-900 font-bold' 
+                      : 'fill-slate-400'
                   }`}
                 >
                   {p.data.month}
@@ -261,34 +268,34 @@ export const EmploymentTrendChart: React.FC = () => {
           })}
         </svg>
 
-        {/* Floating Tooltip */}
+        {/* Floating Tooltip matching Voltara mockup */}
         {hoveredPoint && (
           <div
-            className="absolute z-20 pointer-events-none transition-all duration-150 bg-[#0D0D11] text-white p-3.5 rounded-3xl text-xs w-40 ring-1 ring-white/10"
+            className="absolute z-20 pointer-events-none transition-all duration-150 bg-[#0F172A] text-white p-3 rounded-2xl shadow-xl border border-slate-700/50 text-xs w-36"
             style={{
-              left: `calc(${(hoveredPoint.x / width) * 100}% - 80px)`,
+              left: `calc(${(hoveredPoint.x / width) * 100}% - 72px)`,
               top: `${Math.max(10, (hoveredPoint.y / height) * 100 - 45)}%`,
             }}
           >
-            <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-zinc-800">
-              <span className="font-black font-display text-[#FFB380] uppercase tracking-wider text-[10px]">
-                {hoveredPoint.data.month} Stats
+            <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800">
+              <span className="font-bold text-amber-400 uppercase tracking-wider text-[10px]">
+                {hoveredPoint.data.month} Overview
               </span>
-              <span className="text-[10px] text-zinc-400 font-bold">2026</span>
+              <span className="text-[10px] text-slate-400 font-mono">2026</span>
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-zinc-400 text-[11px] flex items-center gap-1.5 font-medium">
-                  <span className="w-2 h-2 rounded-full bg-[#FFB380]" /> Employed
+                <span className="text-slate-400 text-[11px] flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#0284C7]" /> Employed
                 </span>
-                <span className="font-extrabold text-white">{hoveredPoint.data.employed}</span>
+                <span className="font-bold font-mono text-white">{hoveredPoint.data.employed}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-zinc-400 text-[11px] flex items-center gap-1.5 font-medium">
-                  <span className="w-2 h-2 rounded-full bg-white" /> Available
+                <span className="text-slate-400 text-[11px] flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#F5A623]" /> Available
                 </span>
-                <span className="font-extrabold text-white">{hoveredPoint.data.available}</span>
+                <span className="font-bold font-mono text-white">{hoveredPoint.data.available}</span>
               </div>
             </div>
           </div>

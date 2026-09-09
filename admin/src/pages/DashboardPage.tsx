@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, Briefcase, Hourglass } from 'lucide-react';
+import { Users, Briefcase, Hourglass, MapPin, Sparkles, ShieldCheck } from 'lucide-react';
 import { useAdmin } from '../context/AdminContext';
 import { StatCard } from '../components/dashboard/StatCard';
 import { EmploymentTrendChart } from '../components/dashboard/EmploymentTrendChart';
@@ -22,44 +22,39 @@ export const DashboardPage: React.FC = () => {
   const employedPercentage = isSuperadmin ? 59 : activeBarangay.employmentRatio;
 
   return (
-    <div className="space-y-7 animate-in fade-in duration-200">
+    <div className="space-y-6 animate-in fade-in duration-200">
       
       {/* Top Header */}
       <div>
-        <h1 className="text-3xl sm:text-4xl font-black font-display text-[#0D0D11] tracking-tight">
-          {isSuperadmin ? 'City Dashboard' : `Brgy. ${selectedBarangay} Dashboard`}
+        <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+          Dashboard
         </h1>
-        <p className="text-xs text-zinc-400 mt-1 font-medium">
-          {isSuperadmin ? 'City-wide administration across all Cagayan de Oro barangays' : `Local LGU operational jurisdiction for Brgy. ${selectedBarangay}`}
-        </p>
       </div>
 
-      {/* Filter Tabs Bar (Only Superadmin gets the multi-barangay Breakdown tab) */}
-      {isSuperadmin && (
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setActiveTab('OVERVIEW')}
-            className={`px-5 py-2.5 rounded-full text-xs font-black font-display transition-all cursor-pointer ${
-              activeTab === 'OVERVIEW'
-                ? 'bg-[#0D0D11] text-white'
-                : 'bg-white text-zinc-600 hover:bg-[#F0F0EC]'
-            }`}
-          >
-            Analytics & Trends
-          </button>
+      {/* Filter Tabs Bar (Voltara style) */}
+      <div className="flex items-center gap-2 pb-1">
+        <button
+          onClick={() => setActiveTab('OVERVIEW')}
+          className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+            activeTab === 'OVERVIEW'
+              ? 'bg-[#0F172A] text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200/60'
+          }`}
+        >
+          Analytics & Waves
+        </button>
 
-          <button
-            onClick={() => setActiveTab('BREAKDOWN')}
-            className={`px-5 py-2.5 rounded-full text-xs font-black font-display transition-all cursor-pointer ${
-              activeTab === 'BREAKDOWN'
-                ? 'bg-[#0D0D11] text-white'
-                : 'bg-white text-zinc-600 hover:bg-[#F0F0EC]'
-            }`}
-          >
-            Barangay Directory & Stats
-          </button>
-        </div>
-      )}
+        <button
+          onClick={() => setActiveTab('BREAKDOWN')}
+          className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+            activeTab === 'BREAKDOWN'
+              ? 'bg-[#0F172A] text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200/60'
+          }`}
+        >
+          Barangay Breakdown Table
+        </button>
+      </div>
 
       {/* Top 3 Stat Cards (Voltara / SerbiSure style) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
@@ -104,7 +99,7 @@ export const DashboardPage: React.FC = () => {
 
       {/* Tab 2: Barangay Breakdown (Superadmin level) */}
       {activeTab === 'BREAKDOWN' && (
-        <div className="bg-white rounded-3xl p-6">
+        <div className="bg-white rounded-3xl p-6 border border-slate-100/90 shadow-[0_4px_25px_rgba(0,0,0,0.02)]">
           <SuperAdminBreakdown barangays={barangays} />
         </div>
       )}

@@ -7,12 +7,9 @@ export const VerificationsPage: React.FC = () => {
     <div className="space-y-8 animate-in fade-in duration-200">
       {/* Page Header */}
       <div>
-        <h1 className="text-3xl font-black font-display text-[#0D0D11] tracking-tight">
+        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
           Verification Queue
         </h1>
-        <p className="text-xs text-zinc-400 font-medium mt-1">
-          Review credentials and statutory IDs submitted by Kasambahays and Homeowners
-        </p>
       </div>
 
       {/* Grid matching Mockup #3 (Active Requests on Left, Document Preview on Right) */}

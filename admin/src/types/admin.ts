@@ -21,7 +21,6 @@ export interface VerificationRequest {
   role: AccountRole;
   avatar: string;
   documentType: DocumentType;
-  rawDocumentType?: string;
   documentNumber: string;
   submittedDate: string;
   issuedDate: string;
@@ -29,39 +28,11 @@ export interface VerificationRequest {
   status: VerificationStatus;
   recordStatus: 'Clear Record' | 'Under Review' | 'Flagged';
   documentImage: string;
-  documentImageBack?: string;
   barangay: string;
   contactNumber: string;
   email: string;
   notes?: string;
   faceLivenessMatchScore?: number; // e.g. 98.4%
-  ocrExtractedData?: {
-    full_name?: string;
-    first_name?: string;
-    middle_name?: string;
-    last_name?: string;
-    document_number?: string;
-    clearance_number?: string;
-    philsys_number?: string;
-    purpose?: string;
-    document_type_label?: string;
-    issuing_office?: string;
-    date_issued?: string;
-    valid_until?: string;
-    date_of_birth?: string;
-    barangay?: string;
-    city?: string;
-    [key: string]: any;
-  };
-  ocrDiscrepancies?: Array<{
-    field: string;
-    message?: string;
-    severity?: 'low' | 'medium' | 'high' | 'critical';
-    similarity?: number;
-    profile_value?: string;
-    document_value?: string;
-  }>;
-  ocrMatchScore?: number;
 }
 
 export interface LinkedWorker {
@@ -118,6 +89,5 @@ export interface BookingCompliance {
     thirteenthMonth: boolean;
   };
   startDate: string;
-  barangay?: string;
   status: 'ACTIVE' | 'FLAGGED_THROTTLED' | 'COMPLIANT' | 'DISPUTED';
 }
