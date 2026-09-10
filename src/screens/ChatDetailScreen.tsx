@@ -446,9 +446,13 @@ export function ChatDetailScreen({
                 <Text style={styles.contactName}>{contactName}</Text>
                 <Ionicons name="chevron-forward" size={13} color="#8E8E93" />
               </View>
-              <Text style={styles.contactSub}>
-                {isOnline ? 'Online now' : 'Offline'} · {contactRole}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                <Text style={styles.contactSub}>{isOnline ? 'Online now' : 'Offline'}</Text>
+                <Text style={{ color: '#C4C4C4', fontSize: 10 }}>•</Text>
+                <View style={styles.headerRoleBadge}>
+                  <Text style={styles.headerRoleBadgeText}>{contactRole}</Text>
+                </View>
+              </View>
             </View>
           </Pressable>
 
@@ -733,14 +737,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9F8F6',
   },
   header: {
-    backgroundColor: '#FFECCB',
+    backgroundColor: '#F6F5F2',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   backBtn: {
     paddingRight: 8,
@@ -766,13 +768,24 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#4CAF50',
     borderWidth: 2,
-    borderColor: '#FFECCB',
+    borderColor: '#F6F5F2',
     position: 'absolute',
     bottom: 0,
     right: 0,
   },
   headerTextCol: {
     justifyContent: 'center',
+  },
+  headerRoleBadge: {
+    backgroundColor: '#FFB380',
+    paddingHorizontal: 7,
+    paddingVertical: 1.5,
+    borderRadius: 9999,
+  },
+  headerRoleBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0D0D11',
   },
   contactName: {
     fontSize: 16,

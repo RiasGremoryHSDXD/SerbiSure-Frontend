@@ -15,6 +15,20 @@ export interface BarangayStats {
   status: 'ACTIVE' | 'INACTIVE';
 }
 
+export interface DashboardMetrics {
+  totalWorkers: number;
+  totalEmployed: number;
+  totalAvailable: number;
+  employmentRatio: number;
+  totalHomeowners: number;
+  pendingVerifications: number;
+}
+
+export interface DashboardStatsResponse {
+  metrics: DashboardMetrics;
+  barangays: BarangayStats[];
+}
+
 export interface VerificationRequest {
   id: string;
   name: string;

@@ -11,6 +11,7 @@ import {
   TextInput,
   ActivityIndicator,
   Switch,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,11 +30,11 @@ import {
 import { fetchVerificationStatus, type VerificationStatusResponse } from '../../api/verificationApi';
 import { VerificationStatusModal } from '../VerificationStatusModal';
 import { PasswordSecurityModal } from '../PasswordSecurityModal';
-import { NotificationsModal } from '../NotificationsModal';
 import { AboutUsModal } from '../AboutUsModal';
 import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
 import { MyBookingsModal } from '../MyBookingsModal';
 import { ManageTagsModal } from '../ManageTagsModal';
+import { NotificationBell } from '../../context/NotificationContext';
 import { fetchNotifications } from '../../api/notificationsApi';
 
 const logoSource = require('../../../assets/serbisure-logo.png');
@@ -77,6 +78,63 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
   const [isManageTagsModalVisible, setIsManageTagsModalVisible] = useState(false);
   const [showContactNumber, setShowContactNumber] = useState<boolean>(user.showContactNumber ?? false);
   const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      const promises: Promise<any>[] = [];
+      if (user.token) {
+        promises.push(
+          fetchVerificationStatus(user.token).then((data) => {
+            setVerificationData(data);
+            if (data?.overall_status) {
+              updateUser({ verificationStatus: data.overall_status });
+            }
+          }).catch(() => {})
+        );
+        promises.push(
+          fetchUserAbout(user.token).then((about) => {
+            setBio(about);
+            updateUser({ userAbout: about });
+          }).catch(() => {})
+        );
+        promises.push(
+          fetchReceivedReviews(user.token).then((items) => {
+            setReviews(items || []);
+          }).catch(() => {})
+        );
+        if (user.id) {
+          promises.push(
+            fetchReviewSummary(user.token, user.id).then((sum) => {
+              if (sum) setSummary(sum);
+            }).catch(() => {})
+          );
+        }
+        promises.push(
+          fetchNotifications(user.token).then((res) => {
+            setUnreadNotifCount(res?.unread_count ?? 0);
+          }).catch(() => {})
+        );
+        promises.push(
+          fetchUserTags(user.token).then((userTags) => {
+            setTags(userTags);
+            updateUser({ userTags });
+          }).catch(() => {})
+        );
+        promises.push(
+          fetchContactPrivacy(user.token).then((show) => {
+            setShowContactNumber(show);
+            updateUser({ showContactNumber: show });
+          }).catch(() => {})
+        );
+      }
+      await Promise.allSettled(promises);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const loadVerificationStatus = () => {
     if (user.token) {
@@ -242,78 +300,68 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
   };
 
   return (
-    <View style={[styles.container, currentView === 'personal_info' && { backgroundColor: '#F9F8F6' }]}>
+    <View style={styles.container}>
       {/* Top Status Bar Spacer */}
-      <View style={{ height: insets.top, backgroundColor: currentView === 'personal_info' ? 'transparent' : '#FFF0DB', zIndex: 10 }} />
+      <View style={{ height: insets.top, backgroundColor: '#F6F5F2', zIndex: 10 }} />
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={[styles.scrollContent, { paddingTop: 0 }]}
         showsVerticalScrollIndicator={false}
-        bounces={false}
-      >
-        {/* Backgrounds */}
-        {currentView === 'personal_info' ? (
-          <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&q=80&w=800' }}
-            style={{ width: '100%', height: 220, position: 'absolute', top: 0 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={['#FFB43B']}
+            tintColor="#FFB43B"
           />
-        ) : (
-          <View style={[styles.headerBg, { height: 160 }]} />
-        )}
-
-        {/* Header Row (Scrolls with content) */}
-        <View style={[styles.headerRow, { marginTop: 10, marginBottom: 16 }]}>
-          <Pressable onPress={() => (currentView === 'personal_info' ? setCurrentView('main') : onBack?.())}>
-            <Ionicons
-              name="arrow-back"
-              size={24}
-              color={currentView === 'personal_info' ? "#FFB43B" : "#333"}
-            />
-          </Pressable>
+        }
+      >
+        {/* Header Row */}
+        <View style={styles.headerTop}>
+          <View style={styles.headerSide}>
+            {currentView === 'personal_info' ? (
+              <Pressable
+                style={styles.backCircleButton}
+                onPress={() => setCurrentView('main')}
+                hitSlop={8}
+              >
+                <Ionicons name="arrow-back" size={20} color="#0D0D11" />
+              </Pressable>
+            ) : null}
+          </View>
           <Image source={logoSource} style={styles.logo} resizeMode="contain" />
-          <View style={{ width: 24 }} />
+          <View style={[styles.headerSide, styles.headerSideRight]}>
+            <NotificationBell />
+          </View>
         </View>
 
         {currentView === 'personal_info' ? (
           <React.Fragment>
-            {/* Beige Info Card */}
-            <View style={styles.personalInfoCard}>
+            {/* Identity Hero Squircle Card */}
+            <View style={styles.personalHeroCard}>
               <Pressable style={styles.personalAvatarWrapper} onPress={handlePickImage}>
                 <Image
                   source={{ uri: localAvatar || avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }}
                   style={styles.personalAvatar}
                 />
-                <View style={styles.editIconBadge}>
-                  <Ionicons name="camera" size={12} color="#FFF" />
+                <View style={styles.cameraIconBadge}>
+                  <Ionicons name="camera" size={13} color="#FFFFFF" />
                 </View>
               </Pressable>
 
               <View style={styles.personalNameRow}>
                 <Text style={styles.personalName}>{getFullName()}</Text>
-                {verificationData?.overall_status === 'Verified' ? (
-                  <Ionicons name="shield-checkmark" size={17} color="#27AE60" style={{ marginLeft: 6 }} />
-                ) : verificationData?.overall_status === 'Pending' ? (
-                  <Pressable
-                    style={styles.pendingInlineBadge}
-                    onPress={() => setIsVerificationModalVisible(true)}
-                  >
-                    <Ionicons name="time" size={12} color="#D68910" />
-                    <Text style={styles.pendingInlineBadgeText}>Pending Review</Text>
-                  </Pressable>
-                ) : verificationData?.overall_status === 'Rejected' ? (
-                  <Pressable
-                    style={styles.rejectedInlineBadge}
-                    onPress={() => setIsVerificationModalVisible(true)}
-                  >
-                    <Ionicons name="alert-circle" size={12} color="#C0392B" />
-                    <Text style={styles.rejectedInlineBadgeText}>Action Needed</Text>
-                  </Pressable>
+                {effectiveVerificationStatus === 'Verified' ? (
+                  <Ionicons name="shield-checkmark" size={18} color="#10B981" style={{ marginLeft: 6 }} />
                 ) : null}
               </View>
-              <Text style={styles.personalRole}>{user.accountType || 'Homeowner'}</Text>
+
+              <View style={styles.rolePillBadge}>
+                <Text style={styles.rolePillText}>{(user.accountType || 'HOMEOWNER').toUpperCase()}</Text>
+              </View>
 
               <View style={styles.locationRow}>
-                <Ionicons name="location-outline" size={14} color="#555" />
+                <Ionicons name="location" size={14} color="#FFB380" />
                 <Text style={styles.locationText}>
                   {[user.city, user.province].filter(Boolean).join(', ') || 'Cagayan de Oro, Misamis Oriental'}
                 </Text>
@@ -323,31 +371,31 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
               <View style={styles.contactDetailsContainer}>
                 {user.email ? (
                   <View style={styles.contactItemRow}>
-                    <Ionicons name="mail-outline" size={13} color="#78350F" />
+                    <Ionicons name="mail" size={13} color="#9CA3AF" />
                     <Text style={styles.contactItemText}>{user.email}</Text>
                   </View>
                 ) : null}
                 {user.contactNumber ? (
                   <View style={styles.contactItemRow}>
-                    <Ionicons name="call-outline" size={13} color="#78350F" />
+                    <Ionicons name="call" size={13} color="#9CA3AF" />
                     <Text style={styles.contactItemText}>{user.contactNumber}</Text>
                     <Pressable
                       style={[
-                        styles.privacyStatusBadge,
-                        showContactNumber ? styles.privacyBadgePublic : styles.privacyBadgePrivate,
+                        styles.privacyPill,
+                        showContactNumber ? styles.privacyPillPublic : styles.privacyPillPrivate,
                       ]}
                       onPress={() => handleToggleContactPrivacy(!showContactNumber)}
                       disabled={isUpdatingPrivacy}
                     >
                       <Ionicons
-                        name={showContactNumber ? 'eye-outline' : 'eye-off-outline'}
+                        name={showContactNumber ? 'eye' : 'eye-off'}
                         size={11}
                         color={showContactNumber ? '#065F46' : '#6B7280'}
                       />
                       <Text
                         style={[
-                          styles.privacyStatusBadgeText,
-                          showContactNumber ? styles.privacyBadgeTextPublic : styles.privacyBadgeTextPrivate,
+                          styles.privacyPillText,
+                          showContactNumber ? styles.privacyPillTextPublic : styles.privacyPillTextPrivate,
                         ]}
                       >
                         {showContactNumber ? 'Public' : 'Private'}
@@ -357,117 +405,134 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                 ) : null}
               </View>
 
-              <View style={styles.sentimentDivider} />
-
-              <View style={styles.sentimentRow}>
-                <Text style={styles.sentimentLabel}>{t.workerSentiment}</Text>
-                <View style={styles.sentimentBarBg}>
+              {/* Worker Sentiment Track */}
+              <View style={styles.sentimentCard}>
+                <View style={styles.sentimentTopRow}>
+                  <Text style={styles.sentimentCardLabel}>{t.workerSentiment}</Text>
+                  <Text
+                    style={[
+                      styles.sentimentCardScore,
+                      positivePercentage === null && { color: '#9CA3AF' },
+                    ]}
+                  >
+                    {positivePercentage !== null ? `${positivePercentage}% ${t.positive}` : t.noReviewsYet}
+                  </Text>
+                </View>
+                <View style={styles.sentimentTrack}>
                   <View
                     style={[
-                      styles.sentimentBarFill,
+                      styles.sentimentFill,
                       {
-                        width: positivePercentage !== null ? `${Math.min(100, Math.max(10, positivePercentage))}%` : '0%',
-                        backgroundColor: positivePercentage !== null ? '#4CAF50' : '#E0E0E0',
+                        width: positivePercentage !== null ? `${Math.min(100, Math.max(8, positivePercentage))}%` : '0%',
+                        backgroundColor: positivePercentage !== null ? '#10B981' : '#E5E7EB',
                       },
                     ]}
                   />
                 </View>
-                <Text
-                  style={[
-                    styles.sentimentScore,
-                    positivePercentage === null && { color: '#9CA3AF', fontSize: 11, fontWeight: '500' },
-                  ]}
-                >
-                  {positivePercentage !== null ? `${positivePercentage}% ${t.positive}` : t.noReviewsYet}
-                </Text>
               </View>
+            </View>
 
-              {/* Profile Tags Section */}
-              <View style={styles.tagsHeaderRow}>
-                <Text style={styles.tagsHeaderTitle}>Profile Tags</Text>
+            {/* Profile Tags Card */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionCardHeader}>
+                <View>
+                  <Text style={styles.sectionCardTitle}>Profile Tags</Text>
+                  <Text style={styles.sectionCardSubtitle}>Household & worker preferences</Text>
+                </View>
                 <Pressable
-                  style={styles.manageTagsButton}
+                  style={styles.actionPillButton}
                   onPress={() => setIsManageTagsModalVisible(true)}
                   hitSlop={8}
                 >
-                  <Ionicons name="pricetag-outline" size={12} color="#92400E" />
-                  <Text style={styles.manageTagsButtonText}>
-                    {tags && tags.length > 0 ? 'Edit Tags' : '+ Add Tags'}
+                  <Ionicons name="add" size={13} color="#FFFFFF" />
+                  <Text style={styles.actionPillButtonText}>
+                    {tags && tags.length > 0 ? 'Edit Tags' : 'Add Tags'}
                   </Text>
                 </Pressable>
               </View>
 
-              <View style={styles.tagsContainer}>
-                {tags && tags.length > 0 ? (
-                  tags.map((tagItem, idx) => (
-                    <View key={`${tagItem}-${idx}`} style={styles.pillTag}>
-                      <Text style={styles.pillTagText}>{tagItem}</Text>
+              {tags && tags.length > 0 ? (
+                <View style={styles.tagsFlexWrap}>
+                  {tags.map((tagItem, idx) => (
+                    <View key={`${tagItem}-${idx}`} style={styles.cleanPillTag}>
+                      <Text style={styles.cleanPillTagText}>{tagItem}</Text>
                     </View>
-                  ))
-                ) : (
-                  <Pressable
-                    style={styles.emptyTagsNotice}
-                    onPress={() => setIsManageTagsModalVisible(true)}
-                  >
-                    <Ionicons name="add-circle-outline" size={16} color="#B45309" />
-                    <Text style={styles.emptyTagsNoticeText}>Add tags to describe your household & preferences</Text>
-                  </Pressable>
-                )}
-              </View>
+                  ))}
+                </View>
+              ) : (
+                <Pressable
+                  style={styles.emptyActionTile}
+                  onPress={() => setIsManageTagsModalVisible(true)}
+                >
+                  <View style={styles.emptyActionIconCircle}>
+                    <Ionicons name="pricetag" size={18} color="#0D0D11" />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.emptyActionTitle}>Describe your household</Text>
+                    <Text style={styles.emptyActionSubtitle}>Add tags like Pet Owner, Toddler, Elder Care...</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+                </Pressable>
+              )}
             </View>
 
-            {/* About Section */}
-            <View style={styles.aboutSection}>
-              <View style={styles.aboutHeaderRow}>
-                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>{t.aboutTitle} Homeowner</Text>
+            {/* About Homeowner Section */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionCardHeader}>
+                <View>
+                  <Text style={styles.sectionCardTitle}>{t.aboutTitle} Homeowner</Text>
+                  <Text style={styles.sectionCardSubtitle}>Tell workers about your home</Text>
+                </View>
                 {bio && bio !== 'No Bio' && bio.trim() !== '' ? (
                   <Pressable
-                    style={styles.editBioBtn}
+                    style={styles.actionPillButton}
                     onPress={() => {
                       setEditBioText(bio);
                       setIsEditingBio(true);
                     }}
                   >
-                    <Ionicons name="pencil" size={13} color="#FFB43B" />
-                    <Text style={styles.editBioBtnText}>Edit</Text>
+                    <Ionicons name="pencil" size={12} color="#FFFFFF" />
+                    <Text style={styles.actionPillButtonText}>Edit</Text>
                   </Pressable>
                 ) : null}
               </View>
 
               {!bio || bio === 'No Bio' || bio.trim() === '' ? (
                 <Pressable
-                  style={styles.emptyBioContainer}
+                  style={styles.emptyActionTile}
                   onPress={() => {
                     setEditBioText('');
                     setIsEditingBio(true);
                   }}
                 >
-                  <View style={styles.emptyBioIconCircle}>
-                    <Ionicons name="create-outline" size={18} color="#FFB43B" />
+                  <View style={styles.emptyActionIconCircle}>
+                    <Ionicons name="create" size={18} color="#0D0D11" />
                   </View>
-                  <View style={{ marginLeft: 12, flex: 1 }}>
-                    <Text style={styles.emptyBioTitle}>Add your bio</Text>
-                    <Text style={styles.emptyBioSubtitle}>Tell workers about your household, preferences, and requirements...</Text>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.emptyActionTitle}>Add your bio</Text>
+                    <Text style={styles.emptyActionSubtitle}>Tell workers about your family and expectations...</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={16} color="#BDBDBD" />
+                  <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
                 </Pressable>
               ) : (
-                <Text style={styles.aboutText}>{bio}</Text>
+                <View style={styles.bioTextContainer}>
+                  <Text style={styles.bioBodyText}>{bio}</Text>
+                </View>
               )}
             </View>
 
             {/* Reviews Section */}
             <View style={styles.reviewsSection}>
               <View style={styles.reviewsHeader}>
-                <Text style={[styles.sectionTitle, { flex: 1, marginRight: 12, marginBottom: 0 }]} numberOfLines={1} adjustsFontSizeToFit>{t.recentReviews}</Text>
+                <Text style={styles.reviewsSectionTitle}>{t.recentReviews}</Text>
                 {totalReviews >= 2 ? (
-                  <Text style={[styles.viewAllText, { flexShrink: 0 }]}>{t.viewAll} {totalReviews}</Text>
+                  <Text style={styles.viewAllPill}>{t.viewAll} ({totalReviews})</Text>
                 ) : null}
               </View>
 
               {reviews.length > 0 ? (
                 reviews.slice(0, 3).map((r) => (
-                  <View key={r.review_id} style={[styles.reviewCard, { marginBottom: 12 }]}>
+                  <View key={r.review_id} style={styles.reviewCard}>
                     <View style={styles.reviewCardHeader}>
                       <View style={styles.starsRow}>
                         {[1, 2, 3, 4, 5].map((i) => (
@@ -475,7 +540,7 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                             key={i}
                             name={i <= r.rating ? 'star' : 'star-outline'}
                             size={14}
-                            color="#FFB43B"
+                            color="#FFB380"
                             style={{ marginRight: 2 }}
                           />
                         ))}
@@ -486,13 +551,13 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                     </View>
                     <Text style={styles.reviewText}>"{r.unstructured_feedback}"</Text>
                     <Text style={styles.reviewAuthor}>
-                      — {r.reviewer_name || 'Verified User'}
+                      — {r.reviewer_name || 'Verified Worker'}
                       {r.createdAt ? `, ${new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : ''}
                     </Text>
                   </View>
                 ))
               ) : (
-                <View style={[styles.reviewCard, styles.emptyReviewsCard]}>
+                <View style={styles.emptyReviewsCard}>
                   <Ionicons name="chatbubbles-outline" size={32} color="#D1D5DB" />
                   <Text style={styles.emptyReviewsTitle}>{t.noReviewsYet}</Text>
                   <Text style={styles.emptyReviewsSubtitle}>
@@ -507,51 +572,49 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
           </React.Fragment>
         ) : (
           <React.Fragment>
-            <View style={styles.profileInfoContainer}>
-              <Pressable style={styles.avatarWrapper} onPress={handlePickImage}>
-                <Image
-                  source={{ uri: localAvatar || avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }}
-                  style={styles.avatar}
-                />
-                <View style={styles.editIconBadge}>
-                  <Ionicons name="camera" size={12} color="#FFF" />
-                </View>
-              </Pressable>
-
-              <View style={styles.profileDetails}>
-                <View style={styles.nameRow}>
-                  <Text style={styles.profileName}>{getFullName()}</Text>
-                  {effectiveVerificationStatus === 'Verified' && (
-                    <Ionicons name="checkmark-circle" size={18} color="#27AE60" style={{ marginLeft: 6 }} />
-                  )}
-                </View>
-                {user.email ? (
-                  <View style={styles.headerEmailRow}>
-                    <Ionicons name="mail-outline" size={12} color="#6B7280" />
-                    <Text style={styles.headerEmailText} numberOfLines={1}>{user.email}</Text>
+            {/* Settings Profile Hero Card */}
+            <View style={styles.settingsHeroCard}>
+              <View style={styles.settingsHeroTopRow}>
+                <Pressable style={styles.avatarWrapper} onPress={handlePickImage}>
+                  <Image
+                    source={{ uri: localAvatar || avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }}
+                    style={styles.avatar}
+                  />
+                  <View style={styles.cameraIconBadge}>
+                    <Ionicons name="camera" size={11} color="#FFF" />
                   </View>
-                ) : null}
-                <View style={styles.headerPhoneRow}>
-                  <Ionicons name="call-outline" size={12} color="#6B7280" />
-                  <Text style={styles.profilePhone}>{user.contactNumber || 'No phone registered'}</Text>
-                  <View
-                    style={[
-                      styles.miniPrivacyBadge,
-                      showContactNumber ? styles.miniPrivacyPublic : styles.miniPrivacyPrivate,
-                    ]}
-                  >
-                    <Text
+                </Pressable>
+
+                <View style={styles.heroDetails}>
+                  <Text style={styles.heroName} numberOfLines={1}>{getFullName()}</Text>
+                  <View style={styles.heroRolePillBadge}>
+                    <Text style={styles.rolePillText}>{(user.accountType || 'HOMEOWNER').toUpperCase()}</Text>
+                  </View>
+                  {user.email ? (
+                    <View style={styles.heroContactRow}>
+                      <Ionicons name="mail" size={12} color="#9CA3AF" />
+                      <Text style={styles.heroContactText} numberOfLines={1}>{user.email}</Text>
+                    </View>
+                  ) : null}
+                  <View style={styles.heroContactRow}>
+                    <Ionicons name="call" size={12} color="#9CA3AF" />
+                    <Text style={styles.heroContactText}>{user.contactNumber || 'No phone registered'}</Text>
+                    <View
                       style={[
-                        styles.miniPrivacyText,
-                        showContactNumber ? styles.miniPrivacyTextPublic : styles.miniPrivacyTextPrivate,
+                        styles.privacyPill,
+                        showContactNumber ? styles.privacyPillPublic : styles.privacyPillPrivate,
                       ]}
                     >
-                      {showContactNumber ? 'Public' : 'Private'}
-                    </Text>
+                      <Text
+                        style={[
+                          styles.privacyPillText,
+                          showContactNumber ? styles.privacyPillTextPublic : styles.privacyPillTextPrivate,
+                        ]}
+                      >
+                        {showContactNumber ? 'Public' : 'Private'}
+                      </Text>
+                    </View>
                   </View>
-                </View>
-                <View style={styles.roleBadge}>
-                  <Text style={styles.roleText}>{(user.accountType || 'HOMEOWNER').toUpperCase()}</Text>
                 </View>
               </View>
             </View>
@@ -563,15 +626,15 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                 onPress={() => setIsVerificationModalVisible(true)}
               >
                 <View style={styles.verificationNoticeIconBox}>
-                  <Ionicons name="time" size={18} color="#D68910" />
+                  <Ionicons name="time" size={18} color="#B45309" />
                 </View>
-                <View style={{ flex: 1, marginLeft: 10 }}>
+                <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={styles.verificationNoticeTitle}>ID Verification Pending</Text>
                   <Text style={styles.verificationNoticeSub}>
-                    Your National ID is under review by officials. Tap to check status.
+                    Your National ID is under review. Tap to check status.
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={16} color="#D68910" />
+                <Ionicons name="chevron-forward" size={16} color="#B45309" />
               </Pressable>
             ) : effectiveVerificationStatus === 'Rejected' ? (
               <Pressable
@@ -579,148 +642,125 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                 onPress={() => setIsVerificationModalVisible(true)}
               >
                 <View style={[styles.verificationNoticeIconBox, styles.verificationNoticeIconBoxRejected]}>
-                  <Ionicons name="alert-circle" size={18} color="#C0392B" />
+                  <Ionicons name="alert-circle" size={18} color="#B91C1C" />
                 </View>
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={[styles.verificationNoticeTitle, { color: '#C0392B' }]}>Verification Needs Attention</Text>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={[styles.verificationNoticeTitle, { color: '#B91C1C' }]}>Verification Needs Attention</Text>
                   <Text style={styles.verificationNoticeSub}>
-                    A document was rejected. Tap to review official feedback and re-upload.
+                    A document was rejected. Tap to review feedback and re-upload.
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={16} color="#C0392B" />
+                <Ionicons name="chevron-forward" size={16} color="#B91C1C" />
               </Pressable>
             ) : null}
 
-            <View style={styles.settingsCard}>
-              <SettingsItem
-                icon="person-outline"
-                label={t.personalInfo}
+            {/* Group 1: ACCOUNT */}
+            <Text style={styles.groupHeaderLabel}>ACCOUNT</Text>
+            <View style={styles.groupCard}>
+              <SettingsRow
+                icon="person"
+                title={t.personalInfo}
                 onPress={() => setCurrentView('personal_info')}
               />
-              <View style={styles.divider} />
-              <SettingsItem
-                icon="lock-closed-outline"
-                label={t.passwordsSecurity}
-                onPress={() => setIsPasswordModalVisible(true)}
-              />
-              <View style={styles.divider} />
-              <SettingsItem
-                icon="checkmark-circle-outline"
-                label={t.getVerified}
-                iconColor={
-                  effectiveVerificationStatus === 'Verified'
-                    ? '#27AE60'
-                    : effectiveVerificationStatus === 'Rejected'
-                    ? '#E74C3C'
-                    : effectiveVerificationStatus === 'Pending'
-                    ? '#F39C12'
-                    : '#4CAF50'
-                }
+              <View style={styles.rowDivider} />
+              <SettingsRow
+                icon="shield-checkmark"
+                title={t.getVerified}
                 rightComponent={
-                  effectiveVerificationStatus ? (
-                    <View
+                  <View
+                    style={[
+                      styles.verificationStatusPill,
+                      effectiveVerificationStatus === 'Verified' && styles.verificationPillVerified,
+                      effectiveVerificationStatus === 'Pending' && styles.verificationPillPending,
+                      effectiveVerificationStatus === 'Rejected' && styles.verificationPillRejected,
+                    ]}
+                  >
+                    <Text
                       style={[
-                        styles.verificationStatusBadge,
-                        effectiveVerificationStatus === 'Verified' && styles.verificationBadgeVerified,
-                        effectiveVerificationStatus === 'Pending' && styles.verificationBadgePending,
-                        effectiveVerificationStatus === 'Rejected' && styles.verificationBadgeRejected,
+                        styles.verificationStatusPillText,
+                        effectiveVerificationStatus === 'Verified' && styles.verificationPillTextVerified,
+                        effectiveVerificationStatus === 'Pending' && styles.verificationPillTextPending,
+                        effectiveVerificationStatus === 'Rejected' && styles.verificationPillTextRejected,
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.verificationStatusBadgeText,
-                          effectiveVerificationStatus === 'Verified' && styles.verificationBadgeTextVerified,
-                          effectiveVerificationStatus === 'Pending' && styles.verificationBadgeTextPending,
-                          effectiveVerificationStatus === 'Rejected' && styles.verificationBadgeTextRejected,
-                        ]}
-                      >
-                        {effectiveVerificationStatus === 'Pending'
-                          ? '⏳ Under Review'
-                          : effectiveVerificationStatus === 'Verified'
-                          ? 'Verified'
-                          : effectiveVerificationStatus === 'Rejected'
-                          ? 'Action Needed'
-                          : 'Get Verified'}
-                      </Text>
-                    </View>
-                  ) : undefined
+                      {effectiveVerificationStatus === 'Pending'
+                        ? 'Under Review'
+                        : effectiveVerificationStatus === 'Verified'
+                        ? 'Verified'
+                        : effectiveVerificationStatus === 'Rejected'
+                        ? 'Action Needed'
+                        : 'Get Verified'}
+                    </Text>
+                  </View>
                 }
                 onPress={() => setIsVerificationModalVisible(true)}
               />
-
-              <SettingsItem
-                icon="calendar-outline"
-                label="My Bookings & Hires"
+              <View style={styles.rowDivider} />
+              <SettingsRow
+                icon="lock-closed"
+                title={t.passwordsSecurity}
+                onPress={() => setIsPasswordModalVisible(true)}
+              />
+              <View style={styles.rowDivider} />
+              <SettingsRow
+                icon="calendar"
+                title="My Bookings & Hires"
                 onPress={() => setIsMyBookingsModalVisible(true)}
               />
-              <View style={styles.divider} />
+            </View>
 
-              <SettingsItem
-                icon="notifications-outline"
-                label={t.notifications}
-                rightComponent={
-                  unreadNotifCount > 0 ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <View style={{ backgroundColor: '#E74C3C', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, marginRight: 6 }}>
-                        <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '700' }}>{unreadNotifCount}</Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={16} color="#FFB43B" />
-                    </View>
-                  ) : undefined
-                }
-                onPress={() => {
-                  setIsNotificationsModalVisible(true);
-                  setUnreadNotifCount(0);
-                }}
-              />
-              <View style={styles.divider} />
-              <SettingsItem
-                icon={showContactNumber ? "eye-outline" : "eye-off-outline"}
-                label="Show Contact Number"
+            {/* Group 2: PREFERENCES */}
+            <Text style={styles.groupHeaderLabel}>PREFERENCES</Text>
+            <View style={[styles.groupCard, isLanguageExpanded ? { zIndex: 9999, elevation: 9999 } : { zIndex: 2, elevation: 0 }]}>
+              <SettingsRow
+                icon={showContactNumber ? 'eye' : 'eye-off'}
+                title="Show Contact Number"
                 rightComponent={
                   <Switch
                     value={showContactNumber}
                     onValueChange={handleToggleContactPrivacy}
-                    trackColor={{ false: '#E5E7EB', true: '#FDE68A' }}
-                    thumbColor={showContactNumber ? '#FFB43B' : '#9CA3AF'}
+                    trackColor={{ false: '#E5E7EB', true: '#FFB380' }}
+                    thumbColor={showContactNumber ? '#0D0D11' : '#9CA3AF'}
                     disabled={isUpdatingPrivacy}
                   />
                 }
                 onPress={() => handleToggleContactPrivacy(!showContactNumber)}
               />
-              <View style={styles.divider} />
-              <SettingsItem
-                icon="globe-outline"
-                label={t.language}
-                zIndex={1000}
+              <View style={styles.rowDivider} />
+              <SettingsRow
+                icon="globe"
+                title={t.language}
+                zIndex={isLanguageExpanded ? 9999 : 1}
                 rightComponent={
                   <View style={{ position: 'relative', zIndex: 9999 }}>
                     <Pressable
-                      style={styles.languageSelector}
+                      style={styles.languagePillSelector}
                       onPress={() => setIsLanguageExpanded(!isLanguageExpanded)}
                     >
-                      <Text style={styles.languageText}>{language}</Text>
-                      <Ionicons name={isLanguageExpanded ? "chevron-up" : "chevron-down"} size={14} color="#888" />
+                      <Text style={styles.languagePillText}>{language === 'Cebuano' ? 'Bisaya' : language}</Text>
+                      <Ionicons name={isLanguageExpanded ? 'chevron-up' : 'chevron-down'} size={13} color="#0D0D11" />
                     </Pressable>
 
                     {isLanguageExpanded && (
                       <View style={styles.floatingPillDropdown}>
-                        {(['English', 'Tagalog', 'Cebuano'] as Language[]).map((lang) => (
+                        {(['English', 'Tagalog', 'Bisaya'] as Language[]).map((lang) => (
                           <Pressable
                             key={lang}
                             style={[
                               styles.floatingPillRow,
-                              language === lang && styles.floatingPillRowActive
+                              (language === lang || (lang === 'Bisaya' && language === 'Cebuano')) && styles.floatingPillRowActive,
                             ]}
                             onPress={() => {
                               setLanguage(lang);
                               setIsLanguageExpanded(false);
                             }}
                           >
-                            <Text style={[
-                              styles.floatingPillText,
-                              language === lang && styles.floatingPillTextActive
-                            ]}>
+                            <Text
+                              style={[
+                                styles.floatingPillText,
+                                (language === lang || (lang === 'Bisaya' && language === 'Cebuano')) && styles.floatingPillTextActive,
+                              ]}
+                            >
                               {lang}
                             </Text>
                           </Pressable>
@@ -731,41 +771,38 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                 }
                 onPress={() => setIsLanguageExpanded(!isLanguageExpanded)}
               />
+            </View>
 
-              <View style={styles.sectionSpacing} />
-
-              <SettingsItem
-                icon="help-circle-outline"
-                label={t.aboutUs}
+            {/* Group 3: SUPPORT & LEGAL */}
+            <Text style={styles.groupHeaderLabel}>SUPPORT & LEGAL</Text>
+            <View style={[styles.groupCard, { zIndex: 1, elevation: 0 }]}>
+              <SettingsRow
+                icon="information-circle"
+                title={t.aboutUs}
                 onPress={() => setIsAboutUsModalVisible(true)}
               />
-              <View style={styles.divider} />
-              <SettingsItem
-                icon="shield-checkmark-outline"
-                label={t.privacyPolicy}
+              <View style={styles.rowDivider} />
+              <SettingsRow
+                icon="document-text"
+                title={t.privacyPolicy}
                 onPress={() => setIsPrivacyPolicyModalVisible(true)}
               />
-
-              <View style={styles.sectionSpacing} />
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.settingsItem,
-                  pressed && { backgroundColor: '#FFF0F0', borderRadius: 8, paddingHorizontal: 16, marginHorizontal: -16 }
-                ]}
-                onPress={onLogout}
-              >
-                {({ pressed }) => (
-                  <>
-                    <Ionicons name="log-out-outline" size={24} color={pressed ? "#E74C3C" : "#FFB43B"} style={styles.settingsIcon} />
-                    <Text style={[styles.settingsLabel, { color: pressed ? '#E74C3C' : '#333' }]}>{t.logout}</Text>
-                  </>
-                )}
-              </Pressable>
-
-              {/* Bottom padding for tab bar */}
-              <View style={{ height: 85 }} />
             </View>
+
+            {/* Log Out Pill Button */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.logoutButton,
+                pressed && { opacity: 0.8 },
+              ]}
+              onPress={onLogout}
+            >
+              <Ionicons name="log-out-outline" size={18} color="#EF4444" />
+              <Text style={styles.logoutButtonText}>{t.logout}</Text>
+            </Pressable>
+
+            {/* Bottom padding for tab bar */}
+            <View style={{ height: 85 }} />
           </React.Fragment>
         )}
       </ScrollView>
@@ -870,12 +907,7 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
         token={user.token}
       />
 
-      {/* Notifications Modal */}
-      <NotificationsModal
-        visible={isNotificationsModalVisible}
-        onClose={() => setIsNotificationsModalVisible(false)}
-        token={user.token}
-      />
+
 
       {/* About Us Modal */}
       <AboutUsModal
@@ -909,14 +941,31 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
   );
 }
 
-function SettingsItem({ icon, label, iconColor = "#FFB43B", hideChevron = false, rightComponent, onPress, zIndex }: any) {
+function SettingsRow({
+  icon,
+  title,
+  iconColor = '#FFB380',
+  rightComponent,
+  onPress,
+  zIndex,
+}: {
+  icon: any;
+  title: string;
+  iconColor?: string;
+  rightComponent?: React.ReactNode;
+  onPress?: () => void;
+  zIndex?: number;
+}) {
   return (
-    <Pressable style={[styles.settingsItem, zIndex ? { zIndex, elevation: zIndex } : undefined]} onPress={onPress}>
+    <Pressable
+      style={[styles.settingsRow, zIndex ? { zIndex, elevation: zIndex } : undefined]}
+      onPress={onPress}
+    >
       <View style={styles.iconContainer}>
-        <Ionicons name={icon} size={20} color={iconColor} />
+        <Ionicons name={icon} size={22} color={iconColor} />
       </View>
-      <Text style={styles.settingsLabel} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
-      {rightComponent || (!hideChevron && <Ionicons name="chevron-forward" size={16} color="#FFB43B" />)}
+      <Text style={styles.rowTitle}>{title}</Text>
+      {rightComponent ? rightComponent : <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />}
     </Pressable>
   );
 }
@@ -924,32 +973,367 @@ function SettingsItem({ icon, label, iconColor = "#FFB43B", hideChevron = false,
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFF0DB',
-  },
-  headerBg: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#FFF0DB',
+    backgroundColor: '#F6F5F2',
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: 24,
   },
-  headerRow: {
+  headerTop: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    marginBottom: 12,
+    width: '100%',
+  },
+  headerSide: {
+    width: 44,
+    justifyContent: 'center',
+  },
+  headerSideRight: {
+    alignItems: 'flex-end',
+  },
+  backCircleButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   logo: {
     width: 44,
     height: 44,
   },
-  profileInfoContainer: {
+
+  // Personal Info Detailed View
+  personalHeroCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 22,
+    marginHorizontal: 16,
+    marginBottom: 14,
+    alignItems: 'center',
+  },
+  personalAvatarWrapper: {
+    position: 'relative',
+    marginBottom: 10,
+  },
+  personalAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
+  cameraIconBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#0D0D11',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  personalNameRow: {
     flexDirection: 'row',
-    paddingHorizontal: 24,
-    marginBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  personalName: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0D0D11',
+  },
+  rolePillBadge: {
+    backgroundColor: '#FFB380',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 9999,
+    alignSelf: 'center',
+    marginBottom: 8,
+  },
+  heroRolePillBadge: {
+    backgroundColor: '#FFB380',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 9999,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  rolePillText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#0D0D11',
+    letterSpacing: 0.5,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 14,
+  },
+  locationText: {
+    fontSize: 12.5,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  contactDetailsContainer: {
+    width: '100%',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 18,
+    padding: 12,
+    gap: 8,
+    marginBottom: 14,
+  },
+  contactItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  contactItemText: {
+    fontSize: 12.5,
+    color: '#374151',
+    fontWeight: '600',
+    flex: 1,
+  },
+  privacyPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 9999,
+  },
+  privacyPillPublic: {
+    backgroundColor: '#ECFDF5',
+  },
+  privacyPillPrivate: {
+    backgroundColor: '#F3F4F6',
+  },
+  privacyPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  privacyPillTextPublic: {
+    color: '#065F46',
+  },
+  privacyPillTextPrivate: {
+    color: '#6B7280',
+  },
+  sentimentCard: {
+    width: '100%',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 18,
+    padding: 14,
+  },
+  sentimentTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sentimentCardLabel: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#0D0D11',
+  },
+  sentimentCardScore: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#10B981',
+  },
+  sentimentTrack: {
+    height: 8,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 9999,
+    overflow: 'hidden',
+  },
+  sentimentFill: {
+    height: '100%',
+    borderRadius: 9999,
+  },
+  sectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 20,
+    marginHorizontal: 16,
+    marginBottom: 14,
+  },
+  sectionCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  sectionCardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0D0D11',
+  },
+  sectionCardSubtitle: {
+    fontSize: 11.5,
+    fontWeight: '500',
+    color: '#9CA3AF',
+    marginTop: 1,
+  },
+  actionPillButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#0D0D11',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 9999,
+  },
+  actionPillButtonText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  tagsFlexWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  cleanPillTag: {
+    backgroundColor: '#FFF4ED',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 9999,
+  },
+  cleanPillTagText: {
+    color: '#B45309',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  emptyActionTile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 18,
+    padding: 14,
+  },
+  emptyActionIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFF4ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyActionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0D0D11',
+  },
+  emptyActionSubtitle: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  bioTextContainer: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 18,
+    padding: 14,
+  },
+  bioBodyText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#374151',
+  },
+  reviewsSection: {
+    paddingHorizontal: 16,
+    marginBottom: 14,
+  },
+  reviewsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+    paddingHorizontal: 8,
+  },
+  reviewsSectionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0D0D11',
+  },
+  viewAllPill: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#FFB380',
+  },
+  reviewCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 16,
+    marginBottom: 10,
+  },
+  reviewCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  starsRow: {
+    flexDirection: 'row',
+  },
+  positiveBadge: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 9999,
+  },
+  positiveBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  reviewText: {
+    fontSize: 12.5,
+    color: '#4B5563',
+    lineHeight: 18,
+    fontStyle: 'italic',
+    marginBottom: 6,
+  },
+  reviewAuthor: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#9CA3AF',
+  },
+  emptyReviewsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+  },
+  emptyReviewsTitle: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#6B7280',
+    marginTop: 8,
+  },
+  emptyReviewsSubtitle: {
+    fontSize: 11.5,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+
+  // Main Settings View
+  settingsHeroCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 20,
+    marginHorizontal: 16,
+    marginBottom: 14,
+  },
+  settingsHeroTopRow: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
   avatarWrapper: {
@@ -957,443 +1341,202 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   avatar: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
   },
-  editIconBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#FFB43B',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FFECCB',
-  },
-  profileDetails: {
+  heroDetails: {
     flex: 1,
   },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  heroName: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0D0D11',
     marginBottom: 2,
   },
-  profileName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
+  heroContactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 3,
   },
-  profilePhone: {
+  heroContactText: {
+    fontSize: 11.5,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+
+  verificationNoticeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    borderRadius: 20,
+    padding: 14,
+    marginHorizontal: 16,
+    marginBottom: 14,
+  },
+  verificationNoticeBannerRejected: {
+    backgroundColor: '#FEE2E2',
+  },
+  verificationNoticeIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verificationNoticeIconBoxRejected: {
+    backgroundColor: '#FFFFFF',
+  },
+  verificationNoticeTitle: {
     fontSize: 13,
-    color: '#666',
+    fontWeight: '700',
+    color: '#92400E',
+    marginBottom: 2,
+  },
+  verificationNoticeSub: {
+    fontSize: 11,
+    color: '#78350F',
+    lineHeight: 15,
+  },
+
+  groupHeaderLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#9CA3AF',
+    letterSpacing: 0.8,
+    marginLeft: 24,
     marginBottom: 6,
   },
-  roleBadge: {
-    backgroundColor: '#9F7AEA', // purple
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+  groupCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    overflow: 'visible',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    marginHorizontal: 16,
+    marginBottom: 14,
   },
-  roleText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#FFF',
-  },
-  settingsCard: {
-    flex: 1,
-    backgroundColor: '#FFF',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 5,
+  settingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    overflow: 'visible',
   },
   iconContainer: {
-    width: 24,
+    width: 28,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  settingsItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 13,
-  },
-  settingsIcon: {
-    marginRight: 14,
-  },
-  settingsLabel: {
+  rowTitle: {
     flex: 1,
-    fontSize: 13.5,
-    fontWeight: '400',
-    color: '#2A2A2A',
-    marginRight: 10,
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: '#0D0D11',
   },
-  divider: {
+  rowDivider: {
     height: 1,
-    backgroundColor: '#EFECE6',
-    marginLeft: 34,
+    backgroundColor: '#F6F5F2',
+    marginLeft: 40,
   },
-  sectionSpacing: {
-    height: 16,
-  },
-  languageSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#FFB43B',
-    borderRadius: 6,
+  verificationStatusPill: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    backgroundColor: '#FFF',
-    minWidth: 95,
+    borderRadius: 9999,
+    backgroundColor: '#F3F4F6',
   },
-  languageText: {
-    fontSize: 12,
-    color: '#333',
-    marginRight: 6,
-    fontWeight: '500',
+  verificationPillVerified: {
+    backgroundColor: '#ECFDF5',
+  },
+  verificationPillPending: {
+    backgroundColor: '#FEF3C7',
+  },
+  verificationPillRejected: {
+    backgroundColor: '#FEE2E2',
+  },
+  verificationStatusPillText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  verificationPillTextVerified: {
+    color: '#065F46',
+  },
+  verificationPillTextPending: {
+    color: '#B45309',
+  },
+  verificationPillTextRejected: {
+    color: '#B91C1C',
+  },
+
+  languagePillSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F9FAFB',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 9999,
+  },
+  languagePillText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#0D0D11',
   },
   floatingPillDropdown: {
     position: 'absolute',
-    top: 28,
-    left: 0,
+    top: 34,
     right: 0,
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#FFB43B',
+    borderRadius: 18,
+    padding: 6,
+    elevation: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 25,
-    zIndex: 9999,
-    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    zIndex: 99999,
+    minWidth: 120,
   },
   floatingPillRow: {
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5F5F5',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
   },
   floatingPillRowActive: {
-    backgroundColor: '#FFF4E5',
+    backgroundColor: '#FFF4ED',
   },
   floatingPillText: {
-    fontSize: 12,
-    color: '#333',
-    fontWeight: '500',
+    fontSize: 11.5,
+    color: '#374151',
+    fontWeight: '600',
   },
   floatingPillTextActive: {
-    color: '#FFB43B',
-    fontWeight: '700',
+    color: '#0D0D11',
+    fontWeight: '800',
   },
-  // Personal Info Styles
-  personalInfoCard: {
-    backgroundColor: '#FFECCB',
-    borderRadius: 24,
-    marginHorizontal: 24,
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-    marginTop: 20,
-    position: 'relative',
-  },
-  personalAvatarWrapper: {
-    alignSelf: 'flex-start',
-    marginTop: -35,
-    marginBottom: 12,
-    borderRadius: 38,
-    borderWidth: 4,
-    borderColor: '#FFECCB',
-  },
-  personalAvatar: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-  },
-  personalNameRow: {
+
+  logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
-  },
-  personalName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
-  },
-  personalRole: {
-    fontSize: 13,
-    color: '#555',
-    marginBottom: 6,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  locationText: {
-    fontSize: 12,
-    color: '#555',
-    marginLeft: 4,
-  },
-  sentimentDivider: {
-    height: 1,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    marginVertical: 16,
-  },
-  sentimentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sentimentLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginRight: 12,
-  },
-  sentimentBarBg: {
-    flex: 1,
-    height: 8,
-    backgroundColor: '#FFF',
-    borderRadius: 4,
-    marginRight: 12,
-    overflow: 'hidden',
-  },
-  sentimentBarFill: {
-    width: '86%',
-    height: '100%',
-    backgroundColor: '#4CAF50',
-    borderRadius: 4,
-  },
-  sentimentScore: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#4CAF50',
-  },
-  contactDetailsContainer: {
-    marginTop: 8,
-    marginBottom: 4,
-    gap: 4,
-  },
-  contactItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  contactItemText: {
-    fontSize: 12,
-    color: '#555',
-    fontWeight: '500',
-  },
-  privacyStatusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-    gap: 3,
-    marginLeft: 6,
-  },
-  privacyBadgePublic: {
-    backgroundColor: '#ECFDF5',
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
-  },
-  privacyBadgePrivate: {
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  privacyStatusBadgeText: {
-    fontSize: 9.5,
-    fontWeight: '700',
-  },
-  privacyBadgeTextPublic: {
-    color: '#065F46',
-  },
-  privacyBadgeTextPrivate: {
-    color: '#6B7280',
-  },
-  tagsHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  tagsHeaderTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#374151',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  manageTagsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFBEB',
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    gap: 4,
-  },
-  manageTagsButtonText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#92400E',
-  },
-  emptyTagsNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFBEB',
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: '#FDE68A',
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    gap: 6,
-    width: '100%',
-  },
-  emptyTagsNoticeText: {
-    fontSize: 11.5,
-    color: '#92400E',
-    fontWeight: '500',
-  },
-  headerEmailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-  },
-  headerEmailText: {
-    fontSize: 12,
-    color: '#4B5563',
-    fontWeight: '500',
-  },
-  headerPhoneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-    marginBottom: 6,
-  },
-  miniPrivacyBadge: {
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 8,
-    marginLeft: 4,
-  },
-  miniPrivacyPublic: {
-    backgroundColor: '#ECFDF5',
-  },
-  miniPrivacyPrivate: {
-    backgroundColor: '#F3F4F6',
-  },
-  miniPrivacyText: {
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  miniPrivacyTextPublic: {
-    color: '#059669',
-  },
-  miniPrivacyTextPrivate: {
-    color: '#6B7280',
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  pillTag: {
-    backgroundColor: '#FFB43B',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  pillTagText: {
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  aboutSection: {
-    paddingHorizontal: 24,
-    marginTop: 30,
-  },
-  aboutHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  editBioBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF7ED',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#FFE2B8',
-  },
-  editBioBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFB43B',
-    marginLeft: 4,
-  },
-  emptyBioContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFDF9',
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#FFE8C8',
-    borderStyle: 'dashed',
-    marginTop: 4,
-  },
-  emptyBioIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFF2DE',
     justifyContent: 'center',
-    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 9999,
+    paddingVertical: 14,
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 85,
   },
-  emptyBioTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1A1A1A',
+  logoutButtonText: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#EF4444',
   },
-  emptyBioSubtitle: {
-    fontSize: 11,
-    color: '#888',
-    marginTop: 2,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    marginBottom: 12,
-  },
-  aboutText: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 22,
-  },
+
+  // Modals
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
@@ -1405,13 +1548,8 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 400,
     backgroundColor: '#FFF',
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    borderRadius: 28,
+    padding: 22,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1422,24 +1560,22 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 17,
     fontWeight: '800',
-    color: '#1A1A1A',
+    color: '#0D0D11',
   },
   modalSubtitle: {
     fontSize: 12,
-    color: '#777',
+    color: '#6B7280',
     lineHeight: 17,
     marginBottom: 14,
   },
   bioTextInput: {
     minHeight: 110,
     maxHeight: 180,
-    borderWidth: 1,
-    borderColor: '#E8E8E8',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 18,
+    padding: 14,
     fontSize: 13,
-    color: '#333',
-    backgroundColor: '#FAFAFA',
+    color: '#0D0D11',
   },
   charCountRow: {
     alignItems: 'flex-end',
@@ -1448,7 +1584,7 @@ const styles = StyleSheet.create({
   },
   charCountText: {
     fontSize: 11,
-    color: '#999',
+    color: '#9CA3AF',
     fontWeight: '600',
   },
   modalActionButtons: {
@@ -1459,21 +1595,21 @@ const styles = StyleSheet.create({
   cancelModalBtn: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: '#F3F3F3',
+    borderRadius: 9999,
+    backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelModalBtnText: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#555',
+    fontWeight: '700',
+    color: '#4B5563',
   },
   saveModalBtn: {
     paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: '#FFB43B',
+    borderRadius: 9999,
+    backgroundColor: '#0D0D11',
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 80,
@@ -1481,184 +1617,6 @@ const styles = StyleSheet.create({
   saveModalBtnText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#FFF',
-  },
-  reviewsSection: {
-    paddingHorizontal: 24,
-    marginTop: 30,
-  },
-  reviewsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  viewAllText: {
-    fontSize: 12,
-    color: '#FFB43B',
-    fontWeight: '600',
-  },
-  reviewCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  reviewCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  starsRow: {
-    flexDirection: 'row',
-  },
-  positiveBadge: {
-    backgroundColor: '#14A11C',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  positiveBadgeText: {
-    color: '#FFF',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  reviewText: {
-    fontSize: 13,
-    color: '#555',
-    lineHeight: 20,
-    fontStyle: 'italic',
-    marginBottom: 12,
-  },
-  reviewAuthor: {
-    fontSize: 12,
-    color: '#888',
-  },
-  emptyReviewsCard: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 28,
-    paddingHorizontal: 16,
-  },
-  emptyReviewsTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-    marginTop: 8,
-  },
-  emptyReviewsSubtitle: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    marginTop: 4,
-    maxWidth: 240,
-    lineHeight: 18,
-  },
-  pendingInlineBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    marginLeft: 8,
-    gap: 4,
-  },
-  pendingInlineBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#B45309',
-  },
-  rejectedInlineBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    marginLeft: 8,
-    gap: 4,
-  },
-  rejectedInlineBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#B91C1C',
-  },
-  verificationNoticeBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFBF0',
-    borderRadius: 14,
-    padding: 12,
-    marginHorizontal: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-    shadowColor: '#D97706',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  verificationNoticeBannerRejected: {
-    backgroundColor: '#FFF5F5',
-    borderColor: '#FECACA',
-    shadowColor: '#DC2626',
-  },
-  verificationNoticeIconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#FEF3C7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  verificationNoticeIconBoxRejected: {
-    backgroundColor: '#FEE2E2',
-  },
-  verificationNoticeTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#92400E',
-    marginBottom: 2,
-  },
-  verificationNoticeSub: {
-    fontSize: 11,
-    color: '#78350F',
-    lineHeight: 14,
-  },
-  verificationStatusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    backgroundColor: '#F3F4F6',
-  },
-  verificationBadgeVerified: {
-    backgroundColor: '#DCFCE7',
-  },
-  verificationBadgePending: {
-    backgroundColor: '#FEF3C7',
-  },
-  verificationBadgeRejected: {
-    backgroundColor: '#FEE2E2',
-  },
-  verificationStatusBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#4B5563',
-  },
-  verificationBadgeTextVerified: {
-    color: '#15803D',
-  },
-  verificationBadgeTextPending: {
-    color: '#B45309',
-  },
-  verificationBadgeTextRejected: {
-    color: '#B91C1C',
+    color: '#FFFFFF',
   },
 });

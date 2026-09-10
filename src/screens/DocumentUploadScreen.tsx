@@ -4,8 +4,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { IDPhotoModal } from './IDPhotoModal';
 import { API_BASE_URL, fetchWithTimeout } from '../config/api';
+import THEME from '../config/theme';
+import { RegistrationStepper } from '../components/RegistrationStepper';
 
-const logoSource = require('../../assets/serbisure-logo.png');
+const logoSource = require('../../assets/serbisure_new_clean.png');
 
 function getFileName(uri: string | null, defaultName: string) {
   if (!uri) return defaultName;
@@ -136,11 +138,11 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, onBack, onNex
       </View>
 
       <View style={styles.card}>
-        <View style={styles.stepIndicator}>
-          <View style={styles.stepDot} />
-          <View style={styles.stepDot} />
-          <View style={[styles.stepDot, styles.stepDotActive]} />
-        </View>
+        <RegistrationStepper
+          currentStep={4}
+          title="Step 4: Identity Documents"
+          help="Upload your government ID to complete your registration."
+        />
 
         <View style={styles.cardContent}>
           <View>
@@ -156,7 +158,7 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, onBack, onNex
                     </View>
                   ) : (
                     <>
-                      <Ionicons name="cloud-upload" size={26} color="#FFB43B" style={styles.uploadIcon} />
+                      <Ionicons name="cloud-upload" size={26} color={THEME.colors.brand} style={styles.uploadIcon} />
                       <Text style={styles.uploadTitle}>National ID (Front)</Text>
                       <Text style={styles.uploadSubtitle}>Tap or upload image</Text>
                       <Text style={styles.uploadMeta}>JPG, PNG, PDF (Max 5MB)</Text>
@@ -174,7 +176,7 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, onBack, onNex
                     </View>
                   ) : (
                     <>
-                      <Ionicons name="cloud-upload" size={26} color="#FFB43B" style={styles.uploadIcon} />
+                      <Ionicons name="cloud-upload" size={26} color={THEME.colors.brand} style={styles.uploadIcon} />
                       <Text style={styles.uploadTitle}>National ID (Back)</Text>
                       <Text style={styles.uploadSubtitle}>Tap or upload image</Text>
                       <Text style={styles.uploadMeta}>JPG, PNG, PDF (Max 5MB)</Text>
@@ -194,7 +196,7 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, onBack, onNex
                     </View>
                   ) : (
                     <>
-                      <Ionicons name="cloud-upload" size={26} color="#FFB43B" style={styles.uploadIcon} />
+                      <Ionicons name="cloud-upload" size={26} color={THEME.colors.brand} style={styles.uploadIcon} />
                       <Text style={styles.uploadTitle}>NBI Clearance</Text>
                       <Text style={styles.uploadSubtitle}>Click or drag file to upload</Text>
                       <Text style={styles.uploadMeta}>JPG, PNG, PDF (Max 5MB)</Text>
@@ -212,7 +214,7 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, onBack, onNex
                     </View>
                   ) : (
                     <>
-                      <Ionicons name="cloud-upload" size={26} color="#FFB43B" style={styles.uploadIcon} />
+                      <Ionicons name="cloud-upload" size={26} color={THEME.colors.brand} style={styles.uploadIcon} />
                       <Text style={styles.uploadTitle}>Police Clearance</Text>
                       <Text style={styles.uploadSubtitle}>Click or drag file to upload</Text>
                       <Text style={styles.uploadMeta}>JPG, PNG, PDF (Max 5MB)</Text>
@@ -225,16 +227,18 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, onBack, onNex
 
           <View>
             <View style={styles.divider} />
-            <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, loading && { opacity: 0.7 }]} onPress={handleUploadAll} disabled={loading}>
-              {loading ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Next</Text>
-              )}
-            </Pressable>
-            <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]} onPress={onCancel}>
-              <Text style={styles.secondaryButtonText}>Cancel</Text>
-            </Pressable>
+            <View style={styles.buttonRow}>
+              <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]} onPress={onCancel}>
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, loading && { opacity: 0.7 }]} onPress={handleUploadAll} disabled={loading}>
+                {loading ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Submit</Text>
+                )}
+              </Pressable>
+            </View>
           </View>
         </View>
       </View>
@@ -250,7 +254,7 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, onBack, onNex
 
 const styles = StyleSheet.create({
   root: {
-    backgroundColor: '#F6F5F2',
+    backgroundColor: THEME.colors.canvas,
     flex: 1,
   },
   header: {
@@ -272,100 +276,86 @@ const styles = StyleSheet.create({
     width: 44,
   },
   skipText: {
-    color: '#FFA51F',
+    color: THEME.colors.brandDark,
     fontSize: 13,
-    fontWeight: '500',
+    fontFamily: THEME.typography.fontFamily.bodyBold,
   },
   titleBlock: {
-    height: 64,
-    marginTop: 12,
+    marginTop: 8,
     paddingHorizontal: 24,
+    minHeight: 58,
   },
   title: {
-    color: '#000000',
+    color: THEME.colors.ink,
     fontSize: 24,
-    fontWeight: '900',
-    lineHeight: 29,
-    marginBottom: 2,
+    fontFamily: THEME.typography.fontFamily.display,
+    lineHeight: 28,
+    marginBottom: 4,
   },
   subtitle: {
-    color: '#202020',
+    color: THEME.colors.textSecondary,
     fontSize: 13,
-    lineHeight: 17,
+    fontFamily: THEME.typography.fontFamily.body,
+    lineHeight: 18,
   },
   card: {
     alignSelf: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 11,
+    borderRadius: THEME.roundness.card,
     flex: 1,
-    marginTop: 14,
-    paddingBottom: 16,
+    marginTop: 10,
+    paddingBottom: 14,
     paddingHorizontal: 18,
-    paddingTop: 8,
-    width: '88%',
+    paddingTop: 12,
+    width: '92%',
   },
   cardContent: {
     flex: 1,
     justifyContent: 'space-between',
   },
-  stepIndicator: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 12,
-    marginTop: 4,
-  },
-  stepDot: {
-    width: 24,
-    height: 4,
-    backgroundColor: '#D9D9D9',
-    borderRadius: 2,
-  },
-  stepDotActive: {
-    backgroundColor: '#FFB43B',
-  },
   alertBox: {
     flexDirection: 'row',
-    backgroundColor: '#FFECCB',
-    borderRadius: 8,
+    backgroundColor: THEME.colors.brandLight,
+    borderRadius: 16,
     padding: 12,
-    marginTop: 12,
-    marginHorizontal: 20,
+    marginTop: 8,
+    marginHorizontal: 18,
     marginBottom: 0,
   },
   alertIcon: {
-    marginRight: 12,
+    marginRight: 10,
     marginTop: 2,
   },
   alertContent: {
     flex: 1,
   },
   alertTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
+    fontSize: 12,
+    fontFamily: THEME.typography.fontFamily.bodyBold,
+    color: THEME.colors.ink,
+    marginBottom: 2,
   },
   alertText: {
     fontSize: 11,
-    color: '#333',
-    lineHeight: 14,
+    fontFamily: THEME.typography.fontFamily.body,
+    color: THEME.colors.textSecondary,
+    lineHeight: 15,
   },
   uploadBox: {
     borderWidth: 1.5,
-    borderColor: '#777',
-    borderStyle: 'dotted',
-    borderRadius: 12,
-    paddingVertical: 36,
+    borderColor: '#D8D8D2',
+    borderStyle: 'dashed',
+    borderRadius: 18,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 10,
+    marginTop: 8,
+    marginBottom: 6,
     backgroundColor: '#FAFAF8',
   },
   uploadBoxKasambahay: {
-    paddingVertical: 14,
-    marginTop: 8,
+    paddingVertical: 12,
+    marginTop: 6,
     marginBottom: 6,
   },
   uploadBoxHomeowner: {
@@ -374,12 +364,14 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   uploadBoxHasImage: {
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     backgroundColor: '#F5F4F0',
+    borderStyle: 'solid',
+    borderColor: THEME.colors.brand,
   },
   uploadIcon: {
-    marginBottom: 8,
+    marginBottom: 4,
   },
   attachmentContainer: {
     width: '100%',
@@ -388,68 +380,79 @@ const styles = StyleSheet.create({
   uploadPreview: {
     width: '100%',
     height: 95,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   uploadPreviewHomeowner: {
-    height: 100,
+    height: 95,
   },
   fileNameTextItalic: {
     fontStyle: 'italic',
     fontSize: 11,
-    color: '#666666',
-    marginTop: 6,
+    fontFamily: THEME.typography.fontFamily.body,
+    color: THEME.colors.textSecondary,
+    marginTop: 4,
     textAlign: 'center',
   },
   uploadTitle: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 4,
+    fontFamily: THEME.typography.fontFamily.bodyBold,
+    color: THEME.colors.ink,
+    marginBottom: 2,
   },
   uploadSubtitle: {
     fontSize: 11,
-    color: '#555',
+    fontFamily: THEME.typography.fontFamily.body,
+    color: THEME.colors.textSecondary,
     marginBottom: 2,
   },
   uploadMeta: {
     fontSize: 9,
-    color: '#999',
+    fontFamily: THEME.typography.fontFamily.body,
+    color: THEME.colors.textMuted,
   },
   divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#707070',
-    marginTop: 16,
-    marginBottom: 12,
+    height: 1,
+    backgroundColor: THEME.colors.divider,
+    marginTop: 6,
+    marginBottom: 10,
     width: '100%',
   },
-  primaryButton: {
+  buttonRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFB43B',
-    height: 38,
+    gap: 10,
+    marginHorizontal: 12,
+    marginBottom: 8,
+  },
+  primaryButton: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: THEME.colors.ink,
+    height: 48,
+    borderRadius: THEME.roundness.pill,
     justifyContent: 'center',
-    marginBottom: 12,
-    marginHorizontal: 18,
   },
   buttonPressed: {
-    opacity: 0.78,
+    opacity: 0.88,
+    transform: [{ scale: 0.98 }],
   },
   primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '500',
+    color: THEME.colors.white,
+    fontSize: 15,
+    fontFamily: THEME.typography.fontFamily.display,
+    letterSpacing: THEME.typography.tracking.tight,
   },
   secondaryButton: {
+    flex: 1,
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#FFB43B',
-    borderWidth: 1,
-    height: 36,
+    backgroundColor: THEME.colors.canvas,
+    borderRadius: THEME.roundness.pill,
+    height: 48,
     justifyContent: 'center',
-    marginHorizontal: 18,
   },
   secondaryButtonText: {
-    color: '#FFA51F',
+    color: THEME.colors.ink,
     fontSize: 14,
-    fontWeight: '500',
+    fontFamily: THEME.typography.fontFamily.display,
   },
 });

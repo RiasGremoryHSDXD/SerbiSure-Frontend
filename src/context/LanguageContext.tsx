@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
 
-export type Language = 'English' | 'Tagalog' | 'Cebuano';
+export type Language = 'English' | 'Tagalog' | 'Bisaya' | 'Cebuano';
 
 export interface Translations {
   // Tabs
@@ -116,6 +116,42 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     chatsHeader: 'Mga Mensahe',
     searchChats: 'Maghanap ng pag-uusap...',
   },
+  Bisaya: {
+    tabHome: 'Balay',
+    tabServices: 'Mga Serbisyo',
+    tabJobs: 'Mga Trabaho',
+    tabChats: 'Mga Chat',
+    tabProfile: 'Propayl',
+
+    personalInfo: 'Impormasyon sa Kaugalingon',
+    passwordsSecurity: 'Password ug Siguridad',
+    getVerified: 'Magpa-Biyeripikar',
+    notifications: 'Mga Pahibalo',
+    language: 'Pinulongan',
+    aboutUs: 'Tungkol sa Amoa',
+    privacyPolicy: 'Polisiya sa Pribasya',
+    logout: 'Mag-log out',
+    setStatus: 'Estatuwa',
+    available: 'Makuha',
+    onJob: 'Naa sa Trabaho',
+    aboutTitle: 'Tungkol kang',
+    recentReviews: 'Mga Bag-ong Rebyu',
+    viewAll: 'Ipakita Tanan',
+    noReviewsYet: 'Wala pay rebyu',
+    noReviewsSubtitle: 'Dinhi makita ang mga rebyu gikan sa nahuman nga mga booking.',
+    workerSentiment: 'Saloobin sa Trabahante',
+    clientSentiment: 'Saloobin sa Kliyente',
+    positive: 'Positibo',
+
+    greeting: 'Maayong Adlaw',
+    searchPlaceholder: 'Pangita og serbisyo...',
+    popularServices: 'Inilang mga Serbisyo',
+    featuredWorkers: 'Mga Tampok nga Kasambahay',
+    topEmployers: 'Mga Pangunang Homeowner',
+
+    chatsHeader: 'Mga Mensahe',
+    searchChats: 'Pangita og istorya...',
+  },
   Cebuano: {
     tabHome: 'Balay',
     tabServices: 'Mga Serbisyo',
@@ -168,7 +204,7 @@ const LanguageContext = createContext<LanguageContextType>({
 
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguage] = useState<Language>('English');
-  const t = TRANSLATIONS[language];
+  const t = TRANSLATIONS[language] || TRANSLATIONS.Bisaya || TRANSLATIONS.English;
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage, t }}>

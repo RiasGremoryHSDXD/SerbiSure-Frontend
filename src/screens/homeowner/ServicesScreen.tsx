@@ -21,8 +21,10 @@ import { RecommendationsSection } from '../RecommendationsSection';
 import { UserProfileModal } from '../UserProfileModal';
 import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
 import { useUser } from '../../context/UserContext';
+import { NotificationBell } from '../../context/NotificationContext';
+import THEME from '../../config/theme';
 
-const logoSource = require('../../../assets/serbisure-logo.png');
+const logoSource = require('../../../assets/serbisure_new_clean.png');
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SWIPE_THRESHOLD = 0.25 * SCREEN_WIDTH;
 
@@ -398,31 +400,33 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
   };
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: '#F6F5F2' }}
-      contentContainerStyle={{ flex: 1 }}
-      scrollEnabled={isRefreshing || profiles.length === 0}
-      refreshControl={
-        <RefreshControl
-          refreshing={isRefreshing}
-          onRefresh={handlePullToRefresh}
-          colors={['#FFB43B']}
-          tintColor="#FFB43B"
-          title="Refreshing feed..."
-          titleColor="#888"
-        />
-      }
-    >
     <View style={styles.container}>
       {/* Top Status Bar Spacer */}
       <View style={{ height: insets.top, backgroundColor: '#F6F5F2', zIndex: 10 }} />
+
+      <ScrollView
+        style={{ flex: 1, backgroundColor: '#F6F5F2' }}
+        contentContainerStyle={{ flexGrow: 1 }}
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={true}
+        alwaysBounceVertical={true}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handlePullToRefresh}
+            colors={['#FFB43B']}
+            tintColor="#FFB43B"
+            progressViewOffset={0}
+          />
+        }
+      >
 
       {/* Header Logo & Bell */}
       <View style={[styles.headerTop, { paddingTop: 8 }]}>
         <View style={styles.headerSide} />
         <Image source={logoSource} style={styles.logo} resizeMode="contain" />
         <View style={[styles.headerSide, styles.headerSideRight]}>
-          <Ionicons name="notifications" size={24} color="#333" />
+          <NotificationBell />
         </View>
       </View>
 
@@ -613,115 +617,111 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
                 </ImageBackground>
               </Animated.View>
             )}
+
+            {/* Floating Left/Right Action Buttons (X and Heart) Centered Vertically on Card Edge */}
+            <View style={styles.actionButtonsContainer} pointerEvents="box-none">
+              {/* Pass Button & Floating -1 Indicator */}
+              <View style={styles.actionBtnWrapper}>
+                <Animated.View
+                  style={[
+                    styles.countFloat,
+                    {
+                      opacity: minusAnim,
+                      transform: [
+                        {
+                          translateY: minusAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [-30, -5],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <Text style={styles.minusCountText}>-1</Text>
+                </Animated.View>
+
+                <Pressable
+                  onPress={() => swipeCard('left')}
+                  disabled={profiles.length === 0}
+                >
+                  <Animated.View
+                    style={[
+                      styles.actionBtn,
+                      {
+                        backgroundColor: passBgColor,
+                      },
+                    ]}
+                  >
+                    <Ionicons name="close" size={18} color="#E53935" />
+                    <Animated.View
+                      style={[
+                        StyleSheet.absoluteFillObject,
+                        {
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          opacity: passHighlightOpacity,
+                        },
+                      ]}
+                    >
+                      <Ionicons name="close" size={18} color="#FFFFFF" />
+                    </Animated.View>
+                  </Animated.View>
+                </Pressable>
+              </View>
+
+              {/* Interested Button & Floating +1 Indicator */}
+              <View style={styles.actionBtnWrapper}>
+                <Animated.View
+                  style={[
+                    styles.countFloat,
+                    {
+                      opacity: plusAnim,
+                      transform: [
+                        {
+                          translateY: plusAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [-30, -5],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <Text style={styles.plusCountText}>+1</Text>
+                </Animated.View>
+
+                <Pressable
+                  onPress={() => swipeCard('right')}
+                  disabled={profiles.length === 0}
+                >
+                  <Animated.View
+                    style={[
+                      styles.actionBtn,
+                      {
+                        backgroundColor: likeBgColor,
+                      },
+                    ]}
+                  >
+                    <Ionicons name="heart-outline" size={18} color="#22C55E" />
+                    <Animated.View
+                      style={[
+                        StyleSheet.absoluteFillObject,
+                        {
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          opacity: likeHighlightOpacity,
+                        },
+                      ]}
+                    >
+                      <Ionicons name="heart" size={18} color="#FFFFFF" />
+                    </Animated.View>
+                  </Animated.View>
+                </Pressable>
+              </View>
+            </View>
           </React.Fragment>
         )}
-      </View>
-
-      {/* Action Buttons (X and Heart) with Interactive Drag Highlights & Floating +1 / -1 */}
-      <View style={styles.actionButtonsContainer}>
-        {/* Pass Button & Floating -1 Indicator */}
-        <View style={styles.actionBtnWrapper}>
-          <Animated.View
-            style={[
-              styles.countFloat,
-              {
-                opacity: minusAnim,
-                transform: [
-                  {
-                    translateY: minusAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-30, -5],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <Text style={styles.minusCountText}>-1</Text>
-          </Animated.View>
-
-          <Pressable
-            onPress={() => swipeCard('left')}
-            disabled={profiles.length === 0}
-          >
-            <Animated.View
-              style={[
-                styles.actionBtn,
-                {
-                  backgroundColor: passBgColor,
-                },
-              ]}
-            >
-              {/* Default Red Icon */}
-              <Ionicons name="close" size={22} color="#E53935" />
-              {/* Highlighted White Icon */}
-              <Animated.View
-                style={[
-                  StyleSheet.absoluteFillObject,
-                  {
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    opacity: passHighlightOpacity,
-                  },
-                ]}
-              >
-                <Ionicons name="close" size={22} color="#FFFFFF" />
-              </Animated.View>
-            </Animated.View>
-          </Pressable>
-        </View>
-
-        {/* Interested Button & Floating +1 Indicator */}
-        <View style={styles.actionBtnWrapper}>
-          <Animated.View
-            style={[
-              styles.countFloat,
-              {
-                opacity: plusAnim,
-                transform: [
-                  {
-                    translateY: plusAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-30, -5],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <Text style={styles.plusCountText}>+1</Text>
-          </Animated.View>
-
-          <Pressable
-            onPress={() => swipeCard('right')}
-            disabled={profiles.length === 0}
-          >
-            <Animated.View
-              style={[
-                styles.actionBtn,
-                {
-                  backgroundColor: likeBgColor,
-                },
-              ]}
-            >
-              {/* Default Green Icon */}
-              <Ionicons name="heart" size={20} color="#4CD964" />
-              {/* Highlighted White Icon */}
-              <Animated.View
-                style={[
-                  StyleSheet.absoluteFillObject,
-                  {
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    opacity: likeHighlightOpacity,
-                  },
-                ]}
-              >
-                <Ionicons name="heart" size={20} color="#FFFFFF" />
-              </Animated.View>
-            </Animated.View>
-          </Pressable>
-        </View>
       </View>
 
       {/* Messenger-style Chat Detail Modal */}
@@ -758,8 +758,8 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
           token={effectiveToken || ''}
         />
       )}
+      </ScrollView>
     </View>
-    </ScrollView>
   );
 }
 
@@ -772,8 +772,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    marginBottom: 6,
+    paddingHorizontal: 20,
+    marginBottom: 16,
     width: '100%',
   },
   headerSide: {
@@ -787,15 +787,20 @@ const styles = StyleSheet.create({
     height: 44,
   },
   greetingBanner: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
+    marginTop: 6,
+    marginBottom: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 22,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    marginBottom: 6,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     marginRight: 12,
   },
   greetingTextContainer: {
@@ -803,59 +808,54 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 10,
-    fontWeight: '700',
-    color: '#FFB43B',
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
+    color: THEME.colors.brandDark,
     letterSpacing: 0.5,
   },
   greetingText: {
     fontSize: 18,
-    fontWeight: '800',
-    color: '#1A1A1A',
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
   },
   filterScroll: {
     maxHeight: 46,
-    marginVertical: 10,
+    marginBottom: 8,
   },
   filterContent: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     alignItems: 'center',
   },
   filterChip: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 9999,
     paddingHorizontal: 16,
     paddingVertical: 8,
     marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
     flexDirection: 'row',
     alignItems: 'center',
   },
   filterChipActive: {
-    backgroundColor: '#FFB43B',
-    borderColor: '#FFB43B',
+    backgroundColor: THEME.colors.brand,
   },
   filterChipOutline: {
-    borderColor: '#FFB43B',
+    backgroundColor: '#FFF0E5',
   },
   filterChipActiveOutline: {
-    backgroundColor: '#FFB43B',
-    borderColor: '#FFB43B',
+    backgroundColor: THEME.colors.brand,
   },
   filterText: {
     fontSize: 13,
-    color: '#333',
-    fontWeight: '600',
+    color: THEME.colors.ink,
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
   },
   filterTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
+    color: THEME.colors.ink,
+    fontFamily: THEME.typography.fontFamily.display,
   },
   filterDivider: {
     width: 1,
-    height: 20,
-    backgroundColor: '#FFB43B',
-    opacity: 0.6,
+    height: 18,
+    backgroundColor: '#E4E3DF',
     marginRight: 10,
   },
   cardsContainer: {
@@ -913,7 +913,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'space-between',
     backgroundColor: 'rgba(0,0,0,0.38)',
-    padding: 20,
+    paddingVertical: 18,
+    paddingHorizontal: 28,
   },
   cardInfoTop: {
     flex: 1,
@@ -981,8 +982,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 30,
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
   },
   emptyTitle: {
     fontSize: 18,
@@ -1012,11 +1011,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   actionButtonsContainer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginVertical: 12,
-    gap: 28,
+    zIndex: 50,
+    paddingHorizontal: 4,
   },
   actionBtnWrapper: {
     alignItems: 'center',
@@ -1024,7 +1028,7 @@ const styles = StyleSheet.create({
   },
   countFloat: {
     position: 'absolute',
-    top: -18,
+    top: -24,
     alignItems: 'center',
   },
   plusCountText: {
@@ -1038,13 +1042,18 @@ const styles = StyleSheet.create({
     color: '#E53935',
   },
   actionBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
     position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 5,
+    elevation: 4,
   },
   skeletonCard: {
     width: SCREEN_WIDTH - 48,
@@ -1052,8 +1061,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.08,

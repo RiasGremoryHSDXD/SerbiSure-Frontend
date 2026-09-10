@@ -1,8 +1,18 @@
 import { useState } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import {
+  useFonts,
+  Nunito_400Regular,
+  Nunito_600SemiBold,
+  Nunito_700Bold,
+  Nunito_800ExtraBold,
+  Nunito_900Black,
+} from '@expo-google-fonts/nunito';
 import { LanguageProvider } from './src/context/LanguageContext';
 import { UserProvider } from './src/context/UserContext';
+import { NotificationProvider } from './src/context/NotificationContext';
 
 import {
   LandingScreen,
@@ -29,10 +39,30 @@ type AppFlowState =
   | 'dashboard';
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    Nunito_400Regular,
+    Nunito_600SemiBold,
+    Nunito_700Bold,
+    Nunito_800ExtraBold,
+    Nunito_900Black,
+    'Geist-Regular': require('./assets/fonts/Geist-Regular.ttf'),
+    'Geist-Medium': require('./assets/fonts/Geist-Medium.ttf'),
+    'Geist-SemiBold': require('./assets/fonts/Geist-SemiBold.ttf'),
+    'Geist-Bold': require('./assets/fonts/Geist-Bold.ttf'),
+  });
+
   const [flowState, setFlowState] = useState<AppFlowState>('landing');
   const [selectedRole, setSelectedRole] = useState<Role>('homeowner');
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+
+  if (!fontsLoaded) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#F6F5F2', alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color="#0D0D11" />
+      </View>
+    );
+  }
 
   const handleSelectRole = (role: Role) => {
     setSelectedRole(role);
@@ -43,7 +73,8 @@ export default function App() {
     <SafeAreaProvider>
       <UserProvider token={accessToken}>
         <LanguageProvider>
-          <StatusBar style={flowState === 'registration3' ? 'light' : 'dark'} />
+          <NotificationProvider>
+            <StatusBar style={flowState === 'registration3' ? 'light' : 'dark'} />
 
           {/* Step 1 & 1.5: Landing Page & Animated Login Flow */}
           {(flowState === 'landing' || flowState === 'login') && (
@@ -129,6 +160,7 @@ export default function App() {
               }}
             />
           )}
+          </NotificationProvider>
         </LanguageProvider>
       </UserProvider>
     </SafeAreaProvider>

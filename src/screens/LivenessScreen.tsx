@@ -16,7 +16,10 @@ import {
 } from '../liveness/livenessMachine';
 import { getFaceAlignment } from '../liveness/livenessRules';
 
-const logoSource = require('../../assets/serbisure-logo.png');
+import THEME from '../config/theme';
+import { RegistrationStepper } from '../components/RegistrationStepper';
+
+const logoSource = require('../../assets/serbisure_new_clean.png');
 const faceSource = require('../../assets/face-placeholder.png');
 
 type LivenessScreenProps = {
@@ -271,11 +274,11 @@ export function LivenessScreen({ token, onVerified, onBack, onCancel, onSkip }: 
       </View>
 
       <View style={styles.card}>
-        <View style={styles.stepIndicator}>
-          <View style={styles.stepDot} />
-          <View style={[styles.stepDot, styles.stepDotActive]} />
-          <View style={styles.stepDot} />
-        </View>
+        <RegistrationStepper
+          currentStep={3}
+          title="Step 3: Face Verification"
+          help="Position your face within the circle in a well-lit area."
+        />
 
         <View style={styles.cardContent}>
           <View>
@@ -310,22 +313,24 @@ export function LivenessScreen({ token, onVerified, onBack, onCancel, onSkip }: 
 
           <View>
             <View style={styles.divider} />
-            {!started ? (
-              <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={handleContinue}>
-                <Text style={styles.primaryButtonText}>Continue</Text>
+            <View style={styles.buttonRow}>
+              <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]} onPress={handleCancel}>
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
               </Pressable>
-            ) : state.retryMessage ? (
-              <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={handleRetry}>
-                <Text style={styles.primaryButtonText}>Continue</Text>
-              </Pressable>
-            ) : (
-              <View style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>Continue</Text>
-              </View>
-            )}
-            <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]} onPress={handleCancel}>
-              <Text style={styles.secondaryButtonText}>Cancel</Text>
-            </Pressable>
+              {!started ? (
+                <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={handleContinue}>
+                  <Text style={styles.primaryButtonText}>Continue</Text>
+                </Pressable>
+              ) : state.retryMessage ? (
+                <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={handleRetry}>
+                  <Text style={styles.primaryButtonText}>Retry</Text>
+                </Pressable>
+              ) : (
+                <View style={[styles.primaryButton, { opacity: 0.6 }]}>
+                  <Text style={styles.primaryButtonText}>Scanning...</Text>
+                </View>
+              )}
+            </View>
           </View>
         </View>
       </View>
@@ -340,13 +345,13 @@ const styles = StyleSheet.create({
   card: {
     alignSelf: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 11,
+    borderRadius: THEME.roundness.card,
     flex: 1,
-    marginTop: 14,
-    paddingBottom: 16,
+    marginTop: 10,
+    paddingBottom: 14,
     paddingHorizontal: 18,
-    paddingTop: 8,
-    width: '88%',
+    paddingTop: 12,
+    width: '92%',
   },
   cardContent: {
     flex: 1,
@@ -408,13 +413,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 88,
   },
-  divider: {
-    backgroundColor: '#707070',
-    height: StyleSheet.hairlineWidth,
-    marginBottom: 12,
-    marginTop: 16,
-    width: '100%',
-  },
   faceIcon: {
     height: 128,
     width: 128,
@@ -433,38 +431,63 @@ const styles = StyleSheet.create({
   headerSideRight: {
     alignItems: 'flex-end',
   },
-  helperInstruction: {
-    fontSize: 13,
-    fontWeight: '400',
-    lineHeight: 17,
-    marginTop: 32,
-    paddingHorizontal: 14,
+  buttonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 12,
+    marginBottom: 8,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: THEME.colors.divider,
+    marginTop: 6,
+    marginBottom: 10,
+    width: '100%',
+  },
+  primaryButton: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: THEME.colors.ink,
+    height: 48,
+    borderRadius: THEME.roundness.pill,
+    justifyContent: 'center',
+  },
+  primaryButtonText: {
+    color: THEME.colors.white,
+    fontSize: 15,
+    fontFamily: THEME.typography.fontFamily.display,
+    letterSpacing: THEME.typography.tracking.tight,
+  },
+  secondaryButton: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: THEME.colors.canvas,
+    borderRadius: THEME.roundness.pill,
+    height: 48,
+    justifyContent: 'center',
+  },
+  secondaryButtonText: {
+    color: THEME.colors.ink,
+    fontSize: 14,
+    fontFamily: THEME.typography.fontFamily.display,
   },
   instruction: {
-    color: '#000000',
-    fontSize: 16,
-    fontWeight: '700',
-    lineHeight: 22,
-    marginTop: 32,
-    minHeight: 48,
+    color: THEME.colors.ink,
+    fontSize: 14,
+    fontFamily: THEME.typography.fontFamily.bodyMedium,
+    lineHeight: 20,
+    marginTop: 16,
+    minHeight: 40,
     textAlign: 'center',
+  },
+  helperInstruction: {
+    color: THEME.colors.textSecondary,
+    fontFamily: THEME.typography.fontFamily.body,
   },
   logo: {
     height: 44,
     width: 44,
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#FFB43B',
-    height: 38,
-    justifyContent: 'center',
-    marginBottom: 12,
-    marginHorizontal: 18,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '500',
   },
   ringBox: {
     alignItems: 'center',
@@ -477,67 +500,38 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   root: {
-    backgroundColor: '#F6F5F2',
+    backgroundColor: THEME.colors.canvas,
     flex: 1,
   },
-  secondaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#FFB43B',
-    borderWidth: 1,
-    height: 36,
-    justifyContent: 'center',
-    marginHorizontal: 18,
-  },
-  secondaryButtonText: {
-    color: '#FFA51F',
-    fontSize: 14,
-    fontWeight: '500',
-  },
   skipText: {
-    color: '#FFA51F',
+    color: THEME.colors.brandDark,
     fontSize: 13,
-    fontWeight: '500',
+    fontFamily: THEME.typography.fontFamily.bodyBold,
   },
   titleBlock: {
-    height: 64,
-    marginTop: 12,
+    marginTop: 8,
     paddingHorizontal: 24,
+    minHeight: 58,
   },
   title: {
-    color: '#000000',
+    color: THEME.colors.ink,
     fontSize: 24,
-    fontWeight: '900',
-    lineHeight: 29,
-    marginBottom: 2,
+    fontFamily: THEME.typography.fontFamily.display,
+    lineHeight: 28,
+    marginBottom: 4,
   },
   subtitle: {
-    color: '#202020',
+    color: THEME.colors.textSecondary,
     fontSize: 13,
-    lineHeight: 17,
-  },
-  stepIndicator: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 24,
-    marginTop: 4,
-  },
-  stepDot: {
-    width: 24,
-    height: 4,
-    backgroundColor: '#D9D9D9',
-    borderRadius: 2,
-  },
-  stepDotActive: {
-    backgroundColor: '#FFB43B',
+    fontFamily: THEME.typography.fontFamily.body,
+    lineHeight: 18,
   },
   verificationFrame: {
     alignItems: 'center',
     alignSelf: 'center',
     height: 226,
     justifyContent: 'center',
-    marginTop: 36,
+    marginTop: 12,
     width: 226,
   },
 });

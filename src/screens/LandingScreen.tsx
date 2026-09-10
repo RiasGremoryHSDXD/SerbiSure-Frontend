@@ -15,8 +15,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL, fetchWithTimeout } from '../config/api';
+import THEME from '../config/theme';
 
-const logoSource = require('../../assets/serbisure-logo.png');
+const logoSource = require('../../assets/serbisure_new_clean.png');
 const heroSource = require('../../assets/landingpage.png');
 
 type LandingScreenProps = {
@@ -184,7 +185,9 @@ export function LandingScreen({
           >
             <View style={styles.animatedHeader}>
               <Image source={logoSource} style={styles.logo} resizeMode="contain" />
-              <Text style={styles.brandTitle}>SerbiSure</Text>
+              <Text style={styles.brandTitle}>
+                Serbi<Text style={{ color: THEME.colors.brand }}>Sure</Text>
+              </Text>
             </View>
 
             <View style={styles.heroContainer}>
@@ -192,7 +195,10 @@ export function LandingScreen({
             </View>
 
             <View style={styles.contentBlock}>
-              <Text style={styles.title}>Find the perfect help for your home</Text>
+              <Text style={styles.title}>
+                Find the perfect help{'\n'}
+                <Text style={{ color: THEME.colors.brand }}>for your home</Text>
+              </Text>
               <Text style={styles.subtitle}>
                 SerbiSure connects Filipinos for reliable home services.
               </Text>
@@ -235,7 +241,9 @@ export function LandingScreen({
               {/* Centered Login Header (Bumps up when typing) */}
               <View style={styles.loginHeader}>
                 <Image source={logoSource} style={styles.loginLogo} resizeMode="contain" />
-                <Text style={styles.loginBrandTitle}>SerbiSure</Text>
+                <Text style={styles.loginBrandTitle}>
+                  Serbi<Text style={{ color: THEME.colors.brand }}>Sure</Text>
+                </Text>
               </View>
 
               {/* Form Card */}
@@ -338,7 +346,7 @@ export function LandingScreen({
 
 const styles = StyleSheet.create({
   root: {
-    backgroundColor: '#F7F6F2',
+    backgroundColor: THEME.colors.canvas,
     flex: 1,
     paddingHorizontal: 24,
   },
@@ -349,26 +357,28 @@ const styles = StyleSheet.create({
     zIndex: 30,
   },
   backBtn: {
-    padding: 6,
+    padding: 8,
+    backgroundColor: THEME.colors.white,
+    borderRadius: THEME.roundness.pill,
   },
   animatedHeader: {
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 8,
   },
   logo: {
-    height: 48,
-    width: 48,
-    marginBottom: 4,
+    height: 54,
+    width: 54,
+    marginBottom: 6,
   },
   brandTitle: {
-    color: '#FFB43B',
+    color: THEME.colors.ink,
     fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -0.5,
+    fontFamily: THEME.typography.fontFamily.displayExtraBold,
+    letterSpacing: THEME.typography.tracking.tighter,
   },
   landingContent: {
     flex: 1,
-    marginTop: 20,
+    marginTop: 16,
   },
   heroContainer: {
     alignItems: 'center',
@@ -379,7 +389,7 @@ const styles = StyleSheet.create({
   heroImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 24,
+    borderRadius: THEME.roundness.cardLg,
     resizeMode: 'cover',
   },
   contentBlock: {
@@ -387,16 +397,18 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   title: {
-    color: '#000000',
-    fontSize: 26,
-    fontWeight: '800',
+    color: THEME.colors.ink,
+    fontSize: 28,
+    fontFamily: THEME.typography.fontFamily.display,
     textAlign: 'center',
-    lineHeight: 32,
-    marginBottom: 12,
+    lineHeight: 34,
+    letterSpacing: THEME.typography.tracking.tight,
+    marginBottom: 10,
   },
   subtitle: {
-    color: '#444444',
+    color: THEME.colors.textSecondary,
     fontSize: 15,
+    fontFamily: THEME.typography.fontFamily.body,
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -405,22 +417,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryButton: {
-    backgroundColor: '#FFB43B',
-    borderRadius: 16,
+    backgroundColor: THEME.colors.ink,
+    borderRadius: THEME.roundness.pill,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    height: 52,
-    marginBottom: 18,
+    height: 54,
+    marginBottom: 16,
   },
   buttonPressed: {
-    opacity: 0.8,
+    opacity: 0.88,
+    transform: [{ scale: 0.98 }],
   },
   primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '600',
+    color: THEME.colors.white,
+    fontSize: 16,
+    fontFamily: THEME.typography.fontFamily.display,
+    letterSpacing: THEME.typography.tracking.tight,
   },
   buttonIcon: {
     marginLeft: 8,
@@ -430,13 +444,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loginText: {
-    color: '#444444',
-    fontSize: 12.5,
+    color: THEME.colors.textSecondary,
+    fontSize: 13,
+    fontFamily: THEME.typography.fontFamily.body,
   },
   loginLink: {
-    color: '#FFB43B',
-    fontSize: 12.5,
-    fontWeight: '600',
+    color: THEME.colors.brandDark,
+    fontSize: 13,
+    fontFamily: THEME.typography.fontFamily.bodyBold,
   },
   loginViewWrapper: {
     flex: 1,
@@ -446,47 +461,46 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     paddingBottom: 24,
-    paddingTop: 12,
+    paddingTop: 8,
   },
   loginHeader: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 22,
   },
   loginLogo: {
-    width: 56,
-    height: 56,
-    marginBottom: 6,
+    width: 64,
+    height: 64,
+    marginBottom: 8,
   },
   loginBrandTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#FFB43B',
-    letterSpacing: -0.5,
+    fontSize: 34,
+    fontFamily: THEME.typography.fontFamily.displayExtraBold,
+    color: THEME.colors.ink,
+    letterSpacing: THEME.typography.tracking.tighter,
   },
   formCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    paddingHorizontal: 22,
-    paddingVertical: 24,
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
+    backgroundColor: THEME.colors.white,
+    borderRadius: THEME.roundness.cardLg,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F6F7F9',
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    height: 44,
-    marginBottom: 12,
+    backgroundColor: THEME.colors.canvas,
+    borderRadius: THEME.roundness.pill,
+    paddingHorizontal: 18,
+    height: 50,
+    marginBottom: 14,
   },
   inputIcon: {
     marginRight: 10,
   },
   input: {
     flex: 1,
-    fontSize: 13.5,
-    color: '#1A1A1A',
+    fontSize: 14,
+    fontFamily: THEME.typography.fontFamily.bodyMedium,
+    color: THEME.colors.ink,
     height: '100%',
   },
   eyeBtn: {
@@ -499,46 +513,50 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 2,
-    marginBottom: 18,
+    marginTop: 4,
+    marginBottom: 20,
+    paddingHorizontal: 4,
   },
   rememberRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   rememberText: {
-    fontSize: 12.5,
-    color: '#333333',
+    fontSize: 13,
+    fontFamily: THEME.typography.fontFamily.bodyMedium,
+    color: THEME.colors.textSecondary,
   },
   forgotBtn: {
     paddingVertical: 2,
   },
   forgotText: {
-    fontSize: 12.5,
-    fontWeight: '600',
-    color: '#FFB43B',
+    fontSize: 13,
+    fontFamily: THEME.typography.fontFamily.bodyBold,
+    color: THEME.colors.brandDark,
   },
   loginBtn: {
-    backgroundColor: '#FFB43B',
-    borderRadius: 14,
-    height: 46,
+    backgroundColor: THEME.colors.ink,
+    borderRadius: THEME.roundness.pill,
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
   btnPressed: {
     opacity: 0.88,
+    transform: [{ scale: 0.98 }],
   },
   loginBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
+    color: THEME.colors.white,
+    fontSize: 16,
+    fontFamily: THEME.typography.fontFamily.display,
+    letterSpacing: THEME.typography.tracking.tight,
   },
   divider: {
     height: 1,
-    backgroundColor: '#EBEBEB',
-    marginVertical: 18,
+    backgroundColor: THEME.colors.divider,
+    marginVertical: 20,
   },
   signupRow: {
     flexDirection: 'row',
@@ -546,25 +564,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   signupText: {
-    fontSize: 13,
-    color: '#666',
+    fontSize: 13.5,
+    fontFamily: THEME.typography.fontFamily.body,
+    color: THEME.colors.textSecondary,
   },
   signupLink: {
     fontSize: 13.5,
-    fontWeight: '600',
-    color: '#0AA018',
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.brandDark,
   },
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFEBEE',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 14,
+    backgroundColor: THEME.colors.errorLight,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: THEME.roundness.pill,
+    marginBottom: 16,
   },
   errorText: {
-    color: '#E53935',
+    color: THEME.colors.error,
     fontSize: 13,
+    fontFamily: THEME.typography.fontFamily.bodyMedium,
     marginLeft: 8,
     flex: 1,
   },

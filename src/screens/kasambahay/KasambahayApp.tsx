@@ -29,7 +29,7 @@ export function KasambahayApp({ avatarUri, onLogout }: { avatarUri?: string | nu
     }
   };
 
-  const topBgColor = activeTab === 'profile' ? '#FFF0DB' : '#F6F5F2';
+  const topBgColor = '#F6F5F2';
 
   return (
     <View style={styles.root}>

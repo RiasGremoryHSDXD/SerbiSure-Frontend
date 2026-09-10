@@ -29,8 +29,10 @@ import {
   Barangay,
   LocationItem,
 } from '../services/locationService';
+import THEME from '../config/theme';
+import { RegistrationStepper } from '../components/RegistrationStepper';
 
-const logoSource = require('../../assets/serbisure-logo.png');
+const logoSource = require('../../assets/serbisure_new_clean.png');
 
 type RegistrationScreenProps = {
   role: 'homeowner' | 'kasambahay';
@@ -145,8 +147,8 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
       Alert.alert("Invalid Contact Number", "Please enter a valid 10-digit mobile number starting with 9 (e.g. 9123456789).");
       return;
     }
-    if (password.length < 11) {
-      Alert.alert("Password Requirements", "Password must be at least 11 characters long with a letter and a number.");
+    if (password.length < 8) {
+      Alert.alert("Password Requirements", "Password must be at least 8 characters long with a letter and a number.");
       return;
     }
     if (password !== confirmPassword) {
@@ -449,26 +451,12 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
         {/* Form Card */}
         <View style={styles.card}>
           <View style={styles.formContent}>
-            {/* Step Progress Indicator (2 Sub-Steps) */}
-            <View style={styles.subStepContainer}>
-              <View style={styles.subStepRow}>
-                <View style={[styles.subStepBadge, subStep >= 1 && styles.subStepBadgeActive]}>
-                  <Text style={[styles.subStepNumber, subStep >= 1 && styles.subStepNumberActive]}>1</Text>
-                </View>
-                <View style={[styles.subStepLine, subStep === 2 && styles.subStepLineActive]} />
-                <View style={[styles.subStepBadge, subStep === 2 && styles.subStepBadgeActive]}>
-                  <Text style={[styles.subStepNumber, subStep === 2 && styles.subStepNumberActive]}>2</Text>
-                </View>
-              </View>
-              <Text style={styles.subStepTitle}>
-                {subStep === 1 ? 'Step 1: Account Information' : 'Step 2: Where do you live?'}
-              </Text>
-              {subStep === 2 && (
-                <Text style={styles.subStepHelp}>
-                  We use your location to connect you with jobs and household services in your area.
-                </Text>
-              )}
-            </View>
+            {/* Unified 4-Step Indicator (Current: Step 1 or 2) */}
+            <RegistrationStepper
+              currentStep={subStep}
+              title={subStep === 1 ? 'Step 1: Account Information' : 'Step 2: Where do you live?'}
+              help={subStep === 2 ? 'We use your location to connect you with jobs and household services in your area.' : undefined}
+            />
 
             <ScrollView
               style={{ flex: 1 }}
@@ -546,7 +534,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
                     <Ionicons name="lock-closed" size={18} color="#000000" style={styles.inputIcon} />
                     <TextInput
                       style={styles.input}
-                      placeholder="Password (min. 11 characters)"
+                      placeholder="Password (min. 8 characters)"
                       placeholderTextColor="#999"
                       secureTextEntry={!showPassword}
                       value={password}
@@ -704,22 +692,29 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
             <View style={styles.fixedFooter}>
               <View style={styles.divider} />
               {subStep === 1 ? (
-                <>
-                  <Pressable
-                    style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
-                    onPress={handleProceedToLocation}
-                  >
-                    <Text style={styles.primaryButtonText}>Next: Where do you live? ➔</Text>
-                  </Pressable>
+                <View style={styles.buttonRow}>
                   <Pressable
                     style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
                     onPress={onCancel}
                   >
                     <Text style={styles.secondaryButtonText}>Cancel</Text>
                   </Pressable>
-                </>
+                  <Pressable
+                    style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
+                    onPress={handleProceedToLocation}
+                  >
+                    <Text style={styles.primaryButtonText}>Next</Text>
+                  </Pressable>
+                </View>
               ) : (
-                <>
+                <View style={styles.buttonRow}>
+                  <Pressable
+                    style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
+                    onPress={() => setSubStep(1)}
+                    disabled={loading}
+                  >
+                    <Text style={styles.secondaryButtonText}>Back</Text>
+                  </Pressable>
                   <Pressable
                     style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
                     onPress={handleRegister}
@@ -731,14 +726,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
                       <Text style={styles.primaryButtonText}>Create Account</Text>
                     )}
                   </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
-                    onPress={() => setSubStep(1)}
-                    disabled={loading}
-                  >
-                    <Text style={styles.secondaryButtonText}>Back to Personal Info</Text>
-                  </Pressable>
-                </>
+                </View>
               )}
             </View>
           </View>
@@ -822,27 +810,28 @@ const styles = StyleSheet.create({
     minHeight: 58,
   },
   title: {
-    color: '#000000',
-    fontSize: 22,
-    fontWeight: '800',
-    lineHeight: 27,
-    marginBottom: 2,
+    color: THEME.colors.ink,
+    fontSize: 24,
+    fontFamily: THEME.typography.fontFamily.display,
+    lineHeight: 28,
+    marginBottom: 4,
   },
   subtitle: {
-    color: '#444444',
-    fontSize: 12.5,
-    lineHeight: 16,
+    color: THEME.colors.textSecondary,
+    fontSize: 13,
+    fontFamily: THEME.typography.fontFamily.body,
+    lineHeight: 18,
   },
   card: {
     alignSelf: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: THEME.roundness.card,
     flex: 1,
     marginTop: 10,
-    paddingBottom: 12,
+    paddingBottom: 14,
     paddingHorizontal: 18,
     paddingTop: 12,
-    width: '90%',
+    width: '92%',
   },
   formContent: {
     flex: 1,
@@ -866,24 +855,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   subStepBadgeActive: {
-    backgroundColor: '#FFB43B',
+    backgroundColor: THEME.colors.ink,
   },
   subStepNumber: {
     fontSize: 11,
+    fontFamily: THEME.typography.fontFamily.display,
     fontWeight: '700',
-    color: '#6B7280',
+    color: THEME.colors.textMuted,
   },
   subStepNumberActive: {
-    color: '#FFFFFF',
+    color: THEME.colors.white,
   },
   subStepLine: {
     width: 40,
     height: 2,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: THEME.colors.divider,
     marginHorizontal: 6,
   },
   subStepLineActive: {
-    backgroundColor: '#FFB43B',
+    backgroundColor: THEME.colors.brand,
   },
   subStepTitle: {
     fontSize: 13,
@@ -982,46 +972,56 @@ const styles = StyleSheet.create({
     color: '#333333',
   },
   linkText: {
-    color: '#9F5BFF',
-    fontWeight: '500',
+    color: THEME.colors.brandDark,
+    fontFamily: THEME.typography.fontFamily.bodyMedium,
+    fontWeight: '700',
   },
   divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#D1D5DB',
+    height: 1,
+    backgroundColor: THEME.colors.divider,
     marginTop: 6,
     marginBottom: 10,
     width: '100%',
   },
-  primaryButton: {
+  buttonRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFB43B',
-    height: 40,
-    borderRadius: 8,
-    justifyContent: 'center',
-    marginBottom: 8,
+    gap: 10,
     marginHorizontal: 12,
+    marginBottom: 8,
+  },
+  primaryButton: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: THEME.colors.ink,
+    height: 48,
+    borderRadius: THEME.roundness.pill,
+    justifyContent: 'center',
   },
   buttonPressed: {
-    opacity: 0.78,
+    opacity: 0.88,
+    transform: [{ scale: 0.98 }],
   },
   primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    color: THEME.colors.white,
+    fontSize: 15,
+    fontFamily: THEME.typography.fontFamily.display,
+    fontWeight: '800',
+    letterSpacing: THEME.typography.tracking.tight,
   },
   secondaryButton: {
+    flex: 1,
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#FFB43B',
-    borderWidth: 1,
-    borderRadius: 8,
-    height: 38,
+    backgroundColor: THEME.colors.canvas,
+    borderRadius: THEME.roundness.pill,
+    height: 48,
     justifyContent: 'center',
-    marginHorizontal: 12,
   },
   secondaryButtonText: {
-    color: '#D97706',
-    fontSize: 13.5,
-    fontWeight: '600',
+    color: THEME.colors.ink,
+    fontSize: 14,
+    fontFamily: THEME.typography.fontFamily.display,
+    fontWeight: '700',
   },
 });
+

@@ -1,8 +1,9 @@
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import THEME from '../config/theme';
 
-const logoSource = require('../../assets/serbisure-logo.png');
+const logoSource = require('../../assets/serbisure_new_clean.png');
 const homeownerSource = require('../../assets/homeowner.png');
 const kasambahaySource = require('../../assets/kasambahay.png');
 
@@ -19,8 +20,8 @@ export function RoleSelectionScreen({ onSelectRole, onBack }: RoleSelectionScree
       <View style={styles.header}>
         <View style={styles.headerSide}>
           {onBack ? (
-            <Pressable onPress={onBack}>
-              <Ionicons name="arrow-back" size={26} color="#2A2925" />
+            <Pressable onPress={onBack} style={styles.backBtn}>
+              <Ionicons name="arrow-back" size={24} color={THEME.colors.ink} />
             </Pressable>
           ) : null}
         </View>
@@ -32,7 +33,7 @@ export function RoleSelectionScreen({ onSelectRole, onBack }: RoleSelectionScree
         <Text style={styles.title}>
           How would <Text style={styles.titleHighlight}>you</Text>{'\n'}like to join?
         </Text>
-        <Text style={styles.subtitle}>Choose the path to get started</Text>
+        <Text style={styles.subtitle}>Choose your path to get started</Text>
       </View>
 
       <View style={styles.cardsContainer}>
@@ -62,7 +63,7 @@ export function RoleSelectionScreen({ onSelectRole, onBack }: RoleSelectionScree
 
 const styles = StyleSheet.create({
   root: {
-    backgroundColor: '#F7F6F2',
+    backgroundColor: THEME.colors.canvas,
     flex: 1,
     paddingHorizontal: 24,
   },
@@ -70,35 +71,42 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: 16,
     width: '100%',
   },
   headerSide: {
     width: 44,
     justifyContent: 'center',
   },
+  backBtn: {
+    padding: 8,
+    backgroundColor: THEME.colors.white,
+    borderRadius: THEME.roundness.pill,
+  },
   logo: {
-    height: 44,
-    width: 44,
+    height: 52,
+    width: 52,
   },
   titleContainer: {
     alignItems: 'center',
-    marginBottom: 36,
+    marginBottom: 32,
   },
   title: {
-    color: '#000000',
+    color: THEME.colors.ink,
     fontSize: 34,
-    fontWeight: '800',
+    fontFamily: THEME.typography.fontFamily.displayExtraBold,
     textAlign: 'center',
     lineHeight: 40,
-    marginBottom: 12,
+    letterSpacing: THEME.typography.tracking.tighter,
+    marginBottom: 10,
   },
   titleHighlight: {
-    color: '#FFB43B',
+    color: THEME.colors.brandDark,
   },
   subtitle: {
-    color: '#333333',
-    fontSize: 18,
+    color: THEME.colors.textSecondary,
+    fontSize: 16,
+    fontFamily: THEME.typography.fontFamily.bodyMedium,
     textAlign: 'center',
   },
   cardsContainer: {
@@ -108,13 +116,13 @@ const styles = StyleSheet.create({
   },
   card: {
     flex: 1,
-    borderRadius: 24,
+    borderRadius: THEME.roundness.cardLg,
     overflow: 'hidden',
     position: 'relative',
-    backgroundColor: '#EAEAEA',
+    backgroundColor: THEME.colors.white,
   },
   cardPressed: {
-    opacity: 0.9,
+    opacity: 0.92,
     transform: [{ scale: 0.98 }],
   },
   cardImage: {
@@ -124,21 +132,23 @@ const styles = StyleSheet.create({
   },
   cardLabel: {
     position: 'absolute',
-    bottom: 24,
+    bottom: 22,
     alignSelf: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 28,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: THEME.roundness.pill,
   },
   homeownerLabel: {
-    backgroundColor: '#FFB43B',
+    backgroundColor: THEME.colors.ink,
   },
   kasambahayLabel: {
-    backgroundColor: '#9F5BFF',
+    backgroundColor: THEME.colors.brand,
   },
   cardLabelText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
+    color: THEME.colors.white,
+    fontSize: 17,
+    fontFamily: THEME.typography.fontFamily.display,
     textAlign: 'center',
+    letterSpacing: THEME.typography.tracking.tight,
   },
 });
