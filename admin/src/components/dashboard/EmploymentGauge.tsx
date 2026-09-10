@@ -30,24 +30,24 @@ export const EmploymentGauge: React.FC<EmploymentGaugeProps> = ({
   const needleY = cy + needleLength * Math.sin(angleRad);
 
   return (
-    <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-100/90 shadow-[0_4px_25px_rgba(0,0,0,0.02)] flex flex-col justify-between h-full relative">
+    <div className="bg-white rounded-3xl p-6 sm:p-7 flex flex-col justify-between h-full relative">
       {/* Title */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold text-slate-900 tracking-tight">
+        <h3 className="text-lg font-black font-display text-[#0D0D11] tracking-tight">
           {label}
         </h3>
-        <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 text-xs font-bold">
-          High Performance
+        <span className="px-3 py-1 rounded-full bg-[#FFB380]/15 text-[#FFB380] text-xs font-extrabold">
+          Optimal
         </span>
       </div>
 
       {/* Percentage Center Display */}
-      <div className="text-center my-auto pt-2">
-        <div className="text-5xl font-black text-slate-900 tracking-tight flex items-baseline justify-center gap-0.5">
+      <div className="text-center my-auto pt-3">
+        <div className="text-5xl font-black font-display text-[#0D0D11] tracking-tight flex items-baseline justify-center gap-0.5">
           {percentage}
-          <span className="text-2xl font-extrabold text-[#0284C7]">%</span>
+          <span className="text-2xl font-black text-[#FFB380]">%</span>
         </div>
-        <p className="text-xs font-semibold text-slate-400 mt-1 uppercase tracking-wider">
+        <p className="text-xs font-extrabold font-display text-zinc-400 mt-1 uppercase tracking-wider">
           Active Placement Capacity
         </p>
 
@@ -56,21 +56,17 @@ export const EmploymentGauge: React.FC<EmploymentGaugeProps> = ({
           <svg viewBox={`0 0 ${size} ${size / 2 + 40}`} className="w-full h-full overflow-visible">
             <defs>
               <linearGradient id="gaugeGradient" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#0284C7" />
-                <stop offset="60%" stopColor="#38BDF8" />
-                <stop offset="100%" stopColor="#F5A623" />
+                <stop offset="0%" stopColor="#0D0D11" />
+                <stop offset="55%" stopColor="#FFB380" />
+                <stop offset="100%" stopColor="#FFBE99" />
               </linearGradient>
-
-              <filter id="gaugeShadow" x="-10%" y="-10%" width="120%" height="120%">
-                <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor="#0284C7" floodOpacity="0.25" />
-              </filter>
             </defs>
 
-            {/* Background Track (Grey semi-circle) */}
+            {/* Background Track */}
             <path
               d={`M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy}`}
               fill="none"
-              stroke="#F1F5F9"
+              stroke="#F0F0EC"
               strokeWidth={strokeWidth}
               strokeLinecap="round"
             />
@@ -83,7 +79,6 @@ export const EmploymentGauge: React.FC<EmploymentGaugeProps> = ({
               strokeWidth={strokeWidth}
               strokeDasharray={`${progressLength} ${arcLength}`}
               strokeLinecap="round"
-              filter="url(#gaugeShadow)"
               className="transition-all duration-1000 ease-out"
             />
 
@@ -93,26 +88,26 @@ export const EmploymentGauge: React.FC<EmploymentGaugeProps> = ({
               y1={cy}
               x2={needleX}
               y2={needleY}
-              stroke="#0F172A"
+              stroke="#0D0D11"
               strokeWidth="3.5"
               strokeLinecap="round"
               className="transition-all duration-1000 ease-out"
             />
 
             {/* Center Pivot Circle */}
-            <circle cx={cx} cy={cy} r="8" fill="#0F172A" />
-            <circle cx={cx} cy={cy} r="4" fill="#38BDF8" />
+            <circle cx={cx} cy={cy} r="8" fill="#0D0D11" />
+            <circle cx={cx} cy={cy} r="4" fill="#FFB380" />
           </svg>
         </div>
       </div>
 
       {/* Bottom Metrics Pill & Target Info */}
-      <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs">
+      <div className="pt-3 flex items-center justify-between text-xs bg-[#F6F5F2] rounded-2xl p-3 mt-2">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="font-semibold text-slate-600">{sublabel}</span>
+          <span className="w-2 h-2 rounded-full bg-[#FFB380]" />
+          <span className="font-bold text-zinc-600">{sublabel}</span>
         </div>
-        <span className="font-bold text-slate-900 font-mono">
+        <span className="font-black font-display text-zinc-900">
           +4.2% MoM
         </span>
       </div>
