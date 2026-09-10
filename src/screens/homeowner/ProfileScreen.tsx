@@ -179,6 +179,8 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
     return verificationData?.overall_status || user.verificationStatus || 'Unverified';
   }, [verificationData, user.verificationStatus]);
 
+  const isVerified = effectiveVerificationStatus === 'Verified' || user.verificationStatus === 'Verified';
+
 
   React.useEffect(() => {
     if (avatarUri) {
@@ -351,8 +353,8 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
 
               <View style={styles.personalNameRow}>
                 <Text style={styles.personalName}>{getFullName()}</Text>
-                {effectiveVerificationStatus === 'Verified' ? (
-                  <Ionicons name="shield-checkmark" size={18} color="#10B981" style={{ marginLeft: 6 }} />
+                {isVerified ? (
+                  <Ionicons name="checkmark-circle" size={18} color="#4CAF50" style={{ marginLeft: 6 }} />
                 ) : null}
               </View>
 
@@ -586,7 +588,12 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                 </Pressable>
 
                 <View style={styles.heroDetails}>
-                  <Text style={styles.heroName} numberOfLines={1}>{getFullName()}</Text>
+                  <View style={styles.heroNameRow}>
+                    <Text style={styles.heroName} numberOfLines={1}>{getFullName()}</Text>
+                    {isVerified ? (
+                      <Ionicons name="checkmark-circle" size={17} color="#4CAF50" style={{ marginLeft: 5, marginBottom: 2 }} />
+                    ) : null}
+                  </View>
                   <View style={styles.heroRolePillBadge}>
                     <Text style={styles.rolePillText}>{(user.accountType || 'HOMEOWNER').toUpperCase()}</Text>
                   </View>
@@ -1347,6 +1354,11 @@ const styles = StyleSheet.create({
   },
   heroDetails: {
     flex: 1,
+  },
+  heroNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
   },
   heroName: {
     fontSize: 18,

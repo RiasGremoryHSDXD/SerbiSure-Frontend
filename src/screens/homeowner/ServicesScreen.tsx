@@ -17,7 +17,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { chatStore } from '../../store/chatStore';
 import { ChatDetailScreen } from '../ChatDetailScreen';
 import { FilterModal, FeedFilters, DEFAULT_FILTERS } from '../FilterModal';
-import { RecommendationsSection } from '../RecommendationsSection';
 import { UserProfileModal } from '../UserProfileModal';
 import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
 import { useUser } from '../../context/UserContext';
@@ -447,21 +446,6 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
         </Pressable>
       </View>
 
-      {/* Smart Recommendations Carousel (T3-2) */}
-      <RecommendationsSection
-        token={effectiveToken}
-        accountType="Homeowner"
-        onSelectWorker={(worker) => {
-          setSelectedUserForModal({
-            id: worker.id,
-            name: worker.name,
-            role: worker.role,
-            avatar: worker.avatar,
-          });
-          setIsUserProfileModalVisible(true);
-        }}
-      />
-
       {/* Filter Chips Bar */}
       <ScrollView
         horizontal
@@ -507,19 +491,41 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
       {/* Vertical Stacked Cards Deck Area */}
       <View style={styles.cardsContainer}>
         {isLoading ? (
-          <Animated.View style={[styles.skeletonCard, { opacity: shimmerAnim }]}>
-            <View style={styles.skeletonImageArea}>
-              <View style={styles.skeletonTagPill} />
-            </View>
-            <View style={styles.skeletonContentArea}>
-              <View style={styles.skeletonTitle} />
-              <View style={styles.skeletonSubtitle} />
-              <View style={styles.skeletonRow}>
-                <View style={styles.skeletonBadge} />
-                <View style={styles.skeletonPrice} />
+          <React.Fragment>
+            <Animated.View style={[styles.skeletonStackDeep, { opacity: shimmerAnim }]} />
+            <Animated.View style={[styles.skeletonStackMid, { opacity: shimmerAnim }]} />
+            <Animated.View style={[styles.skeletonCard, { opacity: shimmerAnim }]}>
+              <View style={styles.skeletonImageArea}>
+                <View style={styles.skeletonAvatarRow}>
+                  <View style={styles.skeletonAvatar} />
+                  <View style={{ flex: 1, marginLeft: 12, gap: 8 }}>
+                    <View style={styles.skeletonNameBar} />
+                    <View style={styles.skeletonSubBar} />
+                  </View>
+                </View>
+                <View style={styles.skeletonVerifiedPill} />
               </View>
-            </View>
-          </Animated.View>
+              <View style={styles.skeletonContentArea}>
+                <View style={styles.skeletonTitle} />
+                <View style={styles.skeletonLocationRow}>
+                  <View style={styles.skeletonLocationDot} />
+                  <View style={styles.skeletonLocationBar} />
+                </View>
+                <View style={[styles.skeletonDescBar, { width: '100%' }]} />
+                <View style={[styles.skeletonDescBar, { width: '75%', marginTop: 4 }]} />
+                <View style={styles.skeletonTagsPriceRow}>
+                  <View style={styles.skeletonTagsGroup}>
+                    <View style={styles.skeletonTag} />
+                    <View style={[styles.skeletonTag, { width: 64 }]} />
+                  </View>
+                  <View style={styles.skeletonPriceBox}>
+                    <View style={styles.skeletonPriceAmount} />
+                    <View style={styles.skeletonPriceUnit} />
+                  </View>
+                </View>
+              </View>
+            </Animated.View>
+          </React.Fragment>
         ) : profiles.length === 0 ? (
           <View style={styles.emptyDeckCard}>
             <Ionicons name="checkmark-circle-outline" size={56} color="#FFB43B" style={{ marginBottom: 12 }} />
@@ -1055,63 +1061,142 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 4,
   },
+  skeletonStackDeep: {
+    position: 'absolute',
+    width: SCREEN_WIDTH - 80,
+    height: 380,
+    borderRadius: 24,
+    backgroundColor: '#D8DDE8',
+    zIndex: 2,
+    transform: [{ scale: 0.92 }],
+    top: -24,
+  },
+  skeletonStackMid: {
+    position: 'absolute',
+    width: SCREEN_WIDTH - 64,
+    height: 380,
+    borderRadius: 24,
+    backgroundColor: '#DDE2EC',
+    zIndex: 5,
+    transform: [{ scale: 0.96 }],
+    top: -12,
+  },
   skeletonCard: {
+    position: 'absolute',
+    zIndex: 10,
     width: SCREEN_WIDTH - 48,
-    height: 480,
+    height: 380,
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.10,
     shadowRadius: 16,
-    elevation: 4,
+    elevation: 6,
   },
   skeletonImageArea: {
     flex: 1,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E8ECF4',
     padding: 16,
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
   },
-  skeletonTagPill: {
-    width: 90,
-    height: 24,
+  skeletonAvatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  skeletonAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#CBD5E1',
-    borderRadius: 12,
+  },
+  skeletonNameBar: {
+    height: 14,
+    width: '60%',
+    backgroundColor: '#CBD5E1',
+    borderRadius: 6,
+  },
+  skeletonSubBar: {
+    height: 10,
+    width: '40%',
+    backgroundColor: '#D1D9E5',
+    borderRadius: 4,
+  },
+  skeletonVerifiedPill: {
+    position: 'absolute',
+    right: 16,
+    top: 16,
+    width: 76,
+    height: 22,
+    backgroundColor: '#CBD5E1',
+    borderRadius: 11,
   },
   skeletonContentArea: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     backgroundColor: '#FFFFFF',
+    gap: 8,
   },
   skeletonTitle: {
     width: '65%',
-    height: 22,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 6,
-    marginBottom: 10,
-  },
-  skeletonSubtitle: {
-    width: '45%',
-    height: 14,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 4,
-    marginBottom: 16,
-  },
-  skeletonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  skeletonBadge: {
-    width: 70,
     height: 20,
     backgroundColor: '#E2E8F0',
     borderRadius: 6,
   },
-  skeletonPrice: {
-    width: 80,
-    height: 22,
+  skeletonLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  skeletonLocationDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: '#E2E8F0',
-    borderRadius: 6,
+  },
+  skeletonLocationBar: {
+    width: '40%',
+    height: 12,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 4,
+  },
+  skeletonDescBar: {
+    height: 11,
+    backgroundColor: '#EEF2F6',
+    borderRadius: 4,
+  },
+  skeletonTagsPriceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  skeletonTagsGroup: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  skeletonTag: {
+    width: 54,
+    height: 20,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 10,
+  },
+  skeletonPriceBox: {
+    alignItems: 'flex-end',
+    gap: 3,
+  },
+  skeletonPriceAmount: {
+    width: 60,
+    height: 16,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 4,
+  },
+  skeletonPriceUnit: {
+    width: 40,
+    height: 10,
+    backgroundColor: '#EEF2F6',
+    borderRadius: 3,
   },
 });

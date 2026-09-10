@@ -12,7 +12,7 @@ const MainLayout: React.FC = () => {
   const { activeNav } = useAdmin();
 
   return (
-    <div className="flex min-h-screen bg-[#F8F9FB]">
+    <div className="flex min-h-screen bg-[#F6F5F2]">
       {/* Fixed/Sticky Sidebar matching mockups */}
       <Sidebar />
 

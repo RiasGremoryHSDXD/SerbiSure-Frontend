@@ -8,55 +8,55 @@ export const LogisticsOverview: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Compliance Overview Banner */}
-      <div className="bg-linear-to-r from-[#FFF9ED] via-white to-[#F6F8FD] p-8 rounded-3xl border border-[#FEEBC8] shadow-[0_4px_25px_rgba(0,0,0,0.02)] flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+      <div className="bg-white p-8 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#FFF0D4] text-[#C05621] rounded-full text-xs font-black uppercase tracking-wider">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-[#FFF4ED] text-[#FFB380] rounded-full text-xs font-black uppercase tracking-wider font-display">
             <Scale className="w-4 h-4" />
             <span>Republic Act No. 10361 Compliance Engine</span>
           </div>
-          <h3 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-            Logistics & Labor Misclassification Safeguards
+          <h3 className="text-2xl font-black font-display text-[#0D0D11] tracking-tight">
+            Logistics & Misclassification Safeguards
           </h3>
-          <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+          <p className="text-xs text-zinc-500 max-w-2xl leading-relaxed font-medium">
             SerbiSure automatically enforces a hard limit of <strong>3 short-term bookings per month</strong> between any employer-worker pair to prevent statutory benefit evasion.
           </p>
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
-          <div className="p-4 bg-white rounded-2xl border border-slate-200 text-center shadow-xs">
-            <div className="text-2xl font-black text-[#D97706]">1</div>
-            <div className="text-[10px] font-bold text-slate-500 uppercase">Throttled Pair</div>
+          <div className="p-4 bg-[#F6F5F2] rounded-2xl text-center min-w-[100px]">
+            <div className="text-2xl font-black font-display text-[#FFB380]">1</div>
+            <div className="text-[10px] font-bold text-zinc-400 uppercase font-display mt-0.5">Throttled Pair</div>
           </div>
-          <div className="p-4 bg-white rounded-2xl border border-slate-200 text-center shadow-xs">
-            <div className="text-2xl font-black text-emerald-600">100%</div>
-            <div className="text-[10px] font-bold text-slate-500 uppercase">Wage Compliance</div>
+          <div className="p-4 bg-[#F6F5F2] rounded-2xl text-center min-w-[100px]">
+            <div className="text-2xl font-black font-display text-emerald-600">100%</div>
+            <div className="text-[10px] font-bold text-zinc-400 uppercase font-display mt-0.5">Wage Compliant</div>
           </div>
         </div>
       </div>
 
       {/* Bookings & Compliance Table */}
-      <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-[0_4px_25px_rgba(0,0,0,0.02)] space-y-6">
-        <h4 className="text-lg font-bold text-slate-800 tracking-tight">
+      <div className="bg-white rounded-3xl p-8 space-y-6">
+        <h4 className="text-lg font-black font-display text-[#0D0D11] tracking-tight">
           Active Hiring Pipelines & Compliance Tracking
         </h4>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-100 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
-                <th className="py-4 font-bold">Employer & Worker</th>
-                <th className="py-4 font-bold">Category</th>
-                <th className="py-4 font-bold">Monthly Frequency</th>
-                <th className="py-4 font-bold">Wage & RTWPB-10</th>
-                <th className="py-4 font-bold">Statutory Benefits</th>
-                <th className="py-4 font-bold text-right">Logistics Status</th>
+              <tr className="text-[11px] font-black uppercase tracking-wider text-zinc-400 font-display">
+                <th className="py-3 px-3">Employer & Worker</th>
+                <th className="py-3 px-3">Category</th>
+                <th className="py-3 px-3">Monthly Frequency</th>
+                <th className="py-3 px-3">Wage & Baseline</th>
+                <th className="py-3 px-3">Statutory Benefits</th>
+                <th className="py-3 px-3 text-right">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50 text-xs">
+            <tbody className="text-xs space-y-1">
               {bookings.map((b) => (
-                <tr key={b.id} className="hover:bg-[#FFFDF8] transition-colors">
+                <tr key={b.id} className="hover:bg-[#F6F5F2] transition-colors">
                   {/* Employer & Worker */}
-                  <td className="py-4">
+                  <td className="py-3.5 px-3 rounded-l-2xl">
                     <div className="flex items-center gap-3">
                       <div className="flex -space-x-2 overflow-hidden">
                         <img
@@ -73,10 +73,10 @@ export const LogisticsOverview: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <div className="font-bold text-slate-900">
-                          {b.homeownerName} <span className="text-slate-400 font-normal">→</span> {b.workerName}
+                        <div className="font-black font-display text-[#0D0D11]">
+                          {b.homeownerName} <span className="text-zinc-400 font-normal">→</span> {b.workerName}
                         </div>
-                        <div className="text-[10px] text-slate-500">
+                        <div className="text-[10px] text-zinc-400 font-medium">
                           Started: {b.startDate}
                         </div>
                       </div>
@@ -84,34 +84,34 @@ export const LogisticsOverview: React.FC = () => {
                   </td>
 
                   {/* Category */}
-                  <td className="py-4 font-semibold text-slate-700">
+                  <td className="py-3.5 px-3 font-bold text-zinc-800">
                     <div>{b.serviceCategory}</div>
-                    <span className="text-[10px] font-bold text-[#F5A623]">
+                    <span className="text-[10px] font-black font-display text-[#FFB380]">
                       {b.contractType}
                     </span>
                   </td>
 
                   {/* Monthly Frequency */}
-                  <td className="py-4">
+                  <td className="py-3.5 px-3">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-extrabold text-slate-800">
+                        <span className="font-black font-display text-[#0D0D11]">
                           {b.monthlyBookingsCount} / 3
                         </span>
                         {b.isCapped ? (
-                          <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[10px] font-bold">
+                          <span className="px-2.5 py-0.5 rounded-full bg-[#FFF4ED] text-[#FFB380] text-[10px] font-black font-display">
                             Capped
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">
                             Within Limit
                           </span>
                         )}
                       </div>
-                      <div className="w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                      <div className="w-24 h-1.5 rounded-full bg-[#F0F0EC] overflow-hidden">
                         <div
-                          className={`h-full ${
-                            b.monthlyBookingsCount >= 3 ? 'bg-amber-500' : 'bg-emerald-500'
+                          className={`h-full rounded-full ${
+                            b.monthlyBookingsCount >= 3 ? 'bg-[#FFB380]' : 'bg-emerald-500'
                           }`}
                           style={{ width: `${(b.monthlyBookingsCount / 3) * 100}%` }}
                         />
@@ -120,28 +120,28 @@ export const LogisticsOverview: React.FC = () => {
                   </td>
 
                   {/* Wage & Baseline */}
-                  <td className="py-4">
+                  <td className="py-3.5 px-3">
                     <div>
-                      <span className="font-bold text-slate-900">
+                      <span className="font-black font-display text-[#0D0D11]">
                         ₱{b.offeredWage.toLocaleString()}
                       </span>
-                      <span className="text-slate-400 text-[10px]">
+                      <span className="text-zinc-400 text-[10px] font-medium">
                         {' '}/ {b.contractType.includes('Long-Term') ? 'mo' : 'day'}
                       </span>
                     </div>
                     <div className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
-                      <span>Above RTWPB-10 baseline (₱{b.minimumWageBaseline})</span>
+                      <span>Above RTWPB-10 baseline</span>
                     </div>
                   </td>
 
                   {/* Statutory Benefits */}
-                  <td className="py-4">
+                  <td className="py-3.5 px-3">
                     <div className="flex items-center gap-1.5">
                       {['SSS', 'PhilHealth', 'Pag-IBIG', '13th Mo'].map((item) => (
                         <span
                           key={item}
-                          className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-bold"
+                          className="px-2.5 py-0.5 bg-[#F0F0EC] text-zinc-700 rounded-full text-[10px] font-bold font-display"
                         >
                           {item}
                         </span>
@@ -150,14 +150,14 @@ export const LogisticsOverview: React.FC = () => {
                   </td>
 
                   {/* Status */}
-                  <td className="py-4 text-right">
+                  <td className="py-3.5 px-3 text-right rounded-r-2xl">
                     {b.status === 'FLAGGED_THROTTLED' ? (
-                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-900">
-                        <AlertTriangle className="w-3 h-3 text-amber-600" />
-                        <span>MANDATORY CONTRACT LOCK</span>
+                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black font-display bg-[#FFF4ED] text-[#FFB380]">
+                        <AlertTriangle className="w-3 h-3 text-[#FFB380]" />
+                        <span>CONTRACT LOCK</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800">
+                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black font-display bg-emerald-50 text-emerald-700">
                         <FileCheck className="w-3 h-3 text-emerald-600" />
                         <span>COMPLIANT</span>
                       </span>

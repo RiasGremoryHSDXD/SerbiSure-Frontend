@@ -3,39 +3,43 @@
 @tailwind utilities;
 
 :root {
-  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family: 'Geist', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color-scheme: light;
 }
 
 body {
   margin: 0;
   padding: 0;
-  background-color: #F8F9FB;
-  color: #1E293B;
+  background-color: #F6F5F2;
+  color: #0D0D11;
   min-height: 100vh;
+  letter-spacing: -0.01em;
 }
 
-/* Custom scrollbar for dense tables */
+h1, h2, h3, h4, .font-display {
+  font-family: 'Nunito', sans-serif;
+  letter-spacing: -0.025em;
+}
+
+/* Minimal pill scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #F1F5F9;
-  border-radius: 9999px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
+  background: #D5D5D0;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8;
+  background: #A0A09A;
 }
 
-/* Smooth transitions */
 * {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
