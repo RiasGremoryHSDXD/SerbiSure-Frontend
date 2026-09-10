@@ -1,16 +1,28 @@
-import React from 'react';
-import { StyleSheet, Text, View, Image, ScrollView, TextInput, Pressable } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, Text, View, Image, ScrollView, TextInput, Pressable, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLanguage } from '../../context/LanguageContext';
 import { useUser } from '../../context/UserContext';
+import THEME from '../../config/theme';
+import { NotificationBell } from '../../context/NotificationContext';
 
-const logoSource = require('../../../assets/serbisure-logo.png');
+const logoSource = require('../../../assets/serbisure_new_clean.png');
 
 export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile }: { avatarUri?: string | null, onAvatarPress?: () => void, onViewProfile?: () => void }) {
   const insets = useSafeAreaInsets();
   const { t } = useLanguage();
   const { getFirstNameOnly } = useUser();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
   
   const today = new Date();
   const dateString = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
@@ -20,20 +32,30 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile }: { avatar
       {/* Top Status Bar Spacer */}
       <View style={{ height: insets.top, backgroundColor: '#F6F5F2', zIndex: 10 }} />
       <ScrollView 
+        style={{ flex: 1, backgroundColor: '#F6F5F2' }}
         contentContainerStyle={[styles.scrollContent, { paddingTop: 8 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={['#FFB43B']}
+            tintColor="#FFB43B"
+            progressViewOffset={0}
+          />
+        }
       >
         {/* Header Logo & Bell */}
         <View style={styles.header}>
           <View style={styles.headerSide} />
           <Image source={logoSource} style={styles.logo} resizeMode="contain" />
           <View style={[styles.headerSide, styles.headerSideRight]}>
-            <Ionicons name="notifications" size={24} color="#333" />
+            <NotificationBell />
           </View>
         </View>
 
-        {/* Greeting Banner */}
-        <View style={styles.greetingBanner}>
+        {/* Greeting Card */}
+        <View style={styles.greetingCard}>
           <Pressable onPress={onAvatarPress}>
             <Image 
               source={{ uri: avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }} 
@@ -44,15 +66,14 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile }: { avatar
             <Text style={styles.dateText}>{dateString}</Text>
             <Text style={styles.greetingText} numberOfLines={1} adjustsFontSizeToFit>{t.greeting}, {getFirstNameOnly()}!</Text>
           </View>
-          <Ionicons name="options-outline" size={28} color="#333" />
         </View>
 
         {/* Search Bar */}
         <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color="#333" style={styles.searchIcon} />
+          <Ionicons name="search" size={18} color={THEME.colors.textMuted} style={styles.searchIcon} />
           <TextInput 
             placeholder={t.searchPlaceholder}
-            placeholderTextColor="#333"
+            placeholderTextColor={THEME.colors.textMuted}
             style={styles.searchInput}
           />
         </View>
@@ -106,8 +127,8 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile }: { avatar
 function CategoryItem({ icon, label }: { icon: any, label: string }) {
   return (
     <View style={styles.categoryItem}>
-      <MaterialCommunityIcons name={icon} size={32} color="#333" />
-      <Text style={styles.categoryLabel}>{label}</Text>
+      <MaterialCommunityIcons name={icon} size={28} color="#0D0D11" />
+      <Text style={styles.categoryLabel} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
     </View>
   );
 }
@@ -140,17 +161,17 @@ function WorkerCard({ name, role, years, rating, reviews, time, avatar, onViewPr
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F6F5F2',
+    backgroundColor: THEME.colors.canvas,
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 24,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    marginBottom: 16,
     width: '100%',
   },
   headerSide: {
@@ -159,104 +180,139 @@ const styles = StyleSheet.create({
   headerSideRight: {
     alignItems: 'flex-end',
   },
+  bellBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: THEME.colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   logo: {
     width: 44,
     height: 44,
   },
-  greetingBanner: {
-    backgroundColor: '#FFECCB',
-    paddingHorizontal: 24,
-    paddingVertical: 20,
+  greetingCard: {
+    backgroundColor: THEME.colors.white,
+    marginHorizontal: 20,
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
     flexDirection: 'row',
     alignItems: 'center',
   },
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 14,
   },
   greetingTextContainer: {
     flex: 1,
   },
   dateText: {
-    fontSize: 10,
-    color: '#888',
-    fontWeight: '600',
-    marginBottom: 4,
+    fontSize: 10.5,
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
+    color: THEME.colors.textMuted,
+    letterSpacing: 0.6,
+    marginBottom: 2,
   },
   greetingText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
+    fontSize: 19,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
+  },
+  filterBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: THEME.colors.canvas,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9F8F6',
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#E8E4DF',
-    paddingHorizontal: 24,
-    height: 50,
+    backgroundColor: THEME.colors.white,
+    borderRadius: THEME.roundness.pill,
+    marginHorizontal: 20,
+    marginTop: 14,
+    marginBottom: 10,
+    paddingHorizontal: 18,
+    height: 48,
   },
   searchIcon: {
     marginRight: 10,
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
-    color: '#333',
+    fontSize: 14,
+    fontFamily: THEME.typography.fontFamily.bodyMedium,
+    color: THEME.colors.ink,
   },
   categoriesContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 30,
-    paddingVertical: 30,
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
   },
   categoryItem: {
+    flex: 1,
+    aspectRatio: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: THEME.colors.white,
+    borderRadius: 22,
+    padding: 6,
   },
   categoryLabel: {
-    marginTop: 8,
-    fontSize: 11,
-    color: '#333',
+    marginTop: 6,
+    fontSize: 10.5,
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
+    color: THEME.colors.ink,
+    textAlign: 'center',
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 14,
   },
   sectionTitle: {
     flex: 1,
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1A1A1A',
+    fontSize: 22,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
     marginRight: 12,
   },
   seeAllText: {
     flexShrink: 0,
     fontSize: 13,
-    color: '#333',
+    color: THEME.colors.brandDark,
+    fontFamily: THEME.typography.fontFamily.secondarySemiBold,
   },
   workerList: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
   },
   workerCard: {
-    marginBottom: 24,
+    backgroundColor: THEME.colors.white,
+    borderRadius: THEME.roundness.card,
+    padding: 18,
+    marginBottom: 14,
   },
   workerHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   workerAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    marginRight: 12,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    marginRight: 14,
   },
   workerInfo: {
     flex: 1,
@@ -267,13 +323,14 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   workerName: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#1A1A1A',
+    fontSize: 16,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
   },
   workerRole: {
-    fontSize: 11,
-    color: '#666',
+    fontSize: 12,
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
+    color: THEME.colors.textSecondary,
     marginBottom: 4,
   },
   workerRatingRow: {
@@ -281,30 +338,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   workerRating: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#1A1A1A',
+    fontSize: 12,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
     marginLeft: 4,
   },
   workerReviews: {
-    color: '#888',
-    fontWeight: '400',
+    color: THEME.colors.textMuted,
+    fontFamily: THEME.typography.fontFamily.secondaryRegular,
   },
   workerTime: {
-    fontSize: 9,
-    color: '#888',
-    marginTop: 4,
+    fontSize: 10,
+    fontFamily: THEME.typography.fontFamily.secondaryRegular,
+    color: THEME.colors.textMuted,
+    marginTop: 2,
   },
   viewProfileBtn: {
-    borderWidth: 1,
-    borderColor: '#FFB43B',
-    borderRadius: 8,
+    backgroundColor: '#E5E7EB',
+    borderRadius: THEME.roundness.pill,
     paddingVertical: 12,
     alignItems: 'center',
   },
   viewProfileText: {
-    color: '#FFB43B',
-    fontWeight: '600',
+    color: '#0D0D11',
+    fontFamily: THEME.typography.fontFamily.display,
     fontSize: 13,
   },
 });

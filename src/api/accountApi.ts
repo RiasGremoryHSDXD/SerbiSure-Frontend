@@ -438,3 +438,59 @@ export async function updateContactPrivacy(token: string, showContactNumber: boo
     throw error;
   }
 }
+
+/**
+ * Fetch the authenticated Kasambahay's current job status (isOnJob).
+ * GET /api/v1/accounts/job-status/
+ */
+export async function fetchJobStatus(token: string): Promise<boolean> {
+  try {
+    const res = await fetchWithTimeout(`${ACCOUNTS_BASE}/job-status/`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson?.detail || `Failed to fetch job status (${res.status})`);
+    }
+
+    const data = await res.json();
+    return Boolean(data.is_on_job);
+  } catch (error: any) {
+    console.warn('[accountApi] fetchJobStatus error:', error?.message || error);
+    return false;
+  }
+}
+
+/**
+ * Update the authenticated Kasambahay's job status (isOnJob).
+ * PATCH /api/v1/accounts/job-status/
+ */
+export async function updateJobStatus(token: string, isOnJob: boolean): Promise<boolean> {
+  try {
+    const res = await fetchWithTimeout(`${ACCOUNTS_BASE}/job-status/`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ is_on_job: isOnJob }),
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson?.detail || `Failed to update job status (${res.status})`);
+    }
+
+    const data = await res.json();
+    return Boolean(data.is_on_job);
+  } catch (error: any) {
+    console.warn('[accountApi] updateJobStatus error:', error?.message || error);
+    throw error;
+  }
+}
+

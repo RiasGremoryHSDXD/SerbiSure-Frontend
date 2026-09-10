@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, Image, ScrollView, Pressable, Modal } from 'react-native';
+import { StyleSheet, Text, View, Image, ScrollView, Pressable, Modal, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../../context/LanguageContext';
 import { useUser } from '../../context/UserContext';
+import THEME from '../../config/theme';
+import { useJobsActivity } from '../../store/savedJobsStore';
+import { NotificationBell } from '../../context/NotificationContext';
 
-const logoSource = require('../../../assets/serbisure-logo.png');
+const logoSource = require('../../../assets/serbisure_new_clean.png');
 
 interface JobOffer {
   id: number;
@@ -64,37 +67,65 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile }: { avatar
   const { t } = useLanguage();
   const { getFirstNameOnly } = useUser();
   const [selectedJob, setSelectedJob] = useState<JobOffer | null>(null);
-  const [appliedJobs, setAppliedJobs] = useState<number[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isSaved, isApplied, toggleSave, applyJob } = useJobsActivity();
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleApply = (job: JobOffer) => {
+    applyJob({
+      id: job.id,
+      employerName: job.employerName,
+      avatar: job.avatar,
+      time: job.time,
+      location: job.location,
+      roleTag: job.roleTag,
+      termTag: job.termTag,
+      price: job.price,
+      unit: job.unit,
+      aboutText: job.aboutText,
+    });
+  };
 
   const today = new Date();
   const dateString = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
-
-  const handleApply = (jobId: number) => {
-    if (!appliedJobs.includes(jobId)) {
-      setAppliedJobs([...appliedJobs, jobId]);
-    }
-    setSelectedJob(null);
-  };
 
   return (
     <View style={styles.container}>
       {/* Top Status Bar Spacer */}
       <View style={{ height: insets.top, backgroundColor: '#F6F5F2', zIndex: 10 }} />
       <ScrollView
+        style={{ flex: 1, backgroundColor: '#F6F5F2' }}
         contentContainerStyle={[styles.scrollContent, { paddingTop: 8 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={['#FFB43B']}
+            tintColor="#FFB43B"
+            progressViewOffset={0}
+          />
+        }
       >
         {/* Header Logo & Bell */}
         <View style={styles.header}>
           <View style={styles.headerSide} />
           <Image source={logoSource} style={styles.logo} resizeMode="contain" />
           <View style={[styles.headerSide, styles.headerSideRight]}>
-            <Ionicons name="notifications" size={24} color="#333" />
+            <NotificationBell />
           </View>
         </View>
 
-        {/* Greeting Banner */}
-        <View style={styles.greetingBanner}>
+        {/* Greeting Card */}
+        <View style={styles.greetingCard}>
           <Pressable onPress={onAvatarPress}>
             <Image
               source={{ uri: avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }}
@@ -105,7 +136,6 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile }: { avatar
             <Text style={styles.dateText}>{dateString}</Text>
             <Text style={styles.greetingText} numberOfLines={1} adjustsFontSizeToFit>{t.greeting}, {getFirstNameOnly()}!</Text>
           </View>
-          <Ionicons name="options-outline" size={28} color="#333" />
         </View>
 
         {/* Section Header */}
@@ -117,7 +147,9 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile }: { avatar
         {/* Job List */}
         <View style={styles.jobList}>
           {MOCK_JOBS.map((job) => {
-            const isApplied = appliedJobs.includes(job.id);
+            const applied = isApplied(job.id);
+            const saved = isSaved(job.id);
+
             return (
               <Pressable key={job.id} style={styles.jobCard} onPress={() => setSelectedJob(job)}>
                 <View style={styles.jobHeader}>
@@ -127,7 +159,7 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile }: { avatar
                   <View style={styles.jobEmployerInfo}>
                     <Pressable style={styles.nameRow} onPress={onViewProfile}>
                       <Text style={styles.employerName}>{job.employerName}</Text>
-                      <Ionicons name="checkmark-circle" size={16} color="#4CAF50" style={{ marginLeft: 4 }} />
+                      <Ionicons name="checkmark-circle" size={16} color="#10B981" style={{ marginLeft: 4 }} />
                     </Pressable>
                     <Text style={styles.postTime}>{job.time}</Text>
 
@@ -140,6 +172,30 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile }: { avatar
                       </View>
                     </View>
                   </View>
+
+                  {/* Bookmark Icon in Top Right Corner */}
+                  <Pressable
+                    style={styles.bookmarkBtn}
+                    onPress={() => toggleSave({
+                      id: job.id,
+                      employerName: job.employerName,
+                      avatar: job.avatar,
+                      time: job.time,
+                      location: job.location,
+                      roleTag: job.roleTag,
+                      termTag: job.termTag,
+                      price: job.price,
+                      unit: job.unit,
+                      aboutText: job.aboutText,
+                    })}
+                    hitSlop={10}
+                  >
+                    <Ionicons
+                      name={saved ? "bookmark" : "bookmark-outline"}
+                      size={22}
+                      color={THEME.colors.ink}
+                    />
+                  </Pressable>
                 </View>
 
                 <View style={styles.divider} />
@@ -150,11 +206,11 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile }: { avatar
                   </Text>
 
                   <Pressable
-                    style={[styles.quickApplyBtn, isApplied && styles.quickApplyBtnDone]}
-                    onPress={() => handleApply(job.id)}
+                    style={[styles.seeDetailsBtn, applied && styles.seeDetailsBtnApplied]}
+                    onPress={() => setSelectedJob(job)}
                   >
-                    <Text style={[styles.quickApplyText, isApplied && styles.quickApplyTextDone]}>
-                      {isApplied ? 'Applied' : 'Quick Apply'}
+                    <Text style={[styles.seeDetailsText, applied && styles.seeDetailsTextApplied]}>
+                      {applied ? 'Applied' : 'See Details'}
                     </Text>
                   </Pressable>
                 </View>
@@ -236,11 +292,15 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile }: { avatar
 
               {/* Apply button */}
               <Pressable
-                style={({ pressed }) => [styles.applyNowBtn, pressed && { opacity: 0.8 }]}
-                onPress={() => handleApply(selectedJob.id)}
+                style={({ pressed }) => [
+                  styles.applyNowBtn,
+                  isApplied(selectedJob.id) && styles.applyNowBtnDone,
+                  pressed && { opacity: 0.8 },
+                ]}
+                onPress={() => handleApply(selectedJob)}
               >
                 <Text style={styles.applyNowText}>
-                  {appliedJobs.includes(selectedJob.id) ? 'Application Submitted' : 'Apply Now'}
+                  {isApplied(selectedJob.id) ? 'Application Submitted' : 'Apply Now'}
                 </Text>
               </Pressable>
               <Text style={styles.applyNotice}>Your application goes directly to the employer</Text>
@@ -255,17 +315,17 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile }: { avatar
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F6F5F2',
+    backgroundColor: THEME.colors.canvas,
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 24,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    marginBottom: 16,
     width: '100%',
   },
   headerSide: {
@@ -274,68 +334,85 @@ const styles = StyleSheet.create({
   headerSideRight: {
     alignItems: 'flex-end',
   },
+  bellBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: THEME.colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   logo: {
     width: 44,
     height: 44,
   },
-  greetingBanner: {
-    backgroundColor: '#FFECCB',
-    paddingHorizontal: 24,
-    paddingVertical: 20,
+  greetingCard: {
+    backgroundColor: THEME.colors.white,
+    marginHorizontal: 20,
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
     flexDirection: 'row',
     alignItems: 'center',
   },
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 14,
   },
   greetingTextContainer: {
     flex: 1,
   },
   dateText: {
-    fontSize: 10,
-    color: '#888',
-    fontWeight: '600',
-    marginBottom: 4,
+    fontSize: 10.5,
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
+    color: THEME.colors.textMuted,
+    letterSpacing: 0.6,
+    marginBottom: 2,
   },
   greetingText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
+    fontSize: 19,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
+  },
+  filterBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: THEME.colors.canvas,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    marginTop: 20,
+    paddingHorizontal: 20,
+    marginTop: 22,
     marginBottom: 14,
   },
   sectionTitle: {
     flex: 1,
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontSize: 22,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
     marginRight: 12,
   },
   seeAllText: {
     flexShrink: 0,
     fontSize: 13,
-    color: '#FFB43B',
-    fontWeight: '600',
+    color: THEME.colors.brandDark,
+    fontFamily: THEME.typography.fontFamily.secondarySemiBold,
   },
   jobList: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
   },
   jobCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-    padding: 16,
-    marginBottom: 16,
+    backgroundColor: THEME.colors.white,
+    borderRadius: THEME.roundness.card,
+    padding: 18,
+    marginBottom: 14,
   },
   jobHeader: {
     flexDirection: 'row',
@@ -345,7 +422,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    marginRight: 12,
+    marginRight: 14,
   },
   jobEmployerInfo: {
     flex: 1,
@@ -356,12 +433,13 @@ const styles = StyleSheet.create({
   },
   employerName: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
   },
   postTime: {
     fontSize: 11,
-    color: '#888',
+    fontFamily: THEME.typography.fontFamily.secondaryRegular,
+    color: THEME.colors.textMuted,
     marginTop: 2,
     marginBottom: 6,
   },
@@ -370,30 +448,30 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tagBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: THEME.roundness.pill,
   },
   tagRole: {
-    backgroundColor: '#8F5CFF',
+    backgroundColor: THEME.colors.ink,
   },
   tagRoleText: {
-    color: '#FFF',
-    fontSize: 10,
-    fontWeight: '700',
+    color: THEME.colors.white,
+    fontSize: 11,
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
   },
   tagTerm: {
-    backgroundColor: '#FFF0DB',
+    backgroundColor: THEME.colors.brandLight,
   },
   tagTermText: {
-    color: '#D97706',
-    fontSize: 10,
-    fontWeight: '700',
+    color: THEME.colors.brandDark,
+    fontSize: 11,
+    fontFamily: THEME.typography.fontFamily.secondarySemiBold,
   },
   divider: {
     height: 1,
-    backgroundColor: '#F0F0F0',
-    marginVertical: 12,
+    backgroundColor: THEME.colors.divider,
+    marginVertical: 14,
   },
   jobFooter: {
     flexDirection: 'row',
@@ -401,33 +479,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   priceText: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#FFB43B',
+    fontSize: 20,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
   },
   unitText: {
     fontSize: 12,
-    fontWeight: '400',
-    color: '#666',
+    fontFamily: THEME.typography.fontFamily.secondaryRegular,
+    color: THEME.colors.textSecondary,
   },
   quickApplyBtn: {
-    borderWidth: 1,
-    borderColor: '#FFB43B',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    backgroundColor: THEME.colors.brand,
+    borderRadius: THEME.roundness.pill,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   quickApplyBtnDone: {
-    backgroundColor: '#E8F5E9',
-    borderColor: '#4CAF50',
+    backgroundColor: '#E8F8EE',
   },
   quickApplyText: {
-    color: '#FFB43B',
+    color: THEME.colors.white,
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: THEME.typography.fontFamily.display,
   },
   quickApplyTextDone: {
-    color: '#2E7D32',
+    color: '#10B981',
   },
   // Modal Sheet
   modalOverlay: {
@@ -470,12 +548,13 @@ const styles = StyleSheet.create({
   },
   sheetEmployerName: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
   },
   sheetLocation: {
     fontSize: 12,
-    color: '#666',
+    fontFamily: THEME.typography.fontFamily.secondaryRegular,
+    color: THEME.colors.textSecondary,
     marginVertical: 2,
   },
   sheetTagRow: {
@@ -485,7 +564,8 @@ const styles = StyleSheet.create({
   },
   sheetPostTime: {
     fontSize: 11,
-    color: '#888',
+    fontFamily: THEME.typography.fontFamily.secondaryRegular,
+    color: THEME.colors.textMuted,
   },
   sheetPriceRow: {
     flexDirection: 'row',
@@ -495,38 +575,37 @@ const styles = StyleSheet.create({
   },
   sheetPrice: {
     fontSize: 28,
-    fontWeight: '900',
-    color: '#1A1A1A',
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
   },
   sheetUnit: {
     fontSize: 14,
-    fontWeight: '400',
-    color: '#666',
+    fontFamily: THEME.typography.fontFamily.secondaryRegular,
+    color: THEME.colors.textSecondary,
   },
   aboutBox: {
-    backgroundColor: '#FAF9F6',
-    borderRadius: 12,
-    padding: 14,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FFB43B',
+    backgroundColor: THEME.colors.brandLight,
+    borderRadius: 18,
+    padding: 16,
     marginBottom: 16,
   },
   aboutTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#D97706',
-    letterSpacing: 0.8,
-    marginBottom: 4,
+    fontSize: 12,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.brandDark,
+    letterSpacing: 0.5,
+    marginBottom: 6,
   },
   aboutBody: {
-    fontSize: 12,
-    color: '#444',
-    lineHeight: 18,
+    fontSize: 13,
+    fontFamily: THEME.typography.fontFamily.secondaryRegular,
+    color: THEME.colors.ink,
+    lineHeight: 20,
   },
   feedbackTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontSize: 14,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
     marginBottom: 8,
   },
   feedbackRow: {
@@ -536,60 +615,87 @@ const styles = StyleSheet.create({
   },
   feedbackCard: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingVertical: 12,
+    borderRadius: 14,
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: 0,
   },
   feedbackPositive: {
-    backgroundColor: '#E6F4EA',
-    borderColor: '#A3D9B1',
+    backgroundColor: '#E8F8EE',
   },
   feedbackNeutral: {
     backgroundColor: '#F4F5F7',
-    borderColor: '#DFE1E6',
   },
   feedbackNegative: {
-    backgroundColor: '#FFEBE6',
-    borderColor: '#FFBDAD',
+    backgroundColor: '#FEE2E2',
   },
   feedbackValue: {
     fontSize: 16,
-    fontWeight: '800',
+    fontFamily: THEME.typography.fontFamily.display,
   },
   feedbackLabel: {
     fontSize: 10,
-    fontWeight: '600',
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
     marginTop: 2,
   },
   complianceBox: {
     flexDirection: 'row',
-    backgroundColor: '#F3E8FF',
-    borderRadius: 10,
+    backgroundColor: THEME.colors.canvas,
+    borderRadius: 14,
     padding: 12,
     marginBottom: 16,
   },
   complianceText: {
     flex: 1,
     fontSize: 11,
-    color: '#6B21A8',
+    fontFamily: THEME.typography.fontFamily.secondaryRegular,
+    color: THEME.colors.textSecondary,
     lineHeight: 15,
   },
   applyNowBtn: {
-    backgroundColor: '#FFB43B',
-    borderRadius: 10,
+    backgroundColor: THEME.colors.ink,
+    borderRadius: THEME.roundness.pill,
     paddingVertical: 14,
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
+  },
+  applyNowBtnDone: {
+    backgroundColor: '#10B981',
   },
   applyNowText: {
-    color: '#FFF',
+    color: THEME.colors.white,
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: THEME.typography.fontFamily.display,
+  },
+  bookmarkBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  seeDetailsBtn: {
+    backgroundColor: THEME.colors.brand,
+    borderRadius: THEME.roundness.pill,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  seeDetailsBtnApplied: {
+    backgroundColor: '#E8F8EE',
+  },
+  seeDetailsText: {
+    color: THEME.colors.white,
+    fontSize: 13,
+    fontFamily: THEME.typography.fontFamily.display,
+  },
+  seeDetailsTextApplied: {
+    color: '#10B981',
   },
   applyNotice: {
     fontSize: 11,
-    color: '#888',
+    fontFamily: THEME.typography.fontFamily.secondaryRegular,
+    color: THEME.colors.textMuted,
     textAlign: 'center',
   },
 });

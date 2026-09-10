@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../context/LanguageContext';
+import THEME from '../config/theme';
 
 import { HomeScreen as HomeownerHomeScreen } from '../screens/homeowner/HomeScreen';
 import { ServicesScreen as HomeownerServicesScreen } from '../screens/homeowner/ServicesScreen';
@@ -85,11 +86,11 @@ export function BottomTabNavigator({ role = 'homeowner', avatarUri: oldAvatarUri
     }
   };
 
-  const topBgColor = activeTab === 'profile' ? '#FFF0DB' : '#F6F5F2';
+  const topBgColor = THEME.colors.canvas;
 
   return (
     <View style={styles.root}>
-      {/* Top Status Bar Solid Background Overlay - Prevents scrolled content from overlapping status bar */}
+      {/* Top Status Bar Solid Background Overlay */}
       <View
         style={{
           position: 'absolute',
@@ -104,16 +105,19 @@ export function BottomTabNavigator({ role = 'homeowner', avatarUri: oldAvatarUri
       />
       <View style={styles.content}>{renderScreen()}</View>
 
-      {/* Floating Bottom Navigation */}
-      <View style={[styles.navContainer, { bottom: Math.max(insets.bottom + 24, 38) }]}>
+      {/* Floating Bottom Navigation Dock */}
+      <View style={[styles.navContainer, { bottom: Math.max(insets.bottom + 20, 32) }]}>
         <View style={styles.tabBar}>
           <View style={styles.tabItem}>
             <Pressable
               style={[styles.tabIconBg, activeTab === 'home' && styles.tabIconBgActive]}
               onPress={() => setActiveTab('home')}
             >
-              <Ionicons name={activeTab === 'home' ? 'home' : 'home-outline'} size={18} color="#FFB43B" />
-              <Text style={styles.tabLabel}>Home</Text>
+              <Ionicons
+                name={activeTab === 'home' ? 'home' : 'home-outline'}
+                size={23}
+                color={activeTab === 'home' ? THEME.colors.ink : THEME.colors.textMuted}
+              />
             </Pressable>
           </View>
 
@@ -122,8 +126,11 @@ export function BottomTabNavigator({ role = 'homeowner', avatarUri: oldAvatarUri
               style={[styles.tabIconBg, activeTab === 'services' && styles.tabIconBgActive]}
               onPress={() => setActiveTab('services')}
             >
-              <Ionicons name={activeTab === 'services' ? 'briefcase' : 'briefcase-outline'} size={18} color="#FFB43B" />
-              <Text style={styles.tabLabel}>{isKasambahay ? 'Jobs' : 'Services'}</Text>
+              <Ionicons
+                name={activeTab === 'services' ? 'briefcase' : 'briefcase-outline'}
+                size={23}
+                color={activeTab === 'services' ? THEME.colors.ink : THEME.colors.textMuted}
+              />
             </Pressable>
           </View>
 
@@ -132,8 +139,11 @@ export function BottomTabNavigator({ role = 'homeowner', avatarUri: oldAvatarUri
               style={[styles.tabIconBg, activeTab === 'chats' && styles.tabIconBgActive]}
               onPress={() => setActiveTab('chats')}
             >
-              <Ionicons name={activeTab === 'chats' ? 'chatbubble' : 'chatbubble-outline'} size={18} color="#FFB43B" />
-              <Text style={styles.tabLabel}>Chats</Text>
+              <Ionicons
+                name={activeTab === 'chats' ? 'chatbubble' : 'chatbubble-outline'}
+                size={23}
+                color={activeTab === 'chats' ? THEME.colors.ink : THEME.colors.textMuted}
+              />
             </Pressable>
           </View>
 
@@ -142,14 +152,20 @@ export function BottomTabNavigator({ role = 'homeowner', avatarUri: oldAvatarUri
               style={[styles.tabIconBg, activeTab === 'profile' && styles.tabIconBgActive]}
               onPress={() => setActiveTab('profile')}
             >
-              <Ionicons name={activeTab === 'profile' ? 'person' : 'person-outline'} size={18} color="#FFB43B" />
-              <Text style={styles.tabLabel}>Profile</Text>
+              <Ionicons
+                name={activeTab === 'profile' ? 'person' : 'person-outline'}
+                size={23}
+                color={activeTab === 'profile' ? THEME.colors.ink : THEME.colors.textMuted}
+              />
             </Pressable>
           </View>
         </View>
 
-        <Pressable style={styles.fab} onPress={() => setPostJobVisible(true)}>
-          <Ionicons name="add" size={32} color="#FFFFFF" />
+        <Pressable
+          style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+          onPress={() => setPostJobVisible(true)}
+        >
+          <Ionicons name="add" size={30} color={THEME.colors.white} />
         </Pressable>
       </View>
 
@@ -165,7 +181,7 @@ export function BottomTabNavigator({ role = 'homeowner', avatarUri: oldAvatarUri
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#F6F5F2',
+    backgroundColor: THEME.colors.canvas,
   },
   content: {
     flex: 1,
@@ -182,54 +198,39 @@ const styles = StyleSheet.create({
   tabBar: {
     flex: 1,
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    height: 60,
+    backgroundColor: THEME.colors.white,
+    borderRadius: THEME.roundness.pill,
+    height: 58,
     paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'space-around',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
-    marginRight: 16,
+    marginRight: 14,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    overflow: 'hidden',
   },
   tabIconBg: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
   },
   tabIconBgActive: {
-    backgroundColor: '#FFECCB',
-  },
-  tabLabel: {
-    color: '#FFB43B',
-    fontSize: 8,
-    fontWeight: '700',
-    marginTop: 2,
+    backgroundColor: THEME.colors.brandLight,
   },
   fab: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
-    backgroundColor: '#FFB43B',
+    width: 58,
+    height: 58,
+    borderRadius: THEME.roundness.pill,
+    backgroundColor: THEME.colors.ink,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#FFB43B',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+  },
+  fabPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.95 }],
   },
 });

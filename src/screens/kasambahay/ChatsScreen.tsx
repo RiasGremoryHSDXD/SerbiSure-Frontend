@@ -4,9 +4,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../../context/LanguageContext';
 import { useUser } from '../../context/UserContext';
+import THEME from '../../config/theme';
+import { NotificationBell } from '../../context/NotificationContext';
 
 import { ChatDetailScreen } from '../ChatDetailScreen';
 import { chatStore, ChatConversation } from '../../store/chatStore';
+
+const logoSource = require('../../../assets/serbisure_new_clean.png');
 
 export function ChatsScreen() {
   const insets = useSafeAreaInsets();
@@ -101,29 +105,51 @@ export function ChatsScreen() {
   return (
     <View style={styles.container}>
       {/* Top Status Bar Spacer */}
-      <View style={{ height: insets.top, backgroundColor: '#FFECCB', zIndex: 10 }} />
-      {/* Top Banner */}
-      <View style={[styles.header, { paddingTop: 16 }]}>
-        <Text style={styles.headerTitle}>{t.chatsHeader}</Text>
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={18} color="#888" style={styles.searchIcon} />
-          <TextInput
-            placeholder={t.searchChats}
-            placeholderTextColor="#888"
-            style={styles.searchInput}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-      </View>
+      <View style={{ height: insets.top, backgroundColor: '#F6F5F2', zIndex: 10 }} />
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        style={{ flex: 1, backgroundColor: '#F6F5F2' }}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: 8 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={['#FFB43B']} tintColor="#FFB43B" />
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={['#FFB43B']}
+            tintColor="#FFB43B"
+            progressViewOffset={0}
+          />
         }
       >
+        {/* Header Logo & Bell */}
+        <View style={styles.headerTop}>
+          <View style={styles.headerSide} />
+          <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+          <View style={[styles.headerSide, styles.headerSideRight]}>
+            <NotificationBell />
+          </View>
+        </View>
+
+        {/* Clean Header Area: Title & Pill Search */}
+        <View style={styles.headerArea}>
+          <Text style={styles.headerTitle}>{t.chatsHeader || 'Messages'}</Text>
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
+            <TextInput
+              placeholder={t.searchChats || 'Search conversations...'}
+              placeholderTextColor="#9CA3AF"
+              style={styles.searchInput}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+              </Pressable>
+            )}
+          </View>
+        </View>
+
         <Text style={styles.sectionHeader}>RECENT</Text>
 
         <View style={styles.chatList}>
@@ -143,9 +169,14 @@ export function ChatsScreen() {
               ))}
             </View>
           ) : filteredChats.length === 0 ? (
-            <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-              <Ionicons name="chatbubbles-outline" size={40} color="#CCC" style={{ marginBottom: 8 }} />
-              <Text style={{ color: '#999', fontSize: 14 }}>No conversations yet</Text>
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIconCircle}>
+                <Ionicons name="chatbubbles" size={32} color={THEME.colors.ink} />
+              </View>
+              <Text style={styles.emptyTitle}>No conversations yet</Text>
+              <Text style={styles.emptySub}>
+                When you connect with homeowners, your chats will appear here.
+              </Text>
             </View>
           ) : (
             filteredChats.map((chat) => (
@@ -161,14 +192,18 @@ export function ChatsScreen() {
 
                 <View style={styles.chatContent}>
                   <View style={styles.titleRow}>
-                    <View style={styles.nameBadgeRow}>
-                      <Text style={styles.name}>{chat.name}</Text>
-                      <View style={styles.badge}>
-                        <Text style={styles.badgeText}>{chat.badge}</Text>
-                      </View>
-                    </View>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {chat.name}
+                    </Text>
                     <Text style={styles.time}>{chat.time}</Text>
                   </View>
+
+                  <View style={styles.tagRow}>
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>{chat.badge}</Text>
+                    </View>
+                  </View>
+
                   <Text style={styles.message} numberOfLines={1}>
                     {chat.message}
                   </Text>
@@ -199,26 +234,51 @@ export function ChatsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFF',
+    backgroundColor: '#F6F5F2',
   },
-  header: {
-    backgroundColor: '#FFECCB',
-    paddingHorizontal: 24,
-    paddingBottom: 20,
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    width: '100%',
+  },
+  headerSide: {
+    width: 44,
+  },
+  headerSideRight: {
+    alignItems: 'flex-end',
+  },
+  logo: {
+    width: 44,
+    height: 44,
+  },
+  bellBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: THEME.colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerArea: {
+    paddingHorizontal: 20,
+    paddingBottom: 10,
   },
   headerTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#1A1A1A',
-    marginBottom: 16,
+    fontSize: 24,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
+    marginBottom: 12,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
-    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 9999,
     paddingHorizontal: 16,
-    height: 44,
+    height: 46,
   },
   searchIcon: {
     marginRight: 8,
@@ -226,51 +286,54 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: '#333',
+    fontFamily: THEME.typography.fontFamily.secondaryRegular,
+    color: THEME.colors.ink,
   },
   scrollContent: {
-    paddingTop: 16,
+    paddingTop: 10,
   },
   sectionHeader: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#888',
+    fontFamily: THEME.typography.fontFamily.display,
+    color: '#71717A',
     letterSpacing: 1,
-    paddingHorizontal: 24,
-    marginBottom: 12,
+    paddingHorizontal: 20,
+    marginBottom: 10,
   },
   chatList: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
   },
   chatCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    padding: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    marginBottom: 10,
   },
   chatCardPressed: {
-    backgroundColor: '#F9F8F6',
+    backgroundColor: '#FAF9F6',
+    transform: [{ scale: 0.99 }],
   },
   avatarContainer: {
     position: 'relative',
     marginRight: 14,
   },
   avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
   },
   onlineDot: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#4CAF50',
+    bottom: 0,
+    right: 0,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#10B981',
     borderWidth: 2,
-    borderColor: '#FFF',
+    borderColor: '#FFFFFF',
   },
   chatContent: {
     flex: 1,
@@ -279,47 +342,80 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
-  },
-  nameBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
   },
   name: {
+    flex: 1,
     fontSize: 15,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
+    marginRight: 8,
+  },
+  tagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 3,
+    marginBottom: 4,
   },
   badge: {
-    backgroundColor: '#EDE9FE',
-    paddingHorizontal: 6,
+    backgroundColor: '#FFB380',
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 9999,
+    alignSelf: 'flex-start',
   },
   badgeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#6D28D9',
+    fontSize: 10,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: '#0D0D11',
+    fontWeight: '800',
   },
   time: {
     fontSize: 11,
-    color: '#888',
+    fontFamily: THEME.typography.fontFamily.secondaryRegular,
+    color: '#9CA3AF',
   },
   message: {
     fontSize: 13,
-    color: '#666',
+    fontFamily: THEME.typography.fontFamily.secondaryRegular,
+    color: '#6B7280',
+    lineHeight: 18,
+  },
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#F5F4F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
+    marginBottom: 6,
+  },
+  emptySub: {
+    fontSize: 13,
+    fontFamily: THEME.typography.fontFamily.secondaryRegular,
+    color: THEME.colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   skeletonChatCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    padding: 14,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 22,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#F0F0F0',
   },
   skeletonAvatar: {
     width: 48,
@@ -340,13 +436,13 @@ const styles = StyleSheet.create({
   skeletonName: {
     width: '45%',
     height: 14,
-    borderRadius: 4,
+    borderRadius: 6,
     backgroundColor: '#E2E8F0',
   },
   skeletonTime: {
     width: '20%',
     height: 10,
-    borderRadius: 3,
+    borderRadius: 4,
     backgroundColor: '#E2E8F0',
   },
   skeletonSnippet: {

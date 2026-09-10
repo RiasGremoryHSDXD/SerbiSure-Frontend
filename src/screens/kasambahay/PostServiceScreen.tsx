@@ -13,6 +13,7 @@ import {
   Easing,
   StatusBar,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -60,7 +61,6 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
 
   useEffect(() => {
     if (postedSuccess) {
-      // Spring pop-in scale animation
       scaleAnim.setValue(0.7);
       Animated.spring(scaleAnim, {
         toValue: 1,
@@ -69,7 +69,6 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
         useNativeDriver: true,
       }).start();
 
-      // Continuous 360-degree rotation animation for the loader ring
       rotateAnim.setValue(0);
       const animation = Animated.loop(
         Animated.timing(rotateAnim, {
@@ -153,12 +152,12 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
   };
 
   const services = [
-    { id: 'Cleaning', label: 'Cleaning', icon: 'brush-outline' },
-    { id: 'Child_care', label: 'Child Care', icon: 'happy-outline' },
-    { id: 'Cooking', label: 'Cook', icon: 'restaurant-outline' },
-    { id: 'Caregiver', label: 'Caregiver', icon: 'heart-outline' },
-    { id: 'Laundry', label: 'Laundry', icon: 'shirt-outline' },
-    { id: 'All-around', label: 'All-around', icon: 'home-outline' },
+    { id: 'Cleaning', label: 'Cleaning', icon: 'sparkles' },
+    { id: 'Child_care', label: 'Child Care', icon: 'happy' },
+    { id: 'Cooking', label: 'Cook', icon: 'restaurant' },
+    { id: 'Caregiver', label: 'Caregiver', icon: 'heart' },
+    { id: 'Laundry', label: 'Laundry', icon: 'shirt' },
+    { id: 'All-around', label: 'All-around', icon: 'home' },
   ];
 
   const resetForm = () => {
@@ -182,13 +181,13 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
   const handleNext = async () => {
     if (step < 4) {
       if (step === 1 && selectedServices.length === 0) {
-        Alert.alert('Error', 'Please select at least one service.');
+        Alert.alert('Selection Required', 'Please choose at least one service to continue.');
         return;
       }
       setStep((prev) => (prev + 1) as 1 | 2 | 3 | 4);
     } else {
       if (!agreedTerms) {
-        Alert.alert('Error', 'Please agree to the Terms of Service.');
+        Alert.alert('Terms Required', 'Please agree to the Terms of Service to post.');
         return;
       }
       
@@ -276,44 +275,52 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
             },
           ]}
         >
-          {/* Top Section (Anchored to Top) */}
-          <View style={styles.topSection}>
-            {/* Header Row */}
-            <View style={styles.header}>
-              <Pressable style={styles.headerLeft} onPress={handleBack}>
-                <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
-                <Text style={styles.headerTitle}>Post a Service</Text>
-              </Pressable>
-              <Image source={logoSource} style={styles.logo} resizeMode="contain" />
-            </View>
-
-            {/* Step Counter */}
-            <Text style={styles.stepCounter}>Step {step} of 4</Text>
-
-            {/* Step Main Title */}
-            <View style={styles.titleBlock}>
-              {step === 1 && (
-                <Text style={styles.mainTitle}>
-                  What <Text style={styles.titleHighlight}>service</Text> do you offer today?
-                </Text>
-              )}
-              {step === 2 && (
-                <Text style={styles.mainTitle}>
-                  When do you <Text style={styles.titleHighlight}>offer</Text> the service?
-                </Text>
-              )}
-              {step === 3 && <Text style={styles.mainTitle}>Service Details</Text>}
-              {step === 4 && (
-                <Text style={styles.mainTitle}>
-                  Review & <Text style={styles.titleHighlight}>submit</Text>
-                </Text>
-              )}
-            </View>
+          {/* Header Row */}
+          <View style={styles.header}>
+            <Pressable style={styles.backCircleButton} onPress={handleBack}>
+              <Ionicons name="arrow-back" size={20} color="#0D0D11" />
+            </Pressable>
+            <Text style={styles.headerTitle}>Post a Service</Text>
+            <Image source={logoSource} style={styles.logo} resizeMode="contain" />
           </View>
 
-          {/* Dynamic Content Area (Fits without scrolling) */}
-          <View style={styles.contentArea}>
-            {/* STEP 1 */}
+          {/* Step Pill Counter */}
+          <View style={styles.stepBadge}>
+            <Text style={styles.stepBadgeText}>Step {step} of 4</Text>
+          </View>
+
+          {/* Step Main Title */}
+          <View style={styles.titleBlock}>
+            {step === 1 && (
+              <Text style={styles.mainTitle}>
+                What <Text style={styles.titleHighlight}>service</Text> do you offer today?
+              </Text>
+            )}
+            {step === 2 && (
+              <Text style={styles.mainTitle}>
+                When do you <Text style={styles.titleHighlight}>offer</Text> the service?
+              </Text>
+            )}
+            {step === 3 && (
+              <Text style={styles.mainTitle}>
+                Service <Text style={styles.titleHighlight}>details</Text>
+              </Text>
+            )}
+            {step === 4 && (
+              <Text style={styles.mainTitle}>
+                Review & <Text style={styles.titleHighlight}>submit</Text>
+              </Text>
+            )}
+          </View>
+
+          {/* Scrollable Content Area */}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* STEP 1: SERVICE CATEGORY CARDS */}
             {step === 1 && (
               <View style={styles.serviceGrid}>
                 {services.map((item) => {
@@ -343,9 +350,12 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
                       style={[styles.serviceCard, isSelected && styles.serviceCardActive]}
                       onPress={handleToggle}
                     >
-                      <View style={[styles.iconCircle, isSelected && styles.iconCircleActive]}>
-                        <Ionicons name={item.icon as any} size={26} color="#FFB43B" />
-                      </View>
+                      <Ionicons
+                        name={item.icon as any}
+                        size={32}
+                        color={isSelected ? '#0D0D11' : '#FFB380'}
+                        style={styles.serviceIcon}
+                      />
                       <Text style={[styles.serviceLabel, isSelected && styles.serviceLabelActive]}>
                         {item.label}
                       </Text>
@@ -355,7 +365,7 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
               </View>
             )}
 
-            {/* STEP 2 */}
+            {/* STEP 2: SCHEDULE & TIME */}
             {step === 2 && (
               <View style={styles.step2Container}>
                 {/* Short-term / Long-term Toggle */}
@@ -364,41 +374,43 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
                     style={[styles.typeCard, engagementType === 'short' && styles.typeCardActive]}
                     onPress={() => setEngagementType('short')}
                   >
-                    <View style={styles.typeIconCircle}>
-                      <Ionicons name="time-outline" size={20} color="#FFB43B" />
-                    </View>
-                    <View style={{ width: '100%' }}>
-                      <Text style={styles.typeTitle}>Short-term</Text>
-                      <Text style={styles.typeSub}>Single visit or short service</Text>
-                    </View>
+                    <Ionicons
+                      name="time"
+                      size={24}
+                      color={engagementType === 'short' ? '#0D0D11' : '#FFB380'}
+                      style={styles.typeIcon}
+                    />
+                    <Text style={styles.typeTitle}>Short-term</Text>
+                    <Text style={styles.typeSub}>Single visit or quick shift</Text>
                   </Pressable>
 
                   <Pressable
                     style={[styles.typeCard, engagementType === 'long' && styles.typeCardActive]}
                     onPress={() => setEngagementType('long')}
                   >
-                    <View style={styles.typeIconCircle}>
-                      <Ionicons name="calendar-outline" size={20} color="#FFB43B" />
-                    </View>
-                    <View style={{ width: '100%' }}>
-                      <Text style={styles.typeTitle}>Long-term</Text>
-                      <Text style={styles.typeSub}>Weekly or monthly service</Text>
-                    </View>
+                    <Ionicons
+                      name="calendar"
+                      size={24}
+                      color={engagementType === 'long' ? '#0D0D11' : '#FFB380'}
+                      style={styles.typeIcon}
+                    />
+                    <Text style={styles.typeTitle}>Long-term</Text>
+                    <Text style={styles.typeSub}>Weekly or monthly routine</Text>
                   </Pressable>
                 </View>
 
-                {/* Calendar Grid */}
+                {/* Calendar Card */}
                 <View style={styles.calendarCard}>
                   <View style={styles.calendarHeader}>
                     <Text style={styles.calendarMonth}>
                       {viewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                     </Text>
                     <View style={styles.calendarArrows}>
-                      <Pressable onPress={handlePrevMonth} style={{ padding: 4, marginRight: 6 }} hitSlop={10}>
-                        <Ionicons name="chevron-back" size={16} color="#666" />
+                      <Pressable onPress={handlePrevMonth} style={styles.calendarArrowBtn} hitSlop={10}>
+                        <Ionicons name="chevron-back" size={16} color="#0D0D11" />
                       </Pressable>
-                      <Pressable onPress={handleNextMonth} style={{ padding: 4 }} hitSlop={10}>
-                        <Ionicons name="chevron-forward" size={16} color="#666" />
+                      <Pressable onPress={handleNextMonth} style={styles.calendarArrowBtn} hitSlop={10}>
+                        <Ionicons name="chevron-forward" size={16} color="#0D0D11" />
                       </Pressable>
                     </View>
                   </View>
@@ -449,13 +461,13 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
                 </View>
 
                 {/* Time Selection */}
-                <Text style={styles.sectionLabel}>What time works best?</Text>
+                <Text style={styles.sectionLabel}>WHAT TIME WORKS BEST?</Text>
                 <View style={styles.timeSlotRow}>
                   <Pressable
                     style={[styles.timeSlotCard, selectedTime === 'morning' && styles.timeSlotActive]}
                     onPress={() => setSelectedTime('morning')}
                   >
-                    <Ionicons name="sunny-outline" size={18} color="#FFB43B" />
+                    <Ionicons name="sunny" size={20} color={selectedTime === 'morning' ? '#0D0D11' : '#FFB380'} />
                     <Text style={styles.timeSlotTitle}>Morning</Text>
                     <Text style={styles.timeSlotSub}>8 AM - 12 PM</Text>
                   </Pressable>
@@ -464,7 +476,7 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
                     style={[styles.timeSlotCard, selectedTime === 'afternoon' && styles.timeSlotActive]}
                     onPress={() => setSelectedTime('afternoon')}
                   >
-                    <Ionicons name="partly-sunny-outline" size={18} color="#FFB43B" />
+                    <Ionicons name="partly-sunny" size={20} color={selectedTime === 'afternoon' ? '#0D0D11' : '#FFB380'} />
                     <Text style={styles.timeSlotTitle}>Afternoon</Text>
                     <Text style={styles.timeSlotSub}>12 PM - 5 PM</Text>
                   </Pressable>
@@ -473,7 +485,7 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
                     style={[styles.timeSlotCard, selectedTime === 'night' && styles.timeSlotActive]}
                     onPress={() => setSelectedTime('night')}
                   >
-                    <Ionicons name="moon-outline" size={18} color="#FFB43B" />
+                    <Ionicons name="moon" size={20} color={selectedTime === 'night' ? '#0D0D11' : '#FFB380'} />
                     <Text style={styles.timeSlotTitle}>Night</Text>
                     <Text style={styles.timeSlotSub}>5 PM - 9 PM</Text>
                   </Pressable>
@@ -481,25 +493,25 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
               </View>
             )}
 
-            {/* STEP 3 */}
+            {/* STEP 3: DETAILS & RATE */}
             {step === 3 && (
               <View style={styles.step3Container}>
                 <Text style={styles.inputGroupLabel}>SERVICE ADDRESS</Text>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="Enter street, building, or area"
-                  placeholderTextColor="#999"
+                  placeholder="Street, barangay, or city"
+                  placeholderTextColor="#9CA3AF"
                   value={address}
                   onChangeText={setAddress}
                 />
 
                 <View style={styles.twoColumnRow}>
                   <View style={{ flex: 1, marginRight: 8 }}>
-                    <Text style={styles.inputGroupLabel}>FLOOR / UNIT #</Text>
+                    <Text style={styles.inputGroupLabel}>FLOOR / UNIT (OPTIONAL)</Text>
                     <TextInput
                       style={styles.textInput}
-                      placeholder="Optional"
-                      placeholderTextColor="#999"
+                      placeholder="e.g. Unit 4B"
+                      placeholderTextColor="#9CA3AF"
                       value={floorUnit}
                       onChangeText={setFloorUnit}
                     />
@@ -508,8 +520,8 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
                     <Text style={styles.inputGroupLabel}>ZIP CODE</Text>
                     <TextInput
                       style={styles.textInput}
-                      placeholder="e.g. 1200"
-                      placeholderTextColor="#999"
+                      placeholder="e.g. 6000"
+                      placeholderTextColor="#9CA3AF"
                       value={zipCode}
                       onChangeText={setZipCode}
                       keyboardType="numeric"
@@ -517,18 +529,18 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
                   </View>
                 </View>
 
-                <Text style={styles.sectionLabelLarge}>Add specific instructions</Text>
+                <Text style={styles.inputGroupLabel}>SPECIAL INSTRUCTIONS</Text>
                 <TextInput
                   style={styles.multilineInput}
                   multiline
                   numberOfLines={4}
-                  placeholder="Example: 'Available on weekdays, non-smoker, comfortable with pets...'"
-                  placeholderTextColor="#999"
+                  placeholder="e.g. Available on weekdays, pet-friendly, non-smoker..."
+                  placeholderTextColor="#9CA3AF"
                   value={instructions}
                   onChangeText={setInstructions}
                 />
 
-                <Text style={styles.inputGroupLabel}>YOUR DAILY RATE</Text>
+                <Text style={styles.inputGroupLabel}>YOUR DAILY RATE (PHP)</Text>
                 <View style={styles.offerInputWrapper}>
                   <Text style={styles.currencyPrefix}>₱</Text>
                   <TextInput
@@ -541,19 +553,19 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
 
                 <View style={styles.recommendBox}>
                   <Text style={styles.recommendTitle}>
-                    Recommended range for {selectedServices.length > 0 ? (services.find(x => x.id === selectedServices[0])?.label || selectedServices[0]) : 'Home Service'}: <Text style={{ fontWeight: '800' }}>₱ 400 - ₱ 700 / day</Text>
+                    Market rate for {selectedServices.length > 0 ? (services.find(x => x.id === selectedServices[0])?.label || selectedServices[0]) : 'Home Service'}: <Text style={{ fontWeight: '800' }}>₱400 - ₱700 / day</Text>
                   </Text>
                   <Text style={styles.recommendSub}>
-                    Based on market rates for domestic service in your area.
+                    Suggested rate for professional domestic services in your area.
                   </Text>
                 </View>
               </View>
             )}
 
-            {/* STEP 4 */}
+            {/* STEP 4: SUMMARY & SUBMISSION */}
             {step === 4 && (
               <View style={styles.step4Container}>
-                <Text style={styles.summaryTitle}>SUMMARY</Text>
+                <Text style={styles.inputGroupLabel}>SUMMARY</Text>
                 <View style={styles.summaryCard}>
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Service</Text>
@@ -563,28 +575,33 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
                         : 'None'}
                     </Text>
                   </View>
+                  <View style={styles.summaryDivider} />
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Type</Text>
                     <Text style={styles.summaryValue}>
                       {engagementType === 'short' ? 'Short-term' : 'Long-term'}
                     </Text>
                   </View>
+                  <View style={styles.summaryDivider} />
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Date</Text>
                     <Text style={styles.summaryValue}>{formatSelectedDate(selectedDate)}</Text>
                   </View>
+                  <View style={styles.summaryDivider} />
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Rate</Text>
+                    <Text style={styles.summaryLabel}>Daily Rate</Text>
                     <Text style={[styles.summaryValue, { color: '#D97706', fontWeight: '800' }]}>
                       ₱{offerAmount} / day
                     </Text>
                   </View>
+                  <View style={styles.summaryDivider} />
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Time</Text>
+                    <Text style={styles.summaryLabel}>Preferred Time</Text>
                     <Text style={styles.summaryValue}>
                       {selectedTime === 'morning' ? '8:00 AM - 12:00 PM' : selectedTime === 'afternoon' ? '12:00 PM - 5:00 PM' : '5:00 PM - 9:00 PM'}
                     </Text>
                   </View>
+                  <View style={styles.summaryDivider} />
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Location</Text>
                     <Text style={[styles.summaryValue, { textAlign: 'right', flex: 1, marginLeft: 20 }]}>
@@ -594,8 +611,9 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
                 </View>
 
                 <View style={styles.visibleNoticeBox}>
+                  <Ionicons name="shield-checkmark" size={16} color="#065F46" style={{ marginRight: 8, marginTop: 1 }} />
                   <Text style={styles.visibleNoticeText}>
-                    Your listing will be visible to verified Homeowners once submitted.
+                    Your listing will be visible to verified homeowners looking for domestic services.
                   </Text>
                 </View>
 
@@ -607,36 +625,36 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
                     {agreedTerms && <Ionicons name="checkmark" size={14} color="#FFF" />}
                   </View>
                   <Text style={styles.checkboxText}>
-                    I agree to the <Text style={{ color: '#8F5CFF', fontWeight: '600' }}>SerbiSure Terms of Service</Text> and understand that I will be charged once the job is confirmed and completed by the professional.
+                    I agree to the <Text style={{ color: '#0D0D11', fontWeight: '700' }}>SerbiSure Terms of Service</Text> and confirm that my posted service details are accurate.
                   </Text>
                 </Pressable>
               </View>
             )}
-          </View>
+          </ScrollView>
 
-          {/* Fixed Bottom Buttons Area (Same Position & Size across all 4 steps!) */}
+          {/* Unified Clean Pill Bottom Buttons - Single Row */}
           <View style={styles.bottomButtonsContainer}>
+            <Pressable
+              style={({ pressed }) => [styles.backButton, pressed && styles.btnPressed]}
+              onPress={handleBack}
+              disabled={isPosting}
+            >
+              <Text style={styles.backButtonText}>{step === 1 ? 'Cancel' : 'Back'}</Text>
+            </Pressable>
+
             <Pressable
               style={({ pressed }) => [styles.nextButton, pressed && styles.btnPressed]}
               onPress={handleNext}
               disabled={isPosting}
             >
               <Text style={styles.nextButtonText}>
-                {isPosting ? 'Posting...' : step === 4 ? 'Post' : 'Next'}
+                {isPosting ? 'Posting...' : step === 4 ? 'Post Service' : 'Next'}
               </Text>
-            </Pressable>
-
-            <Pressable
-              style={({ pressed }) => [styles.backButton, pressed && styles.btnPressed]}
-              onPress={handleBack}
-              disabled={isPosting}
-            >
-              <Text style={styles.backButtonText}>Back</Text>
             </Pressable>
           </View>
         </View>
 
-        {/* Service Posted Success Overlay (Animated Logo & Loader Ring) */}
+        {/* Service Posted Success Overlay */}
         {postedSuccess && (
           <View style={styles.successOverlay}>
             <Animated.View style={[styles.successContainer, { transform: [{ scale: scaleAnim }] }]}>
@@ -662,174 +680,180 @@ const styles = StyleSheet.create({
   },
   innerContainer: {
     flex: 1,
-    paddingHorizontal: 24,
-  },
-  topSection: {
-    marginBottom: 8,
+    paddingHorizontal: 20,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 12,
   },
-  headerLeft: {
-    flexDirection: 'row',
+  backCircleButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    marginLeft: 10,
+    fontWeight: '800',
+    color: '#0D0D11',
   },
   logo: {
     width: 36,
     height: 36,
   },
-  stepCounter: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 4,
+  stepBadge: {
+    alignSelf: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 9999,
+    marginBottom: 8,
+  },
+  stepBadgeText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#9CA3AF',
+    letterSpacing: 0.5,
   },
   titleBlock: {
     alignItems: 'center',
     marginBottom: 16,
   },
   mainTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#1A1A1A',
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#0D0D11',
     textAlign: 'center',
+    letterSpacing: -0.3,
   },
   titleHighlight: {
-    color: '#FFB43B',
+    color: '#FFB380',
   },
-  contentArea: {
-    flex: 1,
+  scrollContent: {
+    paddingBottom: 16,
+    flexGrow: 1,
     justifyContent: 'center',
   },
+
   // STEP 1 STYLES
   serviceGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 14,
+    gap: 12,
   },
   serviceCard: {
-    width: '47%',
+    width: '48%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 24,
     paddingVertical: 20,
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#EFEFEF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 3,
+    position: 'relative',
   },
   serviceCardActive: {
-    borderColor: '#FFB43B',
-    backgroundColor: '#FFFBF5',
+    backgroundColor: '#FFF4ED',
   },
-  iconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#FFF0DB',
+  cardCheckBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FFB380',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
   },
-  iconCircleActive: {
-    backgroundColor: '#FFECCB',
+  serviceIcon: {
+    marginBottom: 12,
   },
   serviceLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#FFB43B',
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#0D0D11',
   },
   serviceLabelActive: {
-    color: '#D97706',
+    color: '#0D0D11',
     fontWeight: '800',
   },
+
   // STEP 2 STYLES
-  step2Container: {},
+  step2Container: {
+    width: '100%',
+  },
   typeToggleRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 14,
+    gap: 10,
+    marginBottom: 12,
   },
   typeCard: {
     flex: 1,
-    flexDirection: 'column',
-    alignItems: 'flex-start',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1.5,
-    borderColor: '#EFEFEF',
+    borderRadius: 22,
+    padding: 14,
+    alignItems: 'flex-start',
   },
   typeCardActive: {
-    borderColor: '#FFB43B',
-    backgroundColor: '#FFFBF5',
+    backgroundColor: '#FFF4ED',
   },
-  typeIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FFF0DB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
+  typeIcon: {
+    marginBottom: 10,
   },
   typeTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#0D0D11',
     marginBottom: 2,
   },
   typeSub: {
-    fontSize: 9.5,
-    color: '#888',
-    lineHeight: 12,
+    fontSize: 10.5,
+    color: '#6B7280',
+    lineHeight: 14,
   },
   calendarCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 12,
+    borderRadius: 24,
+    padding: 16,
     marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
   },
   calendarHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   calendarMonth: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: '#0D0D11',
   },
   calendarArrows: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
+  },
+  calendarArrowBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   daysHeader: {
     flexDirection: 'row',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   dayHeaderText: {
     width: '14.28%',
     textAlign: 'center',
-    fontSize: 10,
-    color: '#888',
-    fontWeight: '600',
+    fontSize: 10.5,
+    color: '#9CA3AF',
+    fontWeight: '700',
   },
   datesGrid: {
     flexDirection: 'row',
@@ -842,30 +866,32 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
   dateCell: {
-    width: 26,
-    height: 24,
+    width: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
+    borderRadius: 15,
   },
   dateCellSelected: {
-    backgroundColor: '#FFB43B',
+    backgroundColor: '#0D0D11',
   },
   dateCellText: {
-    fontSize: 10,
-    color: '#333',
+    fontSize: 11,
+    color: '#0D0D11',
+    fontWeight: '600',
   },
   dateCellMuted: {
-    color: '#CCC',
+    color: '#D1D5DB',
   },
   dateCellTextSelected: {
-    color: '#FFF',
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontWeight: '800',
   },
   sectionLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#9CA3AF',
+    letterSpacing: 0.8,
     marginBottom: 8,
   },
   timeSlotRow: {
@@ -875,65 +901,56 @@ const styles = StyleSheet.create({
   timeSlotCard: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingVertical: 8,
+    borderRadius: 18,
+    paddingVertical: 12,
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#EFEFEF',
   },
   timeSlotActive: {
-    borderColor: '#FFB43B',
-    backgroundColor: '#FFFBF5',
+    backgroundColor: '#FFF4ED',
   },
   timeSlotTitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#1A1A1A',
-    marginTop: 2,
+    color: '#0D0D11',
+    marginTop: 4,
   },
   timeSlotSub: {
-    fontSize: 8,
-    color: '#888',
+    fontSize: 9.5,
+    color: '#6B7280',
+    marginTop: 1,
   },
+
   // STEP 3 STYLES
-  step3Container: {},
+  step3Container: {
+    width: '100%',
+  },
   inputGroupLabel: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
-    color: '#666',
-    letterSpacing: 0.5,
-    marginBottom: 4,
+    color: '#9CA3AF',
+    letterSpacing: 0.8,
+    marginBottom: 6,
   },
   textInput: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    height: 44,
-    paddingHorizontal: 14,
+    borderRadius: 18,
+    height: 48,
+    paddingHorizontal: 16,
     fontSize: 13,
-    color: '#1A1A1A',
-    borderWidth: 1,
-    borderColor: '#E2E2E2',
+    color: '#0D0D11',
+    fontWeight: '600',
     marginBottom: 12,
   },
   twoColumnRow: {
     flexDirection: 'row',
   },
-  sectionLabelLarge: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    marginBottom: 6,
-  },
   multilineInput: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    height: 80,
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    fontSize: 12,
-    color: '#1A1A1A',
-    borderWidth: 1,
-    borderColor: '#E2E2E2',
+    borderRadius: 20,
+    height: 85,
+    padding: 14,
+    fontSize: 12.5,
+    color: '#0D0D11',
     textAlignVertical: 'top',
     marginBottom: 12,
   },
@@ -941,193 +958,201 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    height: 44,
-    paddingHorizontal: 14,
-    borderWidth: 1.5,
-    borderColor: '#1A1A1A',
+    borderRadius: 18,
+    height: 48,
+    paddingHorizontal: 16,
     marginBottom: 12,
   },
   currencyPrefix: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0D0D11',
     marginRight: 8,
   },
   offerInput: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0D0D11',
   },
   recommendBox: {
-    backgroundColor: '#E0F7FA',
-    borderRadius: 10,
-    padding: 10,
-    borderLeftWidth: 3,
-    borderLeftColor: '#00ACC1',
+    backgroundColor: '#FFF4ED',
+    borderRadius: 18,
+    padding: 14,
   },
   recommendTitle: {
-    fontSize: 10,
-    color: '#006064',
+    fontSize: 12,
+    color: '#B45309',
+    fontWeight: '600',
   },
   recommendSub: {
-    fontSize: 9,
-    color: '#00838F',
-    marginTop: 2,
+    fontSize: 10.5,
+    color: '#92400E',
+    marginTop: 3,
   },
+
   // STEP 4 STYLES
-  step4Container: {},
-  summaryTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#666',
-    letterSpacing: 0.5,
-    marginBottom: 8,
+  step4Container: {
+    width: '100%',
   },
   summaryCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 14,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: '#F6F5F2',
   },
   summaryLabel: {
     fontSize: 13,
-    color: '#666',
+    color: '#9CA3AF',
+    fontWeight: '600',
   },
   summaryValue: {
-    fontSize: 13,
+    fontSize: 13.5,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#0D0D11',
   },
   visibleNoticeBox: {
-    backgroundColor: '#E0F2F1',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 14,
   },
   visibleNoticeText: {
-    fontSize: 11,
-    color: '#00695C',
+    flex: 1,
+    fontSize: 11.5,
+    color: '#065F46',
+    fontWeight: '600',
+    lineHeight: 16,
   },
   checkboxRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 4,
   },
   checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: '#888',
-    marginRight: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
   },
   checkboxActive: {
-    backgroundColor: '#8F5CFF',
-    borderColor: '#8F5CFF',
+    backgroundColor: '#0D0D11',
   },
   checkboxText: {
     flex: 1,
-    fontSize: 11,
-    color: '#555',
+    fontSize: 11.5,
+    color: '#6B7280',
     lineHeight: 16,
   },
-  // BOTTOM BUTTONS (STATIONARY & UNIFIED ACROSS ALL STEPS - MATCHES REGISTRATION SCREEN)
+
+  // BOTTOM BUTTONS (ONE ROW COMPLETE PILL BUTTONS)
   bottomButtonsContainer: {
-    marginTop: 14,
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  nextButton: {
-    backgroundColor: '#FFB43B',
-    height: 38,
-    width: '82%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  nextButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '500',
+    gap: 12,
+    paddingTop: 12,
+    paddingBottom: 4,
+    width: '100%',
   },
   backButton: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#FFB43B',
-    height: 36,
-    width: '82%',
+    flex: 1,
+    backgroundColor: '#E5E7EB',
+    height: 48,
+    borderRadius: 9999,
     alignItems: 'center',
     justifyContent: 'center',
   },
   backButtonText: {
-    color: '#FFA51F',
-    fontSize: 14,
-    fontWeight: '500',
+    color: '#4B5563',
+    fontSize: 14.5,
+    fontWeight: '700',
   },
-  btnPressed: {
-    opacity: 0.78,
-  },
-  // SUCCESS OVERLAY (DARK BACKDROP WITH ANIMATED LOGO & LOADER RING)
-  successOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+  nextButton: {
+    flex: 1,
+    backgroundColor: '#0D0D11',
+    height: 48,
+    borderRadius: 9999,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 200,
+  },
+  nextButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  btnPressed: {
+    opacity: 0.8,
+  },
+
+  // SUCCESS OVERLAY
+  successOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
   },
   successContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    paddingVertical: 32,
+    paddingHorizontal: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   logoRingWrapper: {
-    width: 144,
-    height: 144,
+    width: 90,
+    height: 90,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    position: 'relative',
+    marginBottom: 16,
   },
   rotatingRing: {
     position: 'absolute',
-    width: 144,
-    height: 144,
-    borderRadius: 72,
-    borderWidth: 4.5,
-    borderColor: '#FFB43B',
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    borderWidth: 3,
+    borderColor: '#FFB380',
     borderTopColor: 'transparent',
-    borderRightColor: '#FFA51F',
   },
   innerLogoCircle: {
-    width: 124,
-    height: 124,
-    borderRadius: 62,
-    backgroundColor: '#1C3144',
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: '#FFF4ED',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#FFB43B',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 14,
-    elevation: 10,
   },
   successLogoImage: {
-    width: 82,
-    height: 82,
+    width: 44,
+    height: 44,
   },
   successTitleText: {
-    fontSize: 26,
+    fontSize: 17,
     fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
-    textAlign: 'center',
+    color: '#0D0D11',
+    marginTop: 4,
   },
 });
