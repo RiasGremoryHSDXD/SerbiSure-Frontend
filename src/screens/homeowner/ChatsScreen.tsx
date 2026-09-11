@@ -8,7 +8,7 @@ import THEME from '../../config/theme';
 import { NotificationBell } from '../../context/NotificationContext';
 
 import { ChatDetailScreen } from '../ChatDetailScreen';
-import { chatStore, ChatConversation } from '../../store/chatStore';
+import { chatStore, ChatConversation, cleanMessagePreview } from '../../store/chatStore';
 
 const logoSource = require('../../../assets/serbisure_new_clean.png');
 
@@ -93,6 +93,9 @@ export function ChatsScreen() {
   };
 
   const openChat = (name: string, role: string, avatar: string, partnerId?: string) => {
+    if (partnerId) {
+      chatStore.markAsRead(partnerId);
+    }
     setActiveChat({ visible: true, name, role, avatar, partnerId });
   };
 
@@ -179,37 +182,57 @@ export function ChatsScreen() {
               </Text>
             </View>
           ) : (
-            filteredChats.map((chat) => (
-              <Pressable
-                key={chat.id}
-                style={({ pressed }) => [styles.chatCard, pressed && styles.chatCardPressed]}
-                onPress={() => openChat(chat.name, chat.badge, chat.avatar, chat.partnerId)}
-              >
-                <View style={styles.avatarContainer}>
-                  <Image source={{ uri: chat.avatar }} style={styles.avatar} />
-                  {chat.online && <View style={styles.onlineDot} />}
-                </View>
-
-                <View style={styles.chatContent}>
-                  <View style={styles.titleRow}>
-                    <Text style={styles.name} numberOfLines={1}>
-                      {chat.name}
-                    </Text>
-                    <Text style={styles.time}>{chat.time}</Text>
+            filteredChats.map((chat) => {
+              const hasUnread = (chat.unreadCount || 0) > 0;
+              return (
+                <Pressable
+                  key={chat.id}
+                  style={({ pressed }) => [styles.chatCard, pressed && styles.chatCardPressed]}
+                  onPress={() => openChat(chat.name, chat.badge, chat.avatar, chat.partnerId)}
+                >
+                  <View style={styles.avatarContainer}>
+                    <Image source={{ uri: chat.avatar }} style={styles.avatar} />
+                    {chat.online && <View style={styles.onlineDot} />}
                   </View>
 
-                  <View style={styles.tagRow}>
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>{chat.badge}</Text>
+                  <View style={styles.chatContent}>
+                    <View style={styles.titleRow}>
+                      <Text style={[styles.name, hasUnread && styles.nameUnread]} numberOfLines={1}>
+                        {chat.name}
+                      </Text>
+                      <Text style={[styles.time, hasUnread && styles.timeUnread]}>{chat.time}</Text>
                     </View>
+
+                    <View style={styles.tagRow}>
+                      <View style={styles.badge}>
+                        <Text style={styles.badgeText}>{chat.badge}</Text>
+                      </View>
+                      {(chat.sentCount || 0) > 0 && (
+                        <View style={styles.sentBadge}>
+                          <Ionicons name="paper-plane-outline" size={10} color="#6B7280" style={{ marginRight: 3 }} />
+                          <Text style={styles.sentBadgeText}>{chat.sentCount} sent</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <Text
+                      style={[styles.message, hasUnread && styles.messageUnread]}
+                      numberOfLines={1}
+                    >
+                      {cleanMessagePreview(chat.message)}
+                    </Text>
                   </View>
 
-                  <Text style={styles.message} numberOfLines={1}>
-                    {chat.message}
-                  </Text>
-                </View>
-              </Pressable>
-            ))
+                  {hasUnread && (
+                    <View style={styles.unreadCountBadge}>
+                      <Text style={styles.unreadCountBadgeText}>
+                        {chat.unreadCount! > 99 ? '99+' : chat.unreadCount}
+                      </Text>
+                    </View>
+                  )}
+                </Pressable>
+              );
+            })
           )}
         </View>
 
@@ -237,7 +260,10 @@ export function ChatsScreen() {
       {/* Messenger-style Chat Detail Modal */}
       <ChatDetailScreen
         visible={activeChat.visible}
-        onClose={() => setActiveChat((prev) => ({ ...prev, visible: false }))}
+        onClose={() => {
+          setActiveChat((prev) => ({ ...prev, visible: false }));
+          loadInboxData();
+        }}
         partnerId={activeChat.partnerId}
         token={user.token}
         contactName={activeChat.name}
@@ -368,6 +394,10 @@ const styles = StyleSheet.create({
     color: THEME.colors.ink,
     marginRight: 8,
   },
+  nameUnread: {
+    fontWeight: '800',
+    color: '#000000',
+  },
   tagRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -387,16 +417,63 @@ const styles = StyleSheet.create({
     color: '#0D0D11',
     fontWeight: '800',
   },
+  sentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 9999,
+    marginLeft: 6,
+  },
+  sentBadgeText: {
+    fontSize: 10,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: '#4B5563',
+    fontWeight: '700',
+  },
   time: {
     fontSize: 11,
     fontFamily: THEME.typography.fontFamily.secondaryRegular,
     color: '#9CA3AF',
   },
+  timeUnread: {
+    color: '#FF2C55',
+    fontWeight: '700',
+  },
+  messageBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   message: {
+    flex: 1,
     fontSize: 13,
     fontFamily: THEME.typography.fontFamily.secondaryRegular,
     color: '#6B7280',
     lineHeight: 18,
+  },
+  messageUnread: {
+    color: '#111827',
+    fontWeight: '700',
+  },
+  unreadCountBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FE2C55',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    marginLeft: 10,
+    alignSelf: 'center',
+  },
+  unreadCountBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   bookingCard: {
     backgroundColor: '#FFFFFF',

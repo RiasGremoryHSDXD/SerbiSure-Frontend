@@ -17,17 +17,123 @@ import {
   markAllNotificationsRead,
   type NotificationItem,
 } from '../api/notificationsApi';
+import THEME from '../config/theme';
 
 interface NotificationsModalProps {
   visible: boolean;
   onClose: () => void;
   token?: string | null;
+  onUnreadCountChange?: (count: number) => void;
+}
+
+interface ParsedNotification {
+  category: 'chat' | 'booking' | 'verification' | 'review' | 'system';
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+  iconBg: string;
+  displayTitle: string;
+  displayBody: string;
+  tagLabel: string;
+}
+
+function parseNotification(item: NotificationItem): ParsedNotification {
+  const rawMessage = item.notification_message || '';
+  const sender = item.sender_name?.trim() || 'SerbiSure';
+
+  // Check if it's a chat message
+  const chatMatch =
+    rawMessage.match(/^New message from [^:]+:\s*["“](.*)["”]$/s) ||
+    rawMessage.match(/^New message from [^:]+:\s*(.*)$/s);
+
+  if (chatMatch) {
+    let cleanMsg = (chatMatch[1] ?? '').trim();
+    if (cleanMsg.startsWith('"') && cleanMsg.endsWith('"')) {
+      cleanMsg = cleanMsg.slice(1, -1).trim();
+    }
+    const quoteMatch = cleanMsg.match(/^> \[[^\]]+\]:\s*.*?\n\n([\s\S]*)$/);
+    if (quoteMatch && quoteMatch[1]) {
+      cleanMsg = quoteMatch[1].trim();
+    }
+    return {
+      category: 'chat',
+      icon: 'chatbubble-ellipses',
+      iconColor: '#2563EB',
+      iconBg: '#EFF6FF',
+      displayTitle: sender,
+      displayBody: cleanMsg,
+      tagLabel: 'Chat',
+    };
+  }
+
+  const lower = rawMessage.toLowerCase();
+
+  // Booking / Hire
+  if (
+    lower.includes('booking') ||
+    lower.includes('hired') ||
+    lower.includes('applied') ||
+    lower.includes('contract') ||
+    lower.includes('reschedule')
+  ) {
+    return {
+      category: 'booking',
+      icon: 'calendar',
+      iconColor: '#059669',
+      iconBg: '#ECFDF5',
+      displayTitle: sender !== 'Serbisure' && sender !== 'SerbiSure' ? sender : 'Booking Update',
+      displayBody: rawMessage,
+      tagLabel: 'Booking',
+    };
+  }
+
+  // Verification
+  if (
+    lower.includes('verif') ||
+    lower.includes('document') ||
+    lower.includes('id status') ||
+    lower.includes('badge')
+  ) {
+    return {
+      category: 'verification',
+      icon: 'shield-checkmark',
+      iconColor: '#7C3AED',
+      iconBg: '#F5F3FF',
+      displayTitle: 'Verification',
+      displayBody: rawMessage,
+      tagLabel: 'Security',
+    };
+  }
+
+  // Review / Rating
+  if (lower.includes('review') || lower.includes('rating') || lower.includes('star')) {
+    return {
+      category: 'review',
+      icon: 'star',
+      iconColor: '#D97706',
+      iconBg: '#FEF3C7',
+      displayTitle: sender !== 'Serbisure' && sender !== 'SerbiSure' ? sender : 'Review & Rating',
+      displayBody: rawMessage,
+      tagLabel: 'Review',
+    };
+  }
+
+  // Fallback: system / general notification
+  return {
+    category: 'system',
+    icon: 'notifications',
+    iconColor: THEME.colors.brandDark,
+    iconBg: THEME.colors.brandLight,
+    displayTitle: sender,
+    displayBody: rawMessage,
+    tagLabel: 'Notice',
+  };
 }
 
 function formatRelativeTime(dateString: string): string {
   try {
     const now = new Date();
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
     const diffSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
     if (diffSeconds < 60) return 'Just now';
@@ -36,6 +142,7 @@ function formatRelativeTime(dateString: string): string {
     const diffHours = Math.floor(diffMinutes / 60);
     if (diffHours < 24) return `${diffHours}h ago`;
     const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays}d ago`;
 
     return date.toLocaleDateString('en-US', {
@@ -52,6 +159,7 @@ export function NotificationsModal({
   visible,
   onClose,
   token,
+  onUnreadCountChange,
 }: NotificationsModalProps) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -70,8 +178,11 @@ export function NotificationsModal({
 
       try {
         const res = await fetchNotifications(token);
-        setNotifications(res.notifications || []);
-        setUnreadCount(res.unread_count || 0);
+        const fetchedList = res.notifications || [];
+        const fetchedUnread = res.unread_count || 0;
+        setNotifications(fetchedList);
+        setUnreadCount(fetchedUnread);
+        onUnreadCountChange?.(fetchedUnread);
       } catch (err) {
         console.warn('[NotificationsModal] load error:', err);
       } finally {
@@ -79,7 +190,7 @@ export function NotificationsModal({
         setRefreshing(false);
       }
     },
-    [token]
+    [token, onUnreadCountChange]
   );
 
   useEffect(() => {
@@ -99,7 +210,9 @@ export function NotificationsModal({
           : n
       )
     );
-    setUnreadCount((prev) => Math.max(0, prev - 1));
+    const newCount = Math.max(0, unreadCount - 1);
+    setUnreadCount(newCount);
+    onUnreadCountChange?.(newCount);
 
     try {
       await markNotificationRead(token, item.notification_id);
@@ -118,6 +231,7 @@ export function NotificationsModal({
         prev.map((n) => ({ ...n, notification_state: 'Read' }))
       );
       setUnreadCount(0);
+      onUnreadCountChange?.(0);
       await markAllNotificationsRead(token);
     } catch (err) {
       console.warn('[NotificationsModal] mark all error:', err);
@@ -128,33 +242,54 @@ export function NotificationsModal({
 
   const renderItem = ({ item }: { item: NotificationItem }) => {
     const isUnread = item.notification_state === 'Unread';
+    const meta = parseNotification(item);
 
     return (
       <Pressable
-        style={[styles.notificationCard, isUnread && styles.notificationCardUnread]}
+        style={({ pressed }) => [
+          styles.notificationCard,
+          isUnread ? styles.notificationCardUnread : styles.notificationCardRead,
+          pressed && styles.cardPressed,
+        ]}
         onPress={() => handleMarkOneRead(item)}
       >
-        <View style={[styles.iconBox, isUnread ? styles.iconBoxUnread : styles.iconBoxRead]}>
-          <Ionicons
-            name={isUnread ? 'notifications' : 'notifications-outline'}
-            size={18}
-            color={isUnread ? '#FFB43B' : '#999'}
-          />
+        {/* Dynamic Category Icon */}
+        <View style={[styles.iconBox, { backgroundColor: meta.iconBg }]}>
+          <Ionicons name={meta.icon} size={19} color={meta.iconColor} />
         </View>
 
+        {/* Content Column */}
         <View style={styles.contentCol}>
           <View style={styles.topRow}>
-            <Text style={[styles.senderName, isUnread && styles.senderNameUnread]} numberOfLines={1}>
-              {item.sender_name || 'Serbisure System'}
-            </Text>
-            <Text style={styles.timeText}>{formatRelativeTime(item.createdAt)}</Text>
+            <View style={styles.titleGroup}>
+              <Text
+                style={[styles.senderName, isUnread && styles.senderNameUnread]}
+                numberOfLines={1}
+              >
+                {meta.displayTitle}
+              </Text>
+              <View style={[styles.categoryPill, { backgroundColor: meta.iconBg }]}>
+                <Text style={[styles.categoryPillText, { color: meta.iconColor }]}>
+                  {meta.tagLabel}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.timeGroup}>
+              <Text style={[styles.timeText, isUnread && styles.timeTextUnread]}>
+                {formatRelativeTime(item.createdAt)}
+              </Text>
+              {isUnread && <View style={styles.unreadDot} />}
+            </View>
           </View>
-          <Text style={[styles.messageText, isUnread && styles.messageTextUnread]}>
-            {item.notification_message}
+
+          <Text
+            style={[styles.messageText, isUnread && styles.messageTextUnread]}
+            numberOfLines={2}
+          >
+            {meta.displayBody}
           </Text>
         </View>
-
-        {isUnread ? <View style={styles.unreadDot} /> : null}
       </Pressable>
     );
   };
@@ -168,42 +303,59 @@ export function NotificationsModal({
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContainer}>
-          {/* Header */}
+          {/* Sheet Handle */}
+          <View style={styles.sheetHandleContainer}>
+            <View style={styles.sheetHandle} />
+          </View>
+
+          {/* Modal Header */}
           <View style={styles.modalHeader}>
-            <View style={styles.headerLeft}>
-              <View style={styles.headerIconCircle}>
-                <Ionicons name="notifications" size={20} color="#FFB43B" />
-              </View>
-              <View style={{ marginLeft: 12 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={styles.modalTitle}>Notifications</Text>
-                  {unreadCount > 0 ? (
-                    <View style={styles.unreadBadge}>
-                      <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
-                    </View>
-                  ) : null}
+            <View style={styles.headerTitleGroup}>
+              <Text style={styles.modalTitle}>Notifications</Text>
+              {unreadCount > 0 ? (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
                 </View>
-                <Text style={styles.modalSubtitle}>Activity updates & alerts</Text>
-              </View>
+              ) : null}
             </View>
 
-            <View style={styles.headerRight}>
+            <View style={styles.headerActions}>
               {unreadCount > 0 ? (
                 <Pressable
                   onPress={handleMarkAllRead}
                   disabled={markingAll}
-                  style={styles.markAllBtn}
-                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.markAllBtn,
+                    pressed && styles.btnPressed,
+                  ]}
+                  hitSlop={6}
                 >
                   {markingAll ? (
-                    <ActivityIndicator size="small" color="#FFB43B" />
+                    <ActivityIndicator size="small" color={THEME.colors.brandDark} />
                   ) : (
-                    <Text style={styles.markAllBtnText}>Mark all read</Text>
+                    <>
+                      <Ionicons
+                        name="checkmark-done"
+                        size={15}
+                        color={THEME.colors.brandDark}
+                        style={{ marginRight: 4 }}
+                      />
+                      <Text style={styles.markAllBtnText}>Mark all read</Text>
+                    </>
                   )}
                 </Pressable>
               ) : null}
-              <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn}>
-                <Ionicons name="close" size={22} color="#777" />
+
+              <Pressable
+                onPress={onClose}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.closeBtn,
+                  pressed && styles.btnPressed,
+                ]}
+                accessibilityLabel="Close"
+              >
+                <Ionicons name="close" size={19} color="#4B5563" />
               </Pressable>
             </View>
           </View>
@@ -211,8 +363,8 @@ export function NotificationsModal({
           {/* Body */}
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#FFB43B" />
-              <Text style={styles.loadingText}>Loading notifications...</Text>
+              <ActivityIndicator size="large" color={THEME.colors.brandDark} />
+              <Text style={styles.loadingText}>Updating notifications...</Text>
             </View>
           ) : (
             <FlatList
@@ -225,18 +377,18 @@ export function NotificationsModal({
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={() => loadNotifications(true)}
-                  colors={['#FFB43B']}
-                  tintColor="#FFB43B"
+                  colors={[THEME.colors.brandDark]}
+                  tintColor={THEME.colors.brandDark}
                 />
               }
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
                   <View style={styles.emptyIconCircle}>
-                    <Ionicons name="chatbubbles-outline" size={38} color="#D1D5DB" />
+                    <Ionicons name="notifications-off-outline" size={32} color="#9CA3AF" />
                   </View>
-                  <Text style={styles.emptyTitle}>No notifications yet</Text>
+                  <Text style={styles.emptyTitle}>All caught up!</Text>
                   <Text style={styles.emptySubtitle}>
-                    You're all caught up! Updates regarding bookings, verification status, and inquiries will appear right here.
+                    You have no notifications right now. Activity and updates will appear here.
                   </Text>
                 </View>
               }
@@ -251,82 +403,90 @@ export function NotificationsModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: 'rgba(13, 13, 17, 0.45)',
     justifyContent: 'flex-end',
   },
   modalContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    height: '85%',
-    paddingBottom: Platform.OS === 'ios' ? 32 : 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 10,
+    backgroundColor: THEME.colors.canvas,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    height: '84%',
+    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+    overflow: 'hidden',
+  },
+  sheetHandleContainer: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  sheetHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D1D5DB',
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 8,
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0EAE1',
   },
-  headerLeft: {
+  headerTitleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-  },
-  headerIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFF4E5',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   modalTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontSize: 22,
+    fontWeight: '800',
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
+    letterSpacing: -0.4,
   },
   unreadBadge: {
-    backgroundColor: '#FFB43B',
-    borderRadius: 10,
-    paddingHorizontal: 7,
-    paddingVertical: 1,
+    backgroundColor: THEME.colors.brandDark,
+    borderRadius: THEME.roundness.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     marginLeft: 8,
   },
   unreadBadgeText: {
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontSize: 11.5,
+    fontWeight: '800',
+    fontFamily: THEME.typography.fontFamily.mainBold,
   },
-  modalSubtitle: {
-    fontSize: 12,
-    color: '#777',
-    marginTop: 2,
-  },
-  headerRight: {
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   markAllBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: THEME.colors.brandLight,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: THEME.roundness.pill,
   },
   markAllBtnText: {
-    fontSize: 12.5,
-    fontWeight: '600',
-    color: '#FFB43B',
+    fontSize: 12,
+    fontWeight: '700',
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    color: THEME.colors.brandDark,
   },
   closeBtn: {
-    padding: 6,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#EBEBE6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnPressed: {
+    opacity: 0.75,
+    transform: [{ scale: 0.96 }],
   },
   loadingContainer: {
     flex: 1,
@@ -336,41 +496,41 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    fontSize: 13.5,
-    color: '#888',
+    fontSize: 13,
+    color: THEME.colors.textSecondary,
+    fontFamily: THEME.typography.fontFamily.body,
   },
   listContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 24,
     flexGrow: 1,
   },
   notificationCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 22,
     padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#EFECE6',
+    marginBottom: 9,
   },
   notificationCardUnread: {
-    backgroundColor: '#FFFBF5',
-    borderColor: '#FDEBD0',
+    backgroundColor: THEME.colors.white,
+  },
+  notificationCardRead: {
+    backgroundColor: '#EAEAE5',
+    opacity: 0.88,
+  },
+  cardPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.99 }],
   },
   iconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
-  },
-  iconBoxUnread: {
-    backgroundColor: '#FFF3E0',
-  },
-  iconBoxRead: {
-    backgroundColor: '#F5F5F3',
   },
   contentCol: {
     flex: 1,
@@ -381,62 +541,91 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
-  senderName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#555',
+  titleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1,
     marginRight: 8,
   },
+  senderName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4B5563',
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    maxWidth: '72%',
+  },
   senderNameUnread: {
-    color: '#1A1A1A',
+    color: THEME.colors.ink,
+    fontWeight: '800',
+  },
+  categoryPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 1.5,
+    borderRadius: THEME.roundness.pill,
+    marginLeft: 6,
+  },
+  categoryPillText: {
+    fontSize: 10,
     fontWeight: '700',
+    fontFamily: THEME.typography.fontFamily.mainBold,
+  },
+  timeGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   timeText: {
-    fontSize: 11,
-    color: '#999',
+    fontSize: 11.5,
+    color: '#9CA3AF',
+    fontFamily: THEME.typography.fontFamily.body,
+  },
+  timeTextUnread: {
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  unreadDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: THEME.colors.brandDark,
+    marginLeft: 5,
   },
   messageText: {
     fontSize: 13,
-    color: '#666',
-    lineHeight: 18,
+    color: THEME.colors.textSecondary,
+    lineHeight: 18.5,
+    fontFamily: THEME.typography.fontFamily.body,
   },
   messageTextUnread: {
-    color: '#2A2A2A',
+    color: '#1F2937',
+    fontFamily: THEME.typography.fontFamily.bodyMedium,
     fontWeight: '500',
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FFB43B',
-    alignSelf: 'center',
-    marginLeft: 8,
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 30,
+    paddingVertical: 64,
+    paddingHorizontal: 32,
   },
   emptyIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#F8F7F4',
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: THEME.colors.white,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
   },
   emptyTitle: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 8,
+    fontWeight: '800',
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
+    marginBottom: 6,
   },
   emptySubtitle: {
     fontSize: 13,
-    color: '#888',
+    color: THEME.colors.textSecondary,
+    fontFamily: THEME.typography.fontFamily.body,
     textAlign: 'center',
     lineHeight: 19,
   },

@@ -10,9 +10,19 @@ export interface ChatConversation {
   message: string;
   online: boolean;
   unreadCount?: number;
+  sentCount?: number;
 }
 
 type ChatListener = () => void;
+
+export function cleanMessagePreview(text?: string | null): string {
+  if (!text) return '';
+  const match = text.match(/^> \[[^\]]+\]:\s*.*?\n\n([\s\S]*)$/);
+  if (match && match[1]) {
+    return match[1].trim();
+  }
+  return text;
+}
 
 function formatTimestamp(isoString?: string | null): string {
   if (!isoString) return 'Just now';
@@ -42,6 +52,17 @@ class ChatStore {
   private chats: ChatConversation[] = [];
   private isLoaded: boolean = false;
   private listeners: ChatListener[] = [];
+  private deletedMessageIds: Set<string> = new Set();
+
+  markMessageDeleted(messageId: string): void {
+    if (messageId) {
+      this.deletedMessageIds.add(String(messageId));
+    }
+  }
+
+  isMessageDeleted(messageId: string): boolean {
+    return this.deletedMessageIds.has(String(messageId));
+  }
 
   getChats(): ChatConversation[] {
     return this.chats;
@@ -49,6 +70,10 @@ class ChatStore {
 
   getIsLoaded(): boolean {
     return this.isLoaded;
+  }
+
+  getTotalUnreadCount(): number {
+    return this.chats.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
   }
 
   async loadInbox(token?: string | null): Promise<ChatConversation[]> {
@@ -69,16 +94,21 @@ class ChatStore {
           p.partner_profile_image ||
           `https://ui-avatars.com/api/?name=${encodeURIComponent(p.partner_name || 'User')}&background=FFB43B&color=fff`,
         time: formatTimestamp(p.last_message_time),
-        message: p.last_message || 'Start a conversation',
+        message: cleanMessagePreview(p.last_message) || 'Start a conversation',
         online: true,
         unreadCount: p.unread_count || 0,
+        sentCount: p.sent_count || 0,
       }));
 
       this.isLoaded = true;
       this.notify();
       return this.chats;
-    } catch (err) {
-      console.warn('[ChatStore] Error loading inbox from backend:', err);
+    } catch (err: any) {
+      if (err?.message?.includes('Given token not valid') || err?.message?.includes('401')) {
+        console.log('[ChatStore] Session token expired or invalid');
+      } else {
+        console.log('[ChatStore] Error loading inbox from backend:', err?.message || err);
+      }
       return this.chats;
     }
   }
@@ -100,9 +130,10 @@ class ChatStore {
         chat.avatar ||
         `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.name || 'User')}&background=FFB43B&color=fff`,
       time: chat.time || 'Just now',
-      message: chat.message || '',
+      message: cleanMessagePreview(chat.message) || '',
       online: chat.online ?? true,
       unreadCount: chat.unreadCount ?? 0,
+      sentCount: chat.sentCount ?? (existingIndex >= 0 ? this.chats[existingIndex]?.sentCount : 0) ?? 0,
     };
 
     if (existingIndex >= 0) {
@@ -116,6 +147,15 @@ class ChatStore {
     }
 
     this.notify();
+  }
+
+  markAsRead(partnerId: string | number): void {
+    const idKey = String(partnerId);
+    const chat = this.chats.find((c) => String(c.partnerId || c.id) === idKey);
+    if (chat && (chat.unreadCount || 0) > 0) {
+      chat.unreadCount = 0;
+      this.notify();
+    }
   }
 
   subscribe(listener: ChatListener): () => void {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +19,7 @@ import { PostJobScreen } from '../screens/homeowner/PostJobScreen';
 import { PostServiceScreen } from '../screens/kasambahay/PostServiceScreen';
 
 import { useUser } from '../context/UserContext';
+import { chatStore } from '../store/chatStore';
 
 export type Role = 'homeowner' | 'kasambahay';
 export type Tab = 'home' | 'services' | 'chats' | 'profile';
@@ -39,10 +40,36 @@ export function BottomTabNavigator({ role = 'homeowner', avatarUri: oldAvatarUri
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [profileInitialView, setProfileInitialView] = useState<'main' | 'personal_info'>('main');
   const [postJobVisible, setPostJobVisible] = useState(false);
+  const [totalUnreadChats, setTotalUnreadChats] = useState(chatStore.getTotalUnreadCount());
+
   const isKasambahay = user.accountType
     ? user.accountType.toLowerCase() === 'kasambahay'
     : role.toLowerCase() === 'kasambahay';
   const avatarUri = user.profileLink || oldAvatarUri;
+  const authToken = token || user.token;
+
+  useEffect(() => {
+    setTotalUnreadChats(chatStore.getTotalUnreadCount());
+
+    if (authToken) {
+      chatStore.loadInbox(authToken);
+    }
+
+    const interval = setInterval(() => {
+      if (authToken) {
+        chatStore.loadInbox(authToken);
+      }
+    }, 6000);
+
+    const unsubscribe = chatStore.subscribe(() => {
+      setTotalUnreadChats(chatStore.getTotalUnreadCount());
+    });
+
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
+  }, [authToken]);
 
   const handleOpenProfileView = () => {
     setProfileInitialView('personal_info');
@@ -139,11 +166,20 @@ export function BottomTabNavigator({ role = 'homeowner', avatarUri: oldAvatarUri
               style={[styles.tabIconBg, activeTab === 'chats' && styles.tabIconBgActive]}
               onPress={() => setActiveTab('chats')}
             >
-              <Ionicons
-                name={activeTab === 'chats' ? 'chatbubble' : 'chatbubble-outline'}
-                size={23}
-                color={activeTab === 'chats' ? THEME.colors.ink : THEME.colors.textMuted}
-              />
+              <View style={styles.tabIconWrapper}>
+                <Ionicons
+                  name={activeTab === 'chats' ? 'chatbubble' : 'chatbubble-outline'}
+                  size={23}
+                  color={activeTab === 'chats' ? THEME.colors.ink : THEME.colors.textMuted}
+                />
+                {totalUnreadChats > 0 && (
+                  <View style={styles.tabBadge}>
+                    <Text style={styles.tabBadgeText}>
+                      {totalUnreadChats > 99 ? '99+' : totalUnreadChats}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </Pressable>
           </View>
 
@@ -220,6 +256,33 @@ const styles = StyleSheet.create({
   },
   tabIconBgActive: {
     backgroundColor: THEME.colors.brandLight,
+  },
+  tabIconWrapper: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -10,
+    minWidth: 19,
+    height: 19,
+    borderRadius: 9.5,
+    backgroundColor: '#FE2C55',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  tabBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   fab: {
     width: 58,
