@@ -71,6 +71,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         visible={isModalVisible}
         onClose={closeNotifications}
         token={user?.token}
+        onUnreadCountChange={setUnreadCount}
       />
     </NotificationContext.Provider>
   );

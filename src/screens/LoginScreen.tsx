@@ -65,12 +65,15 @@ export function LoginScreen({ onLoginSuccess, onSignUp, onBack }: LoginScreenPro
 
   const handleLogin = async () => {
     setErrorMsg('');
-    if (!email.trim()) {
-      setErrorMsg('Please enter your email address.');
+    const identifier = email.trim();
+    if (!identifier) {
+      setErrorMsg('Please enter your email or phone number.');
       return;
     }
-    if (!email.includes('@')) {
-      setErrorMsg('Please enter a valid email address.');
+    const isEmail = identifier.includes('@');
+    const isPhone = /^[0-9+()\- ]{7,15}$/.test(identifier);
+    if (!isEmail && !isPhone) {
+      setErrorMsg('Please enter a valid email or phone number.');
       return;
     }
     if (!password) {
@@ -85,7 +88,7 @@ export function LoginScreen({ onLoginSuccess, onSignUp, onBack }: LoginScreenPro
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email: email.trim(), password }),
+        body: JSON.stringify({ email: identifier, password }),
       });
 
       const data = await response.json();
@@ -140,12 +143,12 @@ export function LoginScreen({ onLoginSuccess, onSignUp, onBack }: LoginScreenPro
             </View>
           ) : null}
 
-          {/* Email Field */}
+          {/* Email or Phone Field */}
           <View style={styles.inputWrapper}>
             <Ionicons name="mail" size={18} color="#000000" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Email"
+              placeholder="Email or phone number"
               placeholderTextColor="#999"
               value={email}
               onChangeText={setEmail}

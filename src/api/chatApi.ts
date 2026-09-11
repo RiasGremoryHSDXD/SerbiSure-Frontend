@@ -19,6 +19,7 @@ export interface ConversationPartner {
   last_message: string;
   last_message_time: string;
   unread_count: number;
+  sent_count?: number;
 }
 
 export interface ChatMessageItem {
@@ -40,6 +41,16 @@ export interface ChatMessageItem {
 export interface SendMessageResponse {
   message: string;
   data: ChatMessageItem;
+}
+
+export interface ToggleReactionResponse {
+  message: string;
+  action: 'added' | 'removed' | 'changed';
+  data: {
+    message_id: string;
+    my_reaction: string | null;
+    reaction_counts: Record<string, number>;
+  };
 }
 
 /**
@@ -68,12 +79,16 @@ export async function fetchChatInbox(token: string): Promise<ConversationPartner
   return [];
 }
 
+export interface FetchChatThreadResult {
+  messages: ChatMessageItem[];
+  partnerIsTyping: boolean;
+}
+
 /**
  * GET /api/v1/chat/thread/<partner_id>/
- * Retrieves conversation messages between authenticated user and partner.
- * Safely handles both direct [] and { results: [] } / { data: [] }.
+ * Retrieves conversation messages and typing status between authenticated user and partner.
  */
-export async function fetchChatThread(token: string, partnerId: string): Promise<ChatMessageItem[]> {
+export async function fetchChatThreadDetails(token: string, partnerId: string): Promise<FetchChatThreadResult> {
   const res = await fetchWithTimeout(`${CHAT_BASE}/thread/${partnerId}/`, {
     method: 'GET',
     headers: {
@@ -88,10 +103,33 @@ export async function fetchChatThread(token: string, partnerId: string): Promise
   }
 
   const json = await res.json();
-  if (Array.isArray(json)) return json;
-  if (Array.isArray(json?.data)) return json.data;
-  if (Array.isArray(json?.results)) return json.results;
-  return [];
+  let messages: ChatMessageItem[] = [];
+  let partnerIsTyping = false;
+
+  if (Array.isArray(json)) {
+    messages = json;
+  } else if (Array.isArray(json?.data)) {
+    messages = json.data;
+    partnerIsTyping = Boolean(json.partner_is_typing);
+  } else if (Array.isArray(json?.results)) {
+    messages = json.results;
+    partnerIsTyping = Boolean(json.partner_is_typing);
+  }
+
+  if (!partnerIsTyping && res.headers.get('x-partner-is-typing') === 'true') {
+    partnerIsTyping = true;
+  }
+
+  return { messages, partnerIsTyping };
+}
+
+/**
+ * GET /api/v1/chat/thread/<partner_id>/
+ * Retrieves conversation messages between authenticated user and partner.
+ */
+export async function fetchChatThread(token: string, partnerId: string): Promise<ChatMessageItem[]> {
+  const result = await fetchChatThreadDetails(token, partnerId);
+  return result.messages;
 }
 
 /**
@@ -265,4 +303,60 @@ export async function reactToChatMessage(
   }
 
   return data;
+}
+
+export const toggleChatReaction = reactToChatMessage;
+
+/**
+ * DELETE /api/v1/chat/message/<message_id>/
+ * Deletes or unsends a message in the conversation.
+ */
+export async function deleteChatMessage(
+  token: string,
+  messageId: string
+): Promise<{ message: string; data: { message_id: string } }> {
+  const cleanId = encodeURIComponent(messageId.trim());
+  const res = await fetchWithTimeout(`${CHAT_BASE}/message/${cleanId}/`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = data.detail || `Failed to delete message (${res.status})`;
+    throw new Error(msg);
+  }
+
+  return data;
+}
+
+/**
+ * POST /api/v1/chat/typing/
+ * Broadcasts typing status to the partner.
+ */
+export async function sendChatTyping(
+  token: string,
+  partnerId: string,
+  isTyping: boolean = true
+): Promise<void> {
+  try {
+    await fetchWithTimeout(
+      `${CHAT_BASE}/typing/`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          partner_id: partnerId,
+          is_typing: isTyping,
+        }),
+      },
+      4000
+    );
+  } catch {}
 }

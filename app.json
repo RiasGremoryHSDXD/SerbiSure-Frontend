@@ -5,6 +5,12 @@
     "version": "0.1.1",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "icon": "./assets/serbisure_new_clean.png",
+    "splash": {
+      "image": "./assets/serbisure_new_clean.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#05070A"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -25,11 +31,16 @@
     ],
     "ios": {
       "supportsTablet": false,
+      "bundleIdentifier": "com.serbisure.frontend",
       "infoPlist": {
         "NSCameraUsageDescription": "SerbiSure needs camera access for liveness detection."
       }
     },
     "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/serbisure_new_clean.png",
+        "backgroundColor": "#FFFFFF"
+      },
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_MEDIA_IMAGES",
