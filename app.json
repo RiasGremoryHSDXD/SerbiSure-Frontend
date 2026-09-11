@@ -2,7 +2,7 @@
   "expo": {
     "name": "SerbiSure",
     "slug": "serbisure-frontend",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "icon": "./assets/serbisure_new_clean.png",

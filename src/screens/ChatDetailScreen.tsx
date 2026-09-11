@@ -33,6 +33,7 @@ import {
   sendChatMessage,
   sendChatImage,
   toggleChatReaction,
+  reactToChatMessage,
   deleteChatMessage,
   markChatMessageRead,
   sendChatTyping,
@@ -214,7 +215,7 @@ function formatTimeOnly(isoString?: string): string {
   }
 }
 
-const REACTION_OPTIONS = ['❤️', '👍', '😂', '😭', '😮'];
+const REACTION_OPTIONS = ['❤️', '👍', '😂', '😢', '😮'];
 
 function isEmojiOnly(str?: string): boolean {
   if (!str) return false;
@@ -354,6 +355,8 @@ export function ChatDetailScreen({
   const [inputMessage, setInputMessage] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [reactingMessageId, setReactingMessageId] = useState<string | null>(null);
   const [activeActionMenuMsg, setActiveActionMenuMsg] = useState<ChatMessage | null>(null);
   const [activeMenuLayout, setActiveMenuLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const messageRefs = useRef<{ [id: string]: View | null }>({});
@@ -795,65 +798,80 @@ export function ChatDetailScreen({
         quality: 0.8,
       });
 
-      if (!result.canceled && result.assets && result.assets[0]?.uri) {
-        const imageUri = result.assets[0].uri;
-        const now = new Date();
-        const hours = now.getHours();
-        const minutes = now.getMinutes().toString().padStart(2, '0');
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        const formattedHours = hours % 12 || 12;
-        const timeString = `${formattedHours}:${minutes} ${ampm}`;
+      if (result.canceled || !result.assets?.[0]?.uri) return;
 
-        const tempId = `temp-${Date.now()}`;
-        const newMsg: ChatMessage = {
-          id: tempId,
-          sender: 'me',
-          imageUri: imageUri,
-          time: timeString,
-          isUploading: true,
-        };
+      const imageUri = result.assets[0].uri;
 
-        setMessages((prev) => {
-          const nonTyping = prev.filter((m) => !m.isTyping);
-          return [...nonTyping, newMsg];
-        });
+      if (!partnerId || !effectiveToken) {
+        Alert.alert('Error', 'Cannot send image: conversation is not ready.');
+        return;
+      }
 
-        setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 100);
+      const fileSize = result.assets[0].fileSize;
+      if (fileSize && fileSize > 10 * 1024 * 1024) {
+        Alert.alert('File Too Large', 'Please choose an image under 10MB.');
+        return;
+      }
 
-        if (partnerId && effectiveToken) {
-          sendChatImage(effectiveToken, partnerId, imageUri)
-            .then((res) => {
-              if (res?.data?.chat_message_id) {
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === tempId
-                      ? {
-                          ...msg,
-                          id: res.data.chat_message_id,
-                          imageUri: res.data.image_url || msg.imageUri,
-                          isUploading: false,
-                        }
-                      : msg
-                  )
-                );
-              }
-              chatStore.addOrUpdateChat({
-                partnerId,
-                name: contactName,
-                badge: contactRole,
-                avatar: contactAvatar,
-                message: '📷 Photo',
-                time: 'Just now',
-              });
-            })
-            .catch((err) => {
-              console.warn('[ChatDetailScreen] upload image error:', err);
-              Alert.alert('Upload Failed', err.message || 'Could not send photo. Please try again.');
-              setMessages((prev) => prev.filter((msg) => msg.id !== tempId));
-            });
+      const now = new Date();
+      const timeString = formatTimeOnly(now.toISOString());
+      const tempId = `temp-img-${Date.now()}`;
+
+      const newMsg: ChatMessage = {
+        id: tempId,
+        sender: 'me',
+        imageUri: imageUri,
+        time: timeString,
+        isUploading: true,
+      };
+
+      setMessages((prev) => {
+        const nonTyping = prev.filter((m) => !m.isTyping);
+        return [...nonTyping, newMsg];
+      });
+
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+
+      setIsUploadingImage(true);
+      try {
+        const res = await sendChatImage(effectiveToken, partnerId, imageUri);
+        if (res?.data?.chat_message_id) {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === tempId
+                ? {
+                    ...msg,
+                    id: res.data.chat_message_id,
+                    imageUri: res.data.image_url || imageUri,
+                  }
+                : msg
+            )
+          );
         }
+        chatStore.addOrUpdateChat({
+          partnerId,
+          name: contactName,
+          badge: contactRole,
+          avatar: contactAvatar,
+          message: '📷 Photo',
+          time: 'Just now',
+        });
+      } catch (uploadErr: any) {
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        const errMsg = uploadErr?.message || 'Could not send image. Please try again.';
+        if (errMsg.toLowerCase().includes('too large') || errMsg.toLowerCase().includes('10 mb')) {
+          Alert.alert('File Too Large', 'Please choose an image under 10MB.');
+        } else if (errMsg.toLowerCase().includes('format') || errMsg.toLowerCase().includes('unsupported')) {
+          Alert.alert('Invalid Format', 'Only JPEG, PNG, and WEBP images are supported.');
+        } else if (errMsg.toLowerCase().includes('rate') || errMsg.toLowerCase().includes('limit') || errMsg.toLowerCase().includes('too many')) {
+          Alert.alert('Slow Down', 'You are sending images too quickly. Please wait a moment.');
+        } else {
+          Alert.alert('Upload Failed', errMsg);
+        }
+      } finally {
+        setIsUploadingImage(false);
       }
     } catch (err) {
       console.log('Error choosing image in chat:', err);
@@ -862,8 +880,9 @@ export function ChatDetailScreen({
   };
 
   const handleSelectReaction = async (emoji: string, targetId?: string) => {
-    const targetMsgId = targetId || activeActionMenuMsg?.id;
+    const targetMsgId = targetId || activeActionMenuMsg?.id || reactingMessageId;
     if (!targetMsgId) return;
+    setReactingMessageId(null);
 
     // Normalize heart emoji
     const normalizedEmoji = emoji === '\u2764' ? '❤️' : emoji;
@@ -1370,6 +1389,12 @@ export function ChatDetailScreen({
         ) : null}
 
         {/* Messenger Style Input Footer */}
+        {isUploadingImage && (
+          <View style={styles.uploadingBar}>
+            <ActivityIndicator size="small" color="#FFB43B" />
+            <Text style={styles.uploadingText}>Sending photo...</Text>
+          </View>
+        )}
         <View style={[styles.inputFooter, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           <Pressable style={styles.attachBtn} onPress={handlePickImage}>
             <Ionicons name="add-circle" size={32} color="#FFB43B" />
@@ -1443,6 +1468,8 @@ export function ChatDetailScreen({
         isConfirmed={activeBookingMsgId ? messages.find((m) => m.id === activeBookingMsgId)?.bookingInfo?.isConfirmed : false}
         userRole={isHomeowner ? 'homeowner' : 'kasambahay'}
         initialDetails={activeBookingDetails}
+        token={effectiveToken}
+        bookingType="long_term"
         onConfirm={(details) => {
           const now = new Date();
           const hours = now.getHours();
@@ -1914,16 +1941,50 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#E5E7EB',
   },
+  imageBubbleContainer: {
+    position: 'relative',
+  },
+  imageBubbleFrame: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  bubbleWithImage: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 10,
+    overflow: 'visible',
+  },
+  imageHeaderFrame: {
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+    marginBottom: 4,
+  },
   chatImage: {
-    width: 200,
-    height: 200,
-    borderRadius: 14,
+    width: 220,
+    height: 220,
+    borderRadius: 16,
   },
   imageUploadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.35)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  chatImageWithCaption: {
+    width: 220,
+    height: 200,
+  },
+  imageCaptionText: {
+    paddingHorizontal: 14,
+    paddingTop: 4,
   },
   rightMsgText: {
     fontSize: 14,
@@ -2142,6 +2203,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
   },
   reactionBadgePillLeft: {
     right: -4,
@@ -2437,5 +2509,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     fontFamily: THEME.typography.fontFamily.secondarySemiBold,
+  },
+  reactionBadgeText: {
+    fontSize: 14,
+  },
+  uploadingBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    backgroundColor: '#FFF8EB',
+    borderTopWidth: 1,
+    borderTopColor: '#FFE0B2',
+  },
+  uploadingText: {
+    marginLeft: 8,
+    fontSize: 12,
+    color: '#8A5A00',
+    fontWeight: '500',
   },
 });

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { fetchMinimumWage, MinimumWageData } from '../api/bookingApi';
 
 const logoSource = require('../../assets/serbisure-logo.png');
 
@@ -23,6 +24,8 @@ interface BookingModalProps {
   readOnly?: boolean;
   isConfirmed?: boolean;
   userRole?: 'homeowner' | 'kasambahay';
+  token?: string | null;
+  bookingType?: 'long_term' | 'short_term';
   initialDetails?: {
     startDate?: string;
     endDate?: string;
@@ -60,6 +63,8 @@ export function BookingModal({
   readOnly = false,
   isConfirmed = false,
   userRole = 'homeowner',
+  token,
+  bookingType = 'long_term',
   initialDetails = null,
   onConfirm,
   onKasambahayConfirm,
@@ -72,6 +77,7 @@ export function BookingModal({
   const [location, setLocation] = useState('');
   const [selectedDays, setSelectedDays] = useState<string[]>(['M', 'T', 'W', 'Th', 'F']);
   const [salary, setSalary] = useState('5000');
+  const [minWageInfo, setMinWageInfo] = useState<MinimumWageData | null>(null);
   const [scope, setScope] = useState<Record<string, boolean>>({
     cooking: true,
     laundry: true,
@@ -107,6 +113,16 @@ export function BookingModal({
     }
   }, [visible, initialDetails, readOnly]);
 
+  useEffect(() => {
+    if (visible && bookingType === 'long_term') {
+      fetchMinimumWage(token || undefined, 'long_term', location)
+        .then((data) => {
+          if (data) setMinWageInfo(data);
+        })
+        .catch(() => {});
+    }
+  }, [visible, bookingType, location, token]);
+
   // Date Picker Modal State
   const [datePickerTarget, setDatePickerTarget] = useState<'start' | 'end' | null>(null);
   const [calendarYear, setCalendarYear] = useState(2026);
@@ -136,6 +152,15 @@ export function BookingModal({
   const handleConfirm = () => {
     if (!location.trim()) {
       Alert.alert('Location Required', 'Please enter a work location to confirm booking.');
+      return;
+    }
+
+    if (bookingType === 'long_term' && isBelowMinWage) {
+      Alert.alert(
+        'Below Minimum Wage',
+        `The monthly salary must be at least ₱${effectiveMinMonthly.toLocaleString()} (approx. ₱${effectiveMinDaily.toFixed(2)}/day) as mandated by ${minWageInfo?.wage_order || 'Batas Kasambahay (RA 10361)'}.`,
+        [{ text: 'OK' }]
+      );
       return;
     }
 
@@ -180,7 +205,9 @@ export function BookingModal({
   };
 
   const salaryNum = parseInt(salary, 10) || 0;
-  const isBelowMinWage = salaryNum > 0 && salaryNum < 6000;
+  const effectiveMinDaily = minWageInfo?.min_daily_rate ? parseFloat(minWageInfo.min_daily_rate) : 250;
+  const effectiveMinMonthly = minWageInfo?.min_monthly_rate ? parseFloat(minWageInfo.min_monthly_rate) : 6500;
+  const isBelowMinWage = bookingType === 'long_term' && salaryNum > 0 && salaryNum < effectiveMinMonthly;
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false} statusBarTranslucent onRequestClose={onClose}>
@@ -340,7 +367,7 @@ export function BookingModal({
               </View>
               {isBelowMinWage && (
                 <Text style={styles.warningText}>
-                  Salary is below regional minimum wage of P6,000/month as mandated by RTWPB-10.
+                  {minWageInfo?.description || `Salary is below statutory minimum wage of ₱${effectiveMinMonthly.toLocaleString()}/month under Batas Kasambahay (RA 10361).`}
                 </Text>
               )}
             </View>
