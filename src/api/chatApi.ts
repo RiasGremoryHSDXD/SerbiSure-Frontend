@@ -26,7 +26,12 @@ export interface ChatMessageItem {
   sender_id: string;
   receiver_id: string;
   booking_id: string | null;
-  message_payload: string;
+  message_payload: string | null;
+  message_type?: 'text' | 'image';
+  image_url?: string | null;
+  image_public_id?: string | null;
+  reaction_summary?: Record<string, number>;
+  my_reaction?: string | null;
   is_read: boolean;
   is_sender: boolean;
   createdAt: string;
@@ -148,4 +153,116 @@ export async function markChatMessageRead(token: string, messageId: string): Pro
     // Non-critical, ignore silent failures
     console.warn(`[chatApi] markChatMessageRead error: ${res.status}`);
   }
+}
+
+/**
+ * POST /api/v1/chat/send-image/
+ * Sends an image file attachment to receiverId using multipart/form-data.
+ * Supports JPEG, PNG, and WEBP up to 10MB.
+ */
+export async function sendChatImage(
+  token: string,
+  receiverId: string,
+  imageUri: string,
+  caption?: string,
+  bookingId?: string | null
+): Promise<SendMessageResponse> {
+  const idempotencyKey = generateUUID();
+
+  const ext = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+  const mimeMap: Record<string, string> = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+  };
+  const mimeType = mimeMap[ext] || 'image/jpeg';
+  const filename = imageUri.split('/').pop() || `chat_${Date.now()}.${ext}`;
+
+  const formData = new FormData();
+  formData.append('receiver_id', receiverId);
+  formData.append('image', {
+    uri: imageUri,
+    name: filename,
+    type: mimeType,
+  } as any);
+
+  if (caption && caption.trim()) {
+    formData.append('message_payload', caption.trim());
+  }
+
+  if (bookingId) {
+    formData.append('booking_id', bookingId);
+  }
+
+  const res = await fetchWithTimeout(
+    `${CHAT_BASE}/send-image/`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: formData,
+    },
+    30000 // 30s timeout for Cloudinary upload
+  );
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const msg =
+      data.image?.[0] ||
+      data.message_payload?.[0] ||
+      data.detail ||
+      data.non_field_errors?.[0] ||
+      `Failed to send image (${res.status})`;
+    throw new Error(msg);
+  }
+
+  return data;
+}
+
+export interface ReactResponse {
+  message: string;
+  action: 'added' | 'removed' | 'changed';
+  data: {
+    message_id: string;
+    my_reaction: string | null;
+    reaction_counts: Record<string, number>;
+  };
+}
+
+/**
+ * POST /api/v1/chat/react/<message_id>/
+ * Toggles an emoji reaction on a message.
+ * Allowed emojis: ❤️ 👍 😂 😢 😮
+ */
+export async function reactToChatMessage(
+  token: string,
+  messageId: string,
+  emoji: string
+): Promise<ReactResponse> {
+  const normalizedEmoji = emoji === '😭' ? '😢' : emoji;
+
+  const res = await fetchWithTimeout(`${CHAT_BASE}/react/${messageId}/`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ emoji: normalizedEmoji }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const msg =
+      data.emoji?.[0] ||
+      data.detail ||
+      `Failed to react to message (${res.status})`;
+    throw new Error(msg);
+  }
+
+  return data;
 }

@@ -26,6 +26,7 @@ import { AboutUsModal } from '../AboutUsModal';
 import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
 import { MyBookingsModal } from '../MyBookingsModal';
 import { ManageTagsModal } from '../ManageTagsModal';
+import { ManageSocialLinksModal } from '../ManageSocialLinksModal';
 import { NotificationBell } from '../../context/NotificationContext';
 
 // Safely require expo-document-picker to avoid crashing if native module is not yet compiled in APK
@@ -87,6 +88,7 @@ export function ProfileScreen({
 
   const [tags, setTags] = useState<string[]>(user.userTags || []);
   const [isManageTagsModalVisible, setIsManageTagsModalVisible] = useState(false);
+  const [isManageSocialLinksModalVisible, setIsManageSocialLinksModalVisible] = useState(false);
   const [showContactNumber, setShowContactNumber] = useState<boolean>(user.showContactNumber ?? false);
   const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -990,6 +992,12 @@ export function ProfileScreen({
                 title="My Jobs & Contracts"
                 onPress={() => setIsMyBookingsModalVisible(true)}
               />
+              <View style={styles.rowDivider} />
+              <SettingsRow
+                icon="share-social"
+                title="Social Links & Contacts"
+                onPress={() => setIsManageSocialLinksModalVisible(true)}
+              />
             </View>
 
             {/* Group 2: PREFERENCES */}
@@ -1219,6 +1227,13 @@ export function ProfileScreen({
         currentTags={tags}
         onSave={handleSaveTags}
         accountType={user.accountType}
+      />
+
+      {/* Manage Social Links Modal */}
+      <ManageSocialLinksModal
+        visible={isManageSocialLinksModalVisible}
+        onClose={() => setIsManageSocialLinksModalVisible(false)}
+        token={user.token}
       />
     </View>
   );

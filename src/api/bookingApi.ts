@@ -281,3 +281,44 @@ export async function fetchRecommendations(token: string): Promise<Recommendatio
     return [];
   }
 }
+
+export interface MinimumWageData {
+  booking_type: 'long_term' | 'short_term';
+  min_daily_rate: string;
+  min_monthly_rate?: string;
+  working_days_per_month?: number;
+  is_statutory_mandatory?: boolean;
+  wage_order?: string;
+  law?: string;
+  description?: string;
+}
+
+/**
+ * GET /api/v1/booking/minimum-wage/
+ * Returns statutory minimum daily wage metadata under Batas Kasambahay (RA 10361).
+ */
+export async function fetchMinimumWage(
+  token?: string,
+  bookingType: 'long_term' | 'short_term' = 'long_term',
+  address: string = ''
+): Promise<MinimumWageData | null> {
+  try {
+    const qs = new URLSearchParams({
+      booking_type: bookingType,
+      address,
+    });
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/v1/booking/minimum-wage/?${qs.toString()}`, {
+      headers,
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.warn('[bookingApi] fetchMinimumWage failed:', err);
+    return null;
+  }
+}
+
