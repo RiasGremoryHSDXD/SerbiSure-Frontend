@@ -71,6 +71,18 @@ export async function updateUserAbout(token: string, bio: string): Promise<strin
   }
 }
 
+export interface SocialLinkItem {
+  platform: string;
+  platform_name?: string;
+  url: string;
+  handle?: string;
+}
+
+export interface UserSocialLinksData {
+  social_links: SocialLinkItem[];
+  show_social_links?: boolean;
+}
+
 export interface PublicProfile {
   id: string;
   first_name?: string;
@@ -88,6 +100,8 @@ export interface PublicProfile {
   email?: string;
   contact_number?: string | null;
   show_contact_number?: boolean;
+  social_links?: SocialLinkItem[];
+  show_social_links?: boolean;
 }
 
 /**
@@ -493,4 +507,69 @@ export async function updateJobStatus(token: string, isOnJob: boolean): Promise<
     throw error;
   }
 }
+
+/**
+ * Fetch the authenticated user's social links.
+ * GET /api/v1/accounts/social-links/
+ */
+export async function fetchUserSocialLinks(token: string): Promise<UserSocialLinksData> {
+  try {
+    const res = await fetchWithTimeout(`${ACCOUNTS_BASE}/social-links/`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson?.detail || `Failed to fetch social links (${res.status})`);
+    }
+
+    return await res.json();
+  } catch (error: any) {
+    console.warn('[accountApi] fetchUserSocialLinks error:', error?.message || error);
+    throw error;
+  }
+}
+
+/**
+ * Update the authenticated user's social links.
+ * PATCH /api/v1/accounts/social-links/
+ */
+export async function updateUserSocialLinks(
+  token: string,
+  payload: {
+    social_links: { platform?: string; url: string }[];
+    show_social_links?: boolean;
+  }
+): Promise<UserSocialLinksData> {
+  try {
+    const res = await fetchWithTimeout(`${ACCOUNTS_BASE}/social-links/`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const errDetail =
+        data.detail ||
+        (Array.isArray(data.social_links) ? data.social_links[0] : null) ||
+        data.non_field_errors?.[0] ||
+        `Failed to update social links (${res.status})`;
+      throw new Error(errDetail);
+    }
+
+    return data;
+  } catch (error: any) {
+    console.warn('[accountApi] updateUserSocialLinks error:', error?.message || error);
+    throw error;
+  }
+}
+
 

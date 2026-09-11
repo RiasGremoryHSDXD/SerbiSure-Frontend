@@ -34,6 +34,7 @@ import { AboutUsModal } from '../AboutUsModal';
 import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
 import { MyBookingsModal } from '../MyBookingsModal';
 import { ManageTagsModal } from '../ManageTagsModal';
+import { ManageSocialLinksModal } from '../ManageSocialLinksModal';
 import { NotificationBell } from '../../context/NotificationContext';
 import { fetchNotifications } from '../../api/notificationsApi';
 
@@ -76,6 +77,7 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
 
   const [tags, setTags] = useState<string[]>(user.userTags || []);
   const [isManageTagsModalVisible, setIsManageTagsModalVisible] = useState(false);
+  const [isManageSocialLinksModalVisible, setIsManageSocialLinksModalVisible] = useState(false);
   const [showContactNumber, setShowContactNumber] = useState<boolean>(user.showContactNumber ?? false);
   const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -714,6 +716,12 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                 title="My Bookings & Hires"
                 onPress={() => setIsMyBookingsModalVisible(true)}
               />
+              <View style={styles.rowDivider} />
+              <SettingsRow
+                icon="share-social"
+                title="Social Links & Contacts"
+                onPress={() => setIsManageSocialLinksModalVisible(true)}
+              />
             </View>
 
             {/* Group 2: PREFERENCES */}
@@ -943,6 +951,13 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
         currentTags={tags}
         onSave={handleSaveTags}
         accountType={user.accountType}
+      />
+
+      {/* Manage Social Links Modal */}
+      <ManageSocialLinksModal
+        visible={isManageSocialLinksModalVisible}
+        onClose={() => setIsManageSocialLinksModalVisible(false)}
+        token={user.token}
       />
     </View>
   );

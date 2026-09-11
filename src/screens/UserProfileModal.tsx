@@ -9,6 +9,7 @@ import {
   Modal,
   ActivityIndicator,
   Linking,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -254,6 +255,59 @@ export function UserProfileModal({
               </View>
             )}
           </View>
+
+          {/* Social Links & Alternative Contacts Section */}
+          {profile?.social_links && profile.social_links.length > 0 ? (
+            <View style={styles.sectionContainer}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                <Ionicons name="share-social-outline" size={17} color="#FFB43B" style={{ marginRight: 6 }} />
+                <Text style={[styles.sectionHeading, { marginBottom: 0 }]}>Social Links & Contacts</Text>
+              </View>
+              <View style={styles.socialLinksList}>
+                {profile.social_links.map((link, idx) => {
+                  let iconName = 'globe-outline';
+                  let iconColor = '#4B5563';
+                  const p = (link.platform || '').toLowerCase();
+                  if (p.includes('facebook')) { iconName = 'logo-facebook'; iconColor = '#1877F2'; }
+                  else if (p.includes('instagram')) { iconName = 'logo-instagram'; iconColor = '#E1306C'; }
+                  else if (p.includes('tiktok')) { iconName = 'logo-tiktok'; iconColor = '#000000'; }
+                  else if (p.includes('twitter') || p === 'x') { iconName = 'logo-twitter'; iconColor = '#1DA1F2'; }
+                  else if (p.includes('linkedin')) { iconName = 'logo-linkedin'; iconColor = '#0A66C2'; }
+                  else if (p.includes('telegram')) { iconName = 'paper-plane'; iconColor = '#0088CC'; }
+                  else if (p.includes('whatsapp')) { iconName = 'logo-whatsapp'; iconColor = '#25D366'; }
+                  else if (p.includes('viber')) { iconName = 'chatbubble-ellipses'; iconColor = '#7360F2'; }
+                  else if (p.includes('youtube')) { iconName = 'logo-youtube'; iconColor = '#FF0000'; }
+
+                  return (
+                    <Pressable
+                      key={`${link.platform}-${idx}`}
+                      style={styles.socialLinkItem}
+                      onPress={() => {
+                        if (link.url) {
+                          Linking.openURL(link.url).catch(() => {
+                            Alert.alert('Link Error', 'Could not open this external link.');
+                          });
+                        }
+                      }}
+                    >
+                      <View style={[styles.socialIconWrap, { backgroundColor: `${iconColor}15` }]}>
+                        <Ionicons name={iconName as any} size={18} color={iconColor} />
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 10 }}>
+                        <Text style={styles.socialPlatformName}>
+                          {link.platform_name || link.platform}
+                        </Text>
+                        <Text style={styles.socialHandleText} numberOfLines={1}>
+                          {link.handle ? `@${link.handle}` : link.url}
+                        </Text>
+                      </View>
+                      <Ionicons name="open-outline" size={15} color="#9CA3AF" />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
 
           {/* Reviews Section */}
           <View style={styles.sectionContainer}>
@@ -689,5 +743,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#333',
+  },
+  socialLinksList: {
+    gap: 8,
+  },
+  socialLinkItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  socialIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  socialPlatformName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  socialHandleText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 1,
   },
 });

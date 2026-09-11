@@ -35,5 +35,6 @@ export { ReviewModal } from './ReviewModal';
 export { MyBookingsModal } from './MyBookingsModal';
 export { ProposalsModal } from './ProposalsModal';
 export { RecommendationsSection } from './RecommendationsSection';
+export { ManageSocialLinksModal } from './ManageSocialLinksModal';
 
 

@@ -148,7 +148,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
       return;
     }
     if (password.length < 8) {
-      Alert.alert("Password Requirements", "Password must be at least 8 characters long with a letter and a number.");
+      Alert.alert("Password Requirements", "Password must be at least 8 characters long.");
       return;
     }
     if (password !== confirmPassword) {

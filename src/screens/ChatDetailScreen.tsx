@@ -12,6 +12,7 @@ import {
   Platform,
   Alert,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,7 +21,7 @@ import { BookingModal } from './BookingModal';
 import { UserProfileModal } from './UserProfileModal';
 
 import { useUser } from '../context/UserContext';
-import { fetchChatThread, sendChatMessage, markChatMessageRead } from '../api/chatApi';
+import { fetchChatThread, sendChatMessage, sendChatImage, reactToChatMessage, markChatMessageRead } from '../api/chatApi';
 import { chatStore } from '../store/chatStore';
 
 export interface ChatMessage {
@@ -71,7 +72,7 @@ function formatTimeOnly(isoString?: string): string {
   }
 }
 
-const REACTION_OPTIONS = ['❤️', '👍', '😂', '😭', '😮'];
+const REACTION_OPTIONS = ['❤️', '👍', '😂', '😢', '😮'];
 
 function SmoothReactionPill({ align, onSelect }: { align: 'left' | 'right'; onSelect: (emoji: string) => void }) {
   const scaleAnim = useRef(new Animated.Value(0.3)).current;
@@ -140,6 +141,7 @@ export function ChatDetailScreen({
   const [inputMessage, setInputMessage] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [reactingMessageId, setReactingMessageId] = useState<string | null>(null);
   const [bookingModalVisible, setBookingModalVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
@@ -195,21 +197,45 @@ export function ChatDetailScreen({
           if (!isMounted) return;
 
           if (items && items.length > 0) {
-            const mapped: ChatMessage[] = items.map((m) => ({
-              id: m.chat_message_id,
-              sender: m.is_sender ? ('me' as const) : ('other' as const),
-              text: m.message_payload,
-              time: formatTimeOnly(m.createdAt),
-              avatar: m.is_sender ? undefined : resolvedAvatar,
-            }));
+            const mapped: ChatMessage[] = items.map((m) => {
+              let displayedReaction = m.my_reaction || undefined;
+              if (!displayedReaction && m.reaction_summary) {
+                for (const [emoji, count] of Object.entries(m.reaction_summary)) {
+                  if (count > 0) {
+                    displayedReaction = emoji;
+                    break;
+                  }
+                }
+              }
+
+              return {
+                id: m.chat_message_id,
+                sender: m.is_sender ? ('me' as const) : ('other' as const),
+                text: m.message_payload || undefined,
+                imageUri: m.image_url || undefined,
+                reaction: displayedReaction,
+                time: formatTimeOnly(m.createdAt),
+                avatar: m.is_sender ? undefined : resolvedAvatar,
+              };
+            });
 
             setMessages((prev) => {
-              // Only update if count changed or last message id is different to avoid redundant re-renders
+              if (prev.length !== mapped.length) return mapped;
               const prevLastId = prev[prev.length - 1]?.id;
               const newLastId = mapped[mapped.length - 1]?.id;
-              if (prev.length !== mapped.length || prevLastId !== newLastId) {
-                return mapped;
-              }
+              if (prevLastId !== newLastId) return mapped;
+
+              const hasChanges = prev.some((msg, idx) => {
+                const nextMsg = mapped[idx];
+                return (
+                  !nextMsg ||
+                  msg.reaction !== nextMsg.reaction ||
+                  msg.imageUri !== nextMsg.imageUri ||
+                  msg.text !== nextMsg.text
+                );
+              });
+
+              if (hasChanges) return mapped;
               return prev;
             });
 
@@ -373,30 +399,78 @@ export function ChatDetailScreen({
         quality: 0.8,
       });
 
-      if (!result.canceled && result.assets && result.assets[0]?.uri) {
-        const imageUri = result.assets[0].uri;
-        const now = new Date();
-        const hours = now.getHours();
-        const minutes = now.getMinutes().toString().padStart(2, '0');
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        const formattedHours = hours % 12 || 12;
-        const timeString = `${formattedHours}:${minutes} ${ampm}`;
+      if (result.canceled || !result.assets?.[0]?.uri) return;
 
-        const newMsg: ChatMessage = {
-          id: Date.now().toString(),
-          sender: 'me',
-          imageUri: imageUri,
-          time: timeString,
-        };
+      const imageUri = result.assets[0].uri;
 
-        setMessages((prev) => {
-          const nonTyping = prev.filter((m) => !m.isTyping);
-          return [...nonTyping, newMsg];
+      if (!partnerId || !effectiveToken) {
+        Alert.alert('Error', 'Cannot send image: conversation is not ready.');
+        return;
+      }
+
+      const fileSize = result.assets[0].fileSize;
+      if (fileSize && fileSize > 10 * 1024 * 1024) {
+        Alert.alert('File Too Large', 'Please choose an image under 10MB.');
+        return;
+      }
+
+      const tempId = `temp-img-${Date.now()}`;
+      const timeString = formatTimeOnly();
+
+      const newMsg: ChatMessage = {
+        id: tempId,
+        sender: 'me',
+        imageUri: imageUri,
+        time: timeString,
+      };
+
+      setMessages((prev) => {
+        const nonTyping = prev.filter((m) => !m.isTyping);
+        return [...nonTyping, newMsg];
+      });
+
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+
+      setIsUploadingImage(true);
+      try {
+        const res = await sendChatImage(effectiveToken, partnerId, imageUri);
+        if (res?.data?.chat_message_id) {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === tempId
+                ? {
+                    ...msg,
+                    id: res.data.chat_message_id,
+                    imageUri: res.data.image_url || imageUri,
+                  }
+                : msg
+            )
+          );
+        }
+        chatStore.addOrUpdateChat({
+          partnerId,
+          name: contactName,
+          badge: contactRole,
+          avatar: contactAvatar,
+          message: '📷 Photo',
+          time: 'Just now',
         });
-
-        setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 100);
+      } catch (uploadErr: any) {
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        const errMsg = uploadErr?.message || 'Could not send image. Please try again.';
+        if (errMsg.toLowerCase().includes('too large') || errMsg.toLowerCase().includes('10 mb')) {
+          Alert.alert('File Too Large', 'Please choose an image under 10MB.');
+        } else if (errMsg.toLowerCase().includes('format') || errMsg.toLowerCase().includes('unsupported')) {
+          Alert.alert('Invalid Format', 'Only JPEG, PNG, and WEBP images are supported.');
+        } else if (errMsg.toLowerCase().includes('rate') || errMsg.toLowerCase().includes('limit') || errMsg.toLowerCase().includes('too many')) {
+          Alert.alert('Slow Down', 'You are sending images too quickly. Please wait a moment.');
+        } else {
+          Alert.alert('Upload Failed', errMsg);
+        }
+      } finally {
+        setIsUploadingImage(false);
       }
     } catch (err) {
       console.log('Error choosing image in chat:', err);
@@ -406,14 +480,34 @@ export function ChatDetailScreen({
 
   const handleSelectReaction = (emoji: string) => {
     if (!reactingMessageId) return;
+    const targetId = reactingMessageId;
+    setReactingMessageId(null);
+
+    // Optimistically toggle reaction locally
     setMessages((prev) =>
       prev.map((msg) =>
-        msg.id === reactingMessageId
+        msg.id === targetId
           ? { ...msg, reaction: msg.reaction === emoji ? undefined : emoji }
           : msg
       )
     );
-    setReactingMessageId(null);
+
+    if (!effectiveToken) return;
+    if (targetId.startsWith('temp-')) return;
+
+    reactToChatMessage(effectiveToken, targetId, emoji)
+      .then((res) => {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === targetId
+              ? { ...msg, reaction: res.data?.my_reaction ?? undefined }
+              : msg
+          )
+        );
+      })
+      .catch((err) => {
+        console.warn('[ChatDetailScreen] reaction failed:', err);
+      });
   };
 
   return (
@@ -560,25 +654,71 @@ export function ChatDetailScreen({
                         <SmoothReactionPill align="left" onSelect={handleSelectReaction} />
                       ) : null}
 
-                      <Pressable onLongPress={() => setReactingMessageId(reactingMessageId === item.id ? null : item.id)}>
-                        <View style={[styles.leftBubble, item.isTyping && styles.typingBubble]}>
-                          {item.imageUri ? (
-                            <Pressable onPress={() => setSelectedImageUri(item.imageUri || null)}>
-                              <Image source={{ uri: item.imageUri }} style={styles.chatImage} resizeMode="contain" />
-                            </Pressable>
-                          ) : null}
-                          {item.text ? (
-                            <Text style={[styles.leftMsgText, item.isTyping && styles.typingText]}>
-                              {item.text}
-                            </Text>
-                          ) : null}
-
-                          {item.reaction ? (
-                            <View style={styles.reactionBadgeLeft}>
-                              <Text style={styles.reactionBadgeText}>{item.reaction}</Text>
+                      <Pressable
+                        onLongPress={() => setReactingMessageId(reactingMessageId === item.id ? null : item.id)}
+                        delayLongPress={250}
+                      >
+                        {item.imageUri && !item.text ? (
+                          <View style={styles.imageBubbleContainer}>
+                            <View style={styles.imageBubbleFrame}>
+                              <Pressable
+                                onPress={() => setSelectedImageUri(item.imageUri || null)}
+                                onLongPress={() => setReactingMessageId(reactingMessageId === item.id ? null : item.id)}
+                                delayLongPress={250}
+                              >
+                                <Image source={{ uri: item.imageUri }} style={styles.chatImage} resizeMode="cover" />
+                              </Pressable>
                             </View>
-                          ) : null}
-                        </View>
+                            {item.reaction ? (
+                              <Pressable
+                                style={styles.reactionBadgeLeft}
+                                onPress={() => setReactingMessageId(reactingMessageId === item.id ? null : item.id)}
+                                hitSlop={8}
+                              >
+                                <Text style={styles.reactionBadgeText}>{item.reaction}</Text>
+                              </Pressable>
+                            ) : null}
+                          </View>
+                        ) : item.imageUri && item.text ? (
+                          <View style={[styles.leftBubble, styles.bubbleWithImage]}>
+                            <View style={styles.imageHeaderFrame}>
+                              <Pressable
+                                onPress={() => setSelectedImageUri(item.imageUri || null)}
+                                onLongPress={() => setReactingMessageId(reactingMessageId === item.id ? null : item.id)}
+                                delayLongPress={250}
+                              >
+                                <Image source={{ uri: item.imageUri }} style={styles.chatImageWithCaption} resizeMode="cover" />
+                              </Pressable>
+                            </View>
+                            <Text style={[styles.leftMsgText, styles.imageCaptionText]}>{item.text}</Text>
+                            {item.reaction ? (
+                              <Pressable
+                                style={styles.reactionBadgeLeft}
+                                onPress={() => setReactingMessageId(reactingMessageId === item.id ? null : item.id)}
+                                hitSlop={8}
+                              >
+                                <Text style={styles.reactionBadgeText}>{item.reaction}</Text>
+                              </Pressable>
+                            ) : null}
+                          </View>
+                        ) : (
+                          <View style={[styles.leftBubble, item.isTyping && styles.typingBubble]}>
+                            {item.text ? (
+                              <Text style={[styles.leftMsgText, item.isTyping && styles.typingText]}>
+                                {item.text}
+                              </Text>
+                            ) : null}
+                            {item.reaction ? (
+                              <Pressable
+                                style={styles.reactionBadgeLeft}
+                                onPress={() => setReactingMessageId(reactingMessageId === item.id ? null : item.id)}
+                                hitSlop={8}
+                              >
+                                <Text style={styles.reactionBadgeText}>{item.reaction}</Text>
+                              </Pressable>
+                            ) : null}
+                          </View>
+                        )}
                       </Pressable>
 
                       {item.time ? <Text style={styles.leftTimeText}>{item.time}</Text> : null}
@@ -594,21 +734,67 @@ export function ChatDetailScreen({
                     <SmoothReactionPill align="right" onSelect={handleSelectReaction} />
                   ) : null}
 
-                  <Pressable onLongPress={() => setReactingMessageId(reactingMessageId === item.id ? null : item.id)}>
-                    <View style={styles.rightBubble}>
-                      {item.imageUri ? (
-                        <Pressable onPress={() => setSelectedImageUri(item.imageUri || null)}>
-                          <Image source={{ uri: item.imageUri }} style={styles.chatImage} resizeMode="contain" />
-                        </Pressable>
-                      ) : null}
-                      {item.text ? <Text style={styles.rightMsgText}>{item.text}</Text> : null}
-
-                      {item.reaction ? (
-                        <View style={styles.reactionBadgeRight}>
-                          <Text style={styles.reactionBadgeText}>{item.reaction}</Text>
+                  <Pressable
+                    onLongPress={() => setReactingMessageId(reactingMessageId === item.id ? null : item.id)}
+                    delayLongPress={250}
+                  >
+                    {item.imageUri && !item.text ? (
+                      <View style={styles.imageBubbleContainer}>
+                        <View style={styles.imageBubbleFrame}>
+                          <Pressable
+                            onPress={() => setSelectedImageUri(item.imageUri || null)}
+                            onLongPress={() => setReactingMessageId(reactingMessageId === item.id ? null : item.id)}
+                            delayLongPress={250}
+                          >
+                            <Image source={{ uri: item.imageUri }} style={styles.chatImage} resizeMode="cover" />
+                          </Pressable>
                         </View>
-                      ) : null}
-                    </View>
+                        {item.reaction ? (
+                          <Pressable
+                            style={styles.reactionBadgeRight}
+                            onPress={() => setReactingMessageId(reactingMessageId === item.id ? null : item.id)}
+                            hitSlop={8}
+                          >
+                            <Text style={styles.reactionBadgeText}>{item.reaction}</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    ) : item.imageUri && item.text ? (
+                      <View style={[styles.rightBubble, styles.bubbleWithImage]}>
+                        <View style={styles.imageHeaderFrame}>
+                          <Pressable
+                            onPress={() => setSelectedImageUri(item.imageUri || null)}
+                            onLongPress={() => setReactingMessageId(reactingMessageId === item.id ? null : item.id)}
+                            delayLongPress={250}
+                          >
+                            <Image source={{ uri: item.imageUri }} style={styles.chatImageWithCaption} resizeMode="cover" />
+                          </Pressable>
+                        </View>
+                        <Text style={[styles.rightMsgText, styles.imageCaptionText]}>{item.text}</Text>
+                        {item.reaction ? (
+                          <Pressable
+                            style={styles.reactionBadgeRight}
+                            onPress={() => setReactingMessageId(reactingMessageId === item.id ? null : item.id)}
+                            hitSlop={8}
+                          >
+                            <Text style={styles.reactionBadgeText}>{item.reaction}</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    ) : (
+                      <View style={styles.rightBubble}>
+                        {item.text ? <Text style={styles.rightMsgText}>{item.text}</Text> : null}
+                        {item.reaction ? (
+                          <Pressable
+                            style={styles.reactionBadgeRight}
+                            onPress={() => setReactingMessageId(reactingMessageId === item.id ? null : item.id)}
+                            hitSlop={8}
+                          >
+                            <Text style={styles.reactionBadgeText}>{item.reaction}</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    )}
                   </Pressable>
 
                   <Text style={styles.rightTimeText}>{item.time}</Text>
@@ -619,6 +805,12 @@ export function ChatDetailScreen({
         </Pressable>
 
         {/* Messenger Style Input Footer */}
+        {isUploadingImage && (
+          <View style={styles.uploadingBar}>
+            <ActivityIndicator size="small" color="#FFB43B" />
+            <Text style={styles.uploadingText}>Sending photo...</Text>
+          </View>
+        )}
         <View style={[styles.inputFooter, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           <Pressable style={styles.attachBtn} onPress={handlePickImage}>
             <Ionicons name="add-circle" size={32} color="#FFB43B" />
@@ -688,6 +880,8 @@ export function ChatDetailScreen({
         isConfirmed={activeBookingMsgId ? messages.find((m) => m.id === activeBookingMsgId)?.bookingInfo?.isConfirmed : false}
         userRole={userRole}
         initialDetails={activeBookingDetails}
+        token={effectiveToken}
+        bookingType="long_term"
         onConfirm={(details) => {
           const now = new Date();
           const hours = now.getHours();
@@ -884,11 +1078,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
+  imageBubbleContainer: {
+    position: 'relative',
+  },
+  imageBubbleFrame: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  bubbleWithImage: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 10,
+    overflow: 'visible',
+  },
+  imageHeaderFrame: {
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+    marginBottom: 4,
+  },
   chatImage: {
-    width: 180,
-    height: 180,
-    borderRadius: 12,
-    marginVertical: 4,
+    width: 220,
+    height: 280,
+    borderRadius: 18,
+  },
+  chatImageWithCaption: {
+    width: 220,
+    height: 200,
+  },
+  imageCaptionText: {
+    paddingHorizontal: 14,
+    paddingTop: 4,
   },
   rightMsgText: {
     fontSize: 14,
@@ -1102,17 +1329,54 @@ const styles = StyleSheet.create({
   },
   reactionBadgeLeft: {
     position: 'absolute',
-    bottom: -10,
+    bottom: -8,
     right: -4,
-    zIndex: 5,
+    zIndex: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
   },
   reactionBadgeRight: {
     position: 'absolute',
-    bottom: -10,
+    bottom: -8,
     right: -4,
-    zIndex: 5,
+    zIndex: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
   },
   reactionBadgeText: {
-    fontSize: 16,
+    fontSize: 14,
+  },
+  uploadingBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    backgroundColor: '#FFF8EB',
+    borderTopWidth: 1,
+    borderTopColor: '#FFE0B2',
+  },
+  uploadingText: {
+    marginLeft: 8,
+    fontSize: 12,
+    color: '#8A5A00',
+    fontWeight: '500',
   },
 });
