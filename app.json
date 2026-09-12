@@ -49,11 +49,11 @@
       ],
       "package": "com.serbisure.frontend"
     },
+    "owner": "davenarchives",
     "extra": {
       "eas": {
-        "projectId": "2285d21a-6154-4ab6-84c9-bed6c4af2ce5"
+        "projectId": "fc20ba55-db50-4c24-bc21-7f22b9903356"
       }
-    },
-    "owner": "riasgremory"
+    }
   }
 }
