@@ -9,6 +9,7 @@ import { useJobsActivity } from '../../store/savedJobsStore';
 import { NotificationBell } from '../../context/NotificationContext';
 import { JobDetailSheet } from '../../components/JobDetailSheet';
 import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
+import { ChatDetailScreen } from '../ChatDetailScreen';
 
 const logoSource = require('../../../assets/serbisure_new_clean.png');
 
@@ -59,6 +60,20 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
   const [selectedJob, setSelectedJob] = useState<JobOffer | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { isSaved, isApplied, toggleSave, applyJob } = useJobsActivity();
+  const [activeChat, setActiveChat] = useState<{
+    visible: boolean;
+    partnerId?: string | number;
+    name: string;
+    role: string;
+    avatar: string;
+    initialMessage?: string;
+    initialReplyTo?: { author: string; text: string };
+  }>({
+    visible: false,
+    name: '',
+    role: '',
+    avatar: '',
+  });
 
   const fetchJobs = async () => {
     try {
@@ -151,6 +166,28 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
       unit: job.unit,
       aboutText: job.aboutText,
     });
+
+    const jobRole = job.roleTag || 'Household Service';
+    const jobRate = `${job.price} ${job.unit}`.trim();
+    const jobLocation = job.location || 'Cagayan de Oro';
+    const jobTerm = job.termTag || '';
+    const replySnippet = `${jobRole} • ${jobRate} • ${jobLocation}${jobTerm ? ` • ${jobTerm}` : ''}`;
+
+    if (job.partnerId) {
+      setSelectedJob(null);
+      setActiveChat({
+        visible: true,
+        partnerId: job.partnerId,
+        name: job.employerName || 'Homeowner',
+        role: 'Homeowner',
+        avatar: job.avatar,
+        initialMessage: 'I am interested in this job position',
+        initialReplyTo: {
+          author: 'Job Post',
+          text: replySnippet,
+        },
+      });
+    }
   };
 
   const today = new Date();
@@ -301,6 +338,20 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
         isApplied={selectedJob ? isApplied(selectedJob.id) : false}
         isSaved={selectedJob ? isSaved(selectedJob.id) : false}
         onToggleSave={() => selectedJob && toggleSave(selectedJob)}
+      />
+
+      {/* Messenger-style Chat Detail Modal */}
+      <ChatDetailScreen
+        visible={activeChat.visible}
+        onClose={() => setActiveChat((prev) => ({ ...prev, visible: false }))}
+        partnerId={activeChat.partnerId ? String(activeChat.partnerId) : undefined}
+        token={effectiveToken}
+        contactName={activeChat.name}
+        contactRole={activeChat.role}
+        contactAvatar={activeChat.avatar}
+        initialMessage={activeChat.initialMessage}
+        initialReplyTo={activeChat.initialReplyTo}
+        userRole="kasambahay"
       />
     </View>
   );

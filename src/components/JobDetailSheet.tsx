@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -15,6 +15,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const SNAP_EXPANDED = 0;
+const SNAP_COLLAPSED = Math.round(SCREEN_HEIGHT * 0.40);
+const SNAP_DISMISSED = SCREEN_HEIGHT;
 
 export interface JobDetailData {
   id: number | string;
@@ -53,67 +56,137 @@ export function JobDetailSheet({
   onToggleSave,
 }: JobDetailSheetProps) {
   const insets = useSafeAreaInsets();
-  const panY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const panY = useRef(new Animated.Value(SNAP_EXPANDED)).current;
+  const currentSnapRef = useRef<'collapsed' | 'expanded'>('expanded');
+  const [currentSnap, setCurrentSnap] = useState<'collapsed' | 'expanded'>('expanded');
+  const currentTranslateY = useRef(SNAP_EXPANDED);
+  const gestureStartY = useRef(SNAP_EXPANDED);
   const isClosingRef = useRef(false);
 
-  // Entrance & Exit animation
+  // Sync currentTranslateY with panY for precise gesture tracking
   useEffect(() => {
-    if (visible && job) {
-      isClosingRef.current = false;
-      panY.setValue(SCREEN_HEIGHT);
-      Animated.spring(panY, {
-        toValue: 0,
-        damping: 24,
-        stiffness: 220,
-        mass: 0.8,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible, job]);
+    const id = panY.addListener(({ value }) => {
+      currentTranslateY.current = value;
+    });
+    return () => {
+      panY.removeListener(id);
+    };
+  }, [panY]);
+
+  const snapTo = (toValue: number, snapName: 'collapsed' | 'expanded', onComplete?: () => void) => {
+    currentSnapRef.current = snapName;
+    setCurrentSnap(snapName);
+    currentTranslateY.current = toValue;
+    Animated.spring(panY, {
+      toValue,
+      damping: 24,
+      stiffness: 260,
+      mass: 0.8,
+      overshootClamping: true,
+      useNativeDriver: true,
+    }).start(onComplete);
+  };
 
   const handleClose = () => {
     if (isClosingRef.current) return;
     isClosingRef.current = true;
     Animated.timing(panY, {
-      toValue: SCREEN_HEIGHT,
-      duration: 200,
+      toValue: SNAP_DISMISSED,
+      duration: 220,
       useNativeDriver: true,
     }).start(() => {
       onClose();
-      panY.setValue(0);
       isClosingRef.current = false;
+      currentSnapRef.current = 'expanded';
+      setCurrentSnap('expanded');
+      currentTranslateY.current = SNAP_EXPANDED;
     });
   };
 
-  // PanResponder for smooth up/down drag gestures
+  // Entrance animation: opens to top/expanded position by default!
+  useEffect(() => {
+    if (visible && job) {
+      isClosingRef.current = false;
+      currentSnapRef.current = 'expanded';
+      setCurrentSnap('expanded');
+      currentTranslateY.current = SNAP_EXPANDED;
+      panY.setValue(SNAP_DISMISSED);
+      Animated.spring(panY, {
+        toValue: SNAP_EXPANDED,
+        damping: 24,
+        stiffness: 240,
+        mass: 0.8,
+        overshootClamping: true,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible, job]);
+
+  // Release physics for snapping between expanded, collapsed, and dismiss
+  const handleRelease = (gestureState: { dy: number; vy: number }) => {
+    const { dy, vy } = gestureState;
+    const currentY = currentTranslateY.current;
+
+    if (currentSnapRef.current === 'collapsed') {
+      // 1. Swipe up to expand back to top default position
+      if (dy < -35 || vy < -0.25) {
+        snapTo(SNAP_EXPANDED, 'expanded');
+      }
+      // 2. Swipe down to dismiss completely
+      else if (dy > 55 || vy > 0.35) {
+        handleClose();
+      }
+      // Return to resting collapsed position
+      else {
+        snapTo(SNAP_COLLAPSED, 'collapsed');
+      }
+    } else {
+      // Currently expanded (top default position)
+      if (dy > 0) {
+        // Deep swipe down or rapid downward flick -> dismiss completely
+        if (dy > SNAP_COLLAPSED + 50 || vy > 0.95 || currentY > SNAP_COLLAPSED + 60) {
+          handleClose();
+        }
+        // Responsive swipe down -> collapse back to mid height
+        else if (dy > 45 || vy > 0.25 || currentY > SNAP_COLLAPSED * 0.25) {
+          snapTo(SNAP_COLLAPSED, 'collapsed');
+        }
+        // Small nudge -> stay expanded
+        else {
+          snapTo(SNAP_EXPANDED, 'expanded');
+        }
+      } else {
+        // Swiped up while already expanded -> stay expanded
+        snapTo(SNAP_EXPANDED, 'expanded');
+      }
+    }
+  };
+
+  // Single unified PanResponder for smooth 1:1 up/down drag gestures across the sheet
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dy) > 4;
+        return Math.abs(gestureState.dy) > 3 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 3 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onPanResponderGrant: () => {
+        gestureStartY.current = currentTranslateY.current;
       },
       onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          // Dragging down: follows finger 1:1
-          panY.setValue(gestureState.dy);
-        } else {
-          // Dragging up: elastic rubber band resistance
-          panY.setValue(gestureState.dy * 0.22);
-        }
+        const rawY = gestureStartY.current + gestureState.dy;
+        // Strictly prevent pulling the sheet upward past its resting top position!
+        const targetY = Math.max(SNAP_EXPANDED, rawY);
+        panY.setValue(targetY);
       },
       onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 100 || (gestureState.dy > 25 && gestureState.vy > 0.45)) {
-          // Swiped down -> dismiss smoothly!
-          handleClose();
-        } else {
-          // Snap back to resting position
-          Animated.spring(panY, {
-            toValue: 0,
-            damping: 22,
-            stiffness: 260,
-            useNativeDriver: true,
-          }).start();
-        }
+        handleRelease(gestureState);
+      },
+      onPanResponderTerminate: (_, gestureState) => {
+        handleRelease(gestureState);
       },
     })
   ).current;
@@ -138,8 +211,8 @@ export function JobDetailSheet({
     'Experienced household assistance needed. Verified and safe family household.';
 
   const backdropOpacity = panY.interpolate({
-    inputRange: [0, SCREEN_HEIGHT * 0.6],
-    outputRange: [1, 0],
+    inputRange: [SNAP_EXPANDED, SNAP_COLLAPSED, SNAP_DISMISSED],
+    outputRange: [1, 0.75, 0],
     extrapolate: 'clamp',
   });
 
@@ -156,16 +229,28 @@ export function JobDetailSheet({
           style={[
             styles.sheetContent,
             {
-              paddingBottom: Math.max(insets.bottom, 20),
+              paddingBottom: Math.max(insets.bottom, 20) + 80,
+              marginBottom: -80,
               transform: [{ translateY: panY }],
             },
           ]}
+          {...panResponder.panHandlers}
         >
-          {/* SWIPABLE TOP DRAG AREA */}
-          <View style={styles.sheetTopArea} {...panResponder.panHandlers}>
-            <View style={styles.handleHitZone}>
+          {/* Top Drag & Header Area */}
+          <View style={styles.sheetTopArea}>
+            <Pressable
+              style={styles.handleHitZone}
+              onPress={() => {
+                if (currentSnapRef.current === 'collapsed') {
+                  snapTo(SNAP_EXPANDED, 'expanded');
+                } else {
+                  snapTo(SNAP_COLLAPSED, 'collapsed');
+                }
+              }}
+              hitSlop={12}
+            >
               <View style={styles.sheetHandle} />
-            </View>
+            </Pressable>
 
             {/* Header: Employer Avatar, Name, Badges & Save Action */}
             <View style={styles.sheetHeader}>
@@ -213,13 +298,8 @@ export function JobDetailSheet({
             </View>
           </View>
 
-          {/* SCROLLABLE / SWIPABLE BODY */}
-          <ScrollView
-            style={styles.sheetScroll}
-            contentContainerStyle={styles.sheetScrollContent}
-            showsVerticalScrollIndicator={false}
-            bounces={true}
-          >
+          {/* SWIPABLE BODY */}
+          <View style={styles.sheetScrollContent}>
             {/* Price & Term Display */}
             <View style={styles.priceRow}>
               <View style={styles.priceWrap}>
@@ -296,7 +376,7 @@ export function JobDetailSheet({
             </Pressable>
 
             <Text style={styles.applyNotice}>Your application goes directly to the employer</Text>
-          </ScrollView>
+          </View>
         </Animated.View>
       </View>
     </Modal>

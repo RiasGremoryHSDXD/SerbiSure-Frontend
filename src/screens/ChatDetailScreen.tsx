@@ -18,6 +18,7 @@ import {
   Share,
   ToastAndroid,
   NativeModules,
+  LayoutChangeEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -153,8 +154,11 @@ export interface ChatMessage {
   replyTo?: {
     author: string;
     text: string;
+    imageUri?: string;
+    messageId?: string;
   };
   time: string;
+  createdAtRaw?: string;
   avatar?: string;
   bookingInfo?: {
     title: string;
@@ -184,11 +188,13 @@ function SwipeableMessageRow({
   onReply,
   disabled,
   align = 'left',
+  onLayout,
 }: {
   children: React.ReactNode;
   onReply: () => void;
   disabled?: boolean;
   align?: 'left' | 'right';
+  onLayout?: (e: LayoutChangeEvent) => void;
 }) {
   const panX = useRef(new Animated.Value(0)).current;
 
@@ -268,7 +274,12 @@ function SwipeableMessageRow({
   });
 
   return (
-    <View style={styles.swipeRowContainer} {...panResponder.panHandlers}>
+    <View
+      style={styles.swipeRowContainer}
+      collapsable={false}
+      onLayout={onLayout}
+      {...panResponder.panHandlers}
+    >
       <Animated.View
         style={[
           align === 'right' ? styles.swipeReplyIconRight : styles.swipeReplyIconLeft,
@@ -303,7 +314,12 @@ interface ChatDetailScreenProps {
   contactAvatar?: string;
   isOnline?: boolean;
   initialMessage?: string;
-  initialReplyTo?: { author: string; text: string };
+  initialReplyTo?: {
+    author: string;
+    text: string;
+    imageUri?: string;
+    messageId?: string;
+  };
   userRole?: 'homeowner' | 'kasambahay';
 }
 
@@ -322,6 +338,72 @@ function formatTimeOnly(isoString?: string): string {
     return `${hours % 12 || 12}:${minutes} ${hours >= 12 ? 'PM' : 'AM'}`;
   } catch {
     return 'Now';
+  }
+}
+
+function formatCenteredDateTime(isoString?: string): string {
+  if (!isoString) {
+    return `Today ${formatTimeOnly()}`;
+  }
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return `Today ${formatTimeOnly()}`;
+
+    const timeStr = formatTimeOnly(isoString);
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const msgDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diffMs = today.getTime() - msgDate.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return `Today ${timeStr}`;
+    }
+    if (diffDays === 1) {
+      return `Yesterday ${timeStr}`;
+    }
+    if (diffDays >= 2 && diffDays < 14) {
+      const weekday = d.toLocaleDateString('en-US', { weekday: 'long' });
+      return `${weekday} ${timeStr}`;
+    }
+
+    const month = d.toLocaleDateString('en-US', { month: 'short' });
+    const day = d.getDate();
+    if (d.getFullYear() === now.getFullYear()) {
+      return `${month} ${day} ${timeStr}`;
+    }
+    return `${month} ${day}, ${d.getFullYear()} ${timeStr}`;
+  } catch {
+    return `Today ${formatTimeOnly()}`;
+  }
+}
+
+function isDifferentDay(d1?: string, d2?: string): boolean {
+  if (!d1 || !d2) return false;
+  try {
+    const a = new Date(d1);
+    const b = new Date(d2);
+    return (
+      a.getFullYear() !== b.getFullYear() ||
+      a.getMonth() !== b.getMonth() ||
+      a.getDate() !== b.getDate()
+    );
+  } catch {
+    return false;
+  }
+}
+
+function shouldShowTimeSeparator(prevDateStr?: string, currDateStr?: string): boolean {
+  if (!prevDateStr || !currDateStr) return true;
+  try {
+    const prev = new Date(prevDateStr).getTime();
+    const curr = new Date(currDateStr).getTime();
+    if (isNaN(prev) || isNaN(curr)) return true;
+    const diffMins = Math.abs(curr - prev) / (1000 * 60);
+    return isDifferentDay(prevDateStr, currDateStr) || diffMins >= 20;
+  } catch {
+    return true;
   }
 }
 
@@ -403,11 +485,18 @@ export function ChatDetailScreen({
   contactAvatar,
   isOnline = true,
   initialMessage,
+  initialReplyTo,
   userRole = 'homeowner',
 }: ChatDetailScreenProps) {
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const effectiveToken = token || user.token;
+
+  const [partnerOnline, setPartnerOnline] = useState<boolean>(isOnline);
+
+  useEffect(() => {
+    setPartnerOnline(isOnline);
+  }, [isOnline]);
 
   // Determine if the current active user is a Kasambahay or Homeowner
   const isKasambahay =
@@ -572,8 +661,82 @@ export function ChatDetailScreen({
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
   // Swipe-to-reply state & input ref
-  const [replyingTo, setReplyingTo] = useState<{ id: string; author: string; text: string } | null>(null);
+  const [replyingTo, setReplyingTo] = useState<{
+    id: string;
+    author: string;
+    text: string;
+    imageUri?: string;
+    messageId?: string;
+  } | null>(null);
   const inputRef = useRef<TextInput>(null);
+
+  // Layout positions and dimensions for each message to enable accurate jumping/scrolling
+  const messageOffsets = useRef<{ [id: string]: number }>({});
+  const messageHeights = useRef<{ [id: string]: number }>({});
+  const chatViewportHeight = useRef<number>(0);
+
+  const scrollToMessage = (targetId?: string, targetImageUri?: string) => {
+    let finalTargetId = targetId;
+
+    // 1. If finalTargetId is not known or not measured, resolve via targetImageUri
+    if ((!finalTargetId || typeof messageOffsets.current[finalTargetId] !== 'number') && targetImageUri) {
+      const match = messages.find(
+        (m) =>
+          m.imageUri &&
+          (m.imageUri === targetImageUri ||
+            m.imageUri.endsWith(targetImageUri) ||
+            targetImageUri.endsWith(m.imageUri))
+      );
+      if (match) {
+        finalTargetId = match.id;
+      }
+    }
+
+    // 2. Fallback: match any photo message if targetImageUri exists
+    if (!finalTargetId && targetImageUri) {
+      const match = messages.find((m) => !!m.imageUri);
+      if (match) {
+        finalTargetId = match.id;
+      }
+    }
+
+    const targetY = finalTargetId ? messageOffsets.current[finalTargetId] : undefined;
+    if (finalTargetId && typeof targetY === 'number') {
+      const targetHeight = messageHeights.current[finalTargetId] || 220;
+      const vpHeight = chatViewportHeight.current > 0 ? chatViewportHeight.current : 520;
+
+      // Position the target photo/message centered in the viewport so it lands right in view
+      const centeredOffset = Math.max(16, (vpHeight - targetHeight) / 2);
+      const scrollY = Math.max(0, targetY - centeredOffset);
+
+      scrollViewRef.current?.scrollTo({ y: scrollY, animated: true });
+      return;
+    }
+
+    // 3. Fallback if layout hasn't populated yet
+    if (finalTargetId) {
+      const idx = messages.findIndex((m) => m.id === finalTargetId);
+      if (idx >= 0 && scrollViewRef.current) {
+        const estY = Math.max(0, idx * 80);
+        scrollViewRef.current?.scrollTo({ y: estY, animated: true });
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (visible && initialReplyTo && !initialMessage) {
+      setReplyingTo({
+        id: `initial-reply-${Date.now()}`,
+        author: initialReplyTo.author || 'Job Post',
+        text: initialReplyTo.text,
+        imageUri: initialReplyTo.imageUri,
+        messageId: initialReplyTo.messageId,
+      });
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 350);
+    }
+  }, [visible, initialReplyTo, initialMessage]);
 
   useEffect(() => {
     if (visible) {
@@ -623,6 +786,8 @@ export function ChatDetailScreen({
       id: msg.id,
       author: authorName,
       text: previewText,
+      imageUri: msg.imageUri,
+      messageId: msg.id,
     });
 
     setTimeout(() => {
@@ -678,9 +843,12 @@ export function ChatDetailScreen({
       if (!partnerId || !effectiveToken) return;
 
       fetchChatThreadDetails(effectiveToken, partnerId)
-        .then(({ messages: items, partnerIsTyping }) => {
+        .then(({ messages: items, partnerIsTyping, partnerIsOnline }) => {
           if (!isMounted) return;
           setIsOtherTyping(partnerIsTyping);
+          if (typeof partnerIsOnline === 'boolean') {
+            setPartnerOnline(partnerIsOnline);
+          }
 
           if (items && items.length > 0) {
             const visibleItems = items.filter((m) => !chatStore.isMessageDeleted(m.chat_message_id));
@@ -696,14 +864,68 @@ export function ChatDetailScreen({
               }
 
               let cleanText = m.message_payload || undefined;
-              let replyInfo: { author: string; text: string } | undefined = undefined;
+              let replyInfo: { author: string; text: string; imageUri?: string; messageId?: string } | undefined = undefined;
 
               if (cleanText) {
                 const replyMatch = cleanText.match(/^> \[([^\]]+)\]:\s*(.*?)\n\n([\s\S]*)$/);
                 if (replyMatch && replyMatch[1] && replyMatch[2] && replyMatch[3]) {
+                  const authorHeader = replyMatch[1];
+                  const parts = authorHeader.split('|');
+                  const author = parts[0] || 'User';
+                  let imageUri: string | undefined = undefined;
+                  let messageId: string | undefined = undefined;
+
+                  if (parts.length >= 3) {
+                    imageUri = parts[1] ? parts[1].trim() : undefined;
+                    messageId = parts[2] ? parts[2].trim() : undefined;
+                  } else if (parts.length === 2 && parts[1]) {
+                    const second = parts[1].trim();
+                    if (
+                      second.startsWith('http://') ||
+                      second.startsWith('https://') ||
+                      second.startsWith('file://') ||
+                      second.startsWith('data:') ||
+                      second.startsWith('content://') ||
+                      second.includes('/media/') ||
+                      second.includes('/')
+                    ) {
+                      imageUri = second;
+                    } else {
+                      messageId = second;
+                    }
+                  }
+
+                  const replyText = replyMatch[2] || 'Message';
+
+                  if (!imageUri && (replyText.includes('Photo') || replyText.includes('📷'))) {
+                    const currentIdx = visibleItems.findIndex((x) => x.chat_message_id === m.chat_message_id);
+                    const prevSlice = currentIdx > 0 ? visibleItems.slice(0, currentIdx) : visibleItems;
+                    const prevImgMsg = [...prevSlice].reverse().find((x) => x.image_url);
+                    if (prevImgMsg && prevImgMsg.image_url) {
+                      imageUri = prevImgMsg.image_url;
+                      messageId = prevImgMsg.chat_message_id;
+                    }
+                  }
+
+                  if (!messageId && imageUri) {
+                    const targetUri = imageUri;
+                    const matchMsg = visibleItems.find(
+                      (x) =>
+                        Boolean(x.image_url) &&
+                        (x.image_url === targetUri ||
+                          targetUri.includes(x.image_url as string) ||
+                          (x.image_url as string).includes(targetUri))
+                    );
+                    if (matchMsg) {
+                      messageId = matchMsg.chat_message_id;
+                    }
+                  }
+
                   replyInfo = {
-                    author: replyMatch[1],
-                    text: replyMatch[2],
+                    author,
+                    text: replyText,
+                    imageUri,
+                    messageId,
                   };
                   cleanText = replyMatch[3];
                 }
@@ -722,6 +944,7 @@ export function ChatDetailScreen({
                     sender: 'system' as const,
                     bookingInfo,
                     time: formatTimeOnly(m.createdAt),
+                    createdAtRaw: m.createdAt,
                   };
                 }
               }
@@ -735,6 +958,7 @@ export function ChatDetailScreen({
                 reactionSummary: m.reaction_summary,
                 replyTo: replyInfo,
                 time: formatTimeOnly(m.createdAt),
+                createdAtRaw: m.createdAt,
                 avatar: m.is_sender ? undefined : resolvedAvatar,
               };
             });
@@ -784,18 +1008,30 @@ export function ChatDetailScreen({
             });
           } else if (isInitial && initialMessage) {
             // New thread with initial auto-message!
+            const replyHeader = initialReplyTo
+              ? `> [${initialReplyTo.author}|${initialReplyTo.imageUri || ''}|${initialReplyTo.messageId || ''}]: ${initialReplyTo.text}\n\n`
+              : '';
+            const payload = `${replyHeader}${initialMessage}`;
             const tempId = `temp-${Date.now()}`;
             setMessages([
               {
                 id: tempId,
                 sender: 'me',
                 text: initialMessage,
+                replyTo: initialReplyTo
+                  ? {
+                      author: initialReplyTo.author,
+                      text: initialReplyTo.text,
+                      imageUri: initialReplyTo.imageUri,
+                      messageId: initialReplyTo.messageId,
+                    }
+                  : undefined,
                 time: formatTimeOnly(),
               },
             ]);
 
             // Persist the initial message to backend
-            sendChatMessage(effectiveToken, partnerId, initialMessage)
+            sendChatMessage(effectiveToken, partnerId, payload)
               .then((res) => {
                 if (res?.data?.chat_message_id && isMounted) {
                   setMessages((prev) =>
@@ -884,9 +1120,10 @@ export function ChatDetailScreen({
     const currentReply = replyingTo;
     setReplyingTo(null);
 
-    const payloadToSend = currentReply
-      ? `> [${currentReply.author}]: ${currentReply.text}\n\n${trimmed}`
-      : trimmed;
+    const replyHeader = currentReply
+      ? `> [${currentReply.author}|${currentReply.imageUri || ''}|${currentReply.messageId || currentReply.id || ''}]: ${currentReply.text}\n\n`
+      : '';
+    const payloadToSend = `${replyHeader}${trimmed}`;
 
     const bookingInfo = parseBookingInfoFromText(
       trimmed,
@@ -895,19 +1132,29 @@ export function ChatDetailScreen({
       contactName
     );
 
+    const nowIso = new Date().toISOString();
     const newMessage: ChatMessage = bookingInfo
       ? {
           id: tempId,
           sender: 'system',
           bookingInfo,
           time: timeString,
+          createdAtRaw: nowIso,
         }
       : {
           id: tempId,
           sender: 'me',
           text: trimmed,
-          replyTo: currentReply ? { author: currentReply.author, text: currentReply.text } : undefined,
+          replyTo: currentReply
+            ? {
+                author: currentReply.author,
+                text: currentReply.text,
+                imageUri: currentReply.imageUri,
+                messageId: currentReply.messageId || currentReply.id,
+              }
+            : undefined,
           time: timeString,
+          createdAtRaw: nowIso,
         };
 
     setMessages((prev) => {
@@ -984,6 +1231,7 @@ export function ChatDetailScreen({
         sender: 'me',
         imageUri: imageUri,
         time: timeString,
+        createdAtRaw: now.toISOString(),
         isUploading: true,
       };
 
@@ -1135,14 +1383,26 @@ export function ChatDetailScreen({
 
   const renderReactionBadge = (msg: ChatMessage, align: 'left' | 'right') => {
     const counts = msg.reactionSummary || {};
-    const activeEntries = Object.entries(counts).filter(([_, count]) => count > 0);
+    const normalizedCounts: Record<string, number> = {};
+    for (const [rawEmoji, count] of Object.entries(counts)) {
+      if (count > 0) {
+        const clean = rawEmoji === '\u2764' || rawEmoji.startsWith('\u2764') ? '❤️' : rawEmoji;
+        normalizedCounts[clean] = (normalizedCounts[clean] ?? 0) + count;
+      }
+    }
+    const activeEntries = Object.entries(normalizedCounts);
 
     if (activeEntries.length === 0 && !msg.reaction) return null;
+
+    const isSingleReaction =
+      (activeEntries.length === 1 && (activeEntries[0]?.[1] ?? 1) <= 1) ||
+      (activeEntries.length === 0 && !!msg.reaction);
 
     return (
       <View
         style={[
           styles.reactionBadgePill,
+          isSingleReaction ? styles.reactionBadgeCircle : styles.reactionBadgeCapsule,
           align === 'left' ? styles.reactionBadgePillLeft : styles.reactionBadgePillRight,
         ]}
       >
@@ -1195,7 +1455,7 @@ export function ChatDetailScreen({
           >
             <View style={styles.avatarWrapper}>
               <Image source={{ uri: resolvedAvatar }} style={styles.headerAvatar} />
-              {isOnline ? <View style={styles.onlineDot} /> : null}
+              {partnerOnline ? <View style={styles.onlineDot} /> : null}
             </View>
             <View style={styles.headerTextCol}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -1204,7 +1464,7 @@ export function ChatDetailScreen({
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                 <Text style={[styles.contactSub, isOtherTyping && styles.contactSubTyping]}>
-                  {isOtherTyping ? 'Typing...' : (isOnline ? 'Online now' : 'Offline')}
+                  {isOtherTyping ? 'Typing...' : (partnerOnline ? 'Active now' : 'Inactive')}
                 </Text>
                 <Text style={{ color: '#C4C4C4', fontSize: 10 }}>•</Text>
                 <View style={styles.headerRoleBadge}>
@@ -1238,6 +1498,9 @@ export function ChatDetailScreen({
             contentContainerStyle={styles.chatBodyContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            onLayout={(e) => {
+              chatViewportHeight.current = e.nativeEvent.layout.height;
+            }}
             onContentSizeChange={(contentWidth, contentHeight) => {
               if (!hasAutoScrolledRef.current && messages.length > 0 && contentHeight > 0) {
                 hasAutoScrolledRef.current = true;
@@ -1247,15 +1510,29 @@ export function ChatDetailScreen({
               }
             }}
           >
-            {/* Date Separator Pill */}
-            <View style={styles.datePill}>
-              <Text style={styles.datePillText}>
-                Today, {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              </Text>
-            </View>
+            {/* Show initial Date Separator if empty thread */}
+            {messages.length === 0 ? (
+              <View style={styles.datePill}>
+                <Text style={styles.datePillText}>
+                  {formatCenteredDateTime(new Date().toISOString())}
+                </Text>
+              </View>
+            ) : null}
 
             {/* Messages */}
             {messages.map((item, index) => {
+              const prevMsg = index > 0 ? messages[index - 1] : null;
+              const showDateSeparator =
+                index === 0 ||
+                shouldShowTimeSeparator(prevMsg?.createdAtRaw, item.createdAtRaw);
+              const datePillElement = showDateSeparator ? (
+                <View key={`date-pill-${item.id}-${index}`} style={styles.datePill}>
+                  <Text style={styles.datePillText}>
+                    {formatCenteredDateTime(item.createdAtRaw)}
+                  </Text>
+                </View>
+              ) : null;
+
               if (item.sender === 'system' && item.bookingInfo) {
                 const isConfirmed = item.bookingInfo.isConfirmed || item.bookingInfo.title === 'BOOKING CONFIRMED';
                 const bookedPersonName =
@@ -1266,7 +1543,16 @@ export function ChatDetailScreen({
                 const formattedStartDate = formatBookingStartDate(item.bookingInfo.startDate);
 
                 return (
-                  <View key={item.id} style={styles.systemCardContainer}>
+                  <React.Fragment key={`system-wrap-${item.id}`}>
+                    {datePillElement}
+                    <View
+                      style={styles.systemCardContainer}
+                      collapsable={false}
+                      onLayout={(e) => {
+                        messageOffsets.current[item.id] = e.nativeEvent.layout.y;
+                        messageHeights.current[item.id] = e.nativeEvent.layout.height;
+                      }}
+                    >
                     <Pressable
                       style={({ pressed }) => [
                         styles.compactBookingCard,
@@ -1349,58 +1635,62 @@ export function ChatDetailScreen({
                         <Text style={styles.compactQuickAgreeText}>Agree & Accept Booking</Text>
                       </Pressable>
                     ) : null}
-
-                    <Text style={styles.systemTimeText}>{item.time}</Text>
                   </View>
-                );
+                </React.Fragment>
+              );
+            }
+
+            // Grouping calculations (Messenger style)
+            const nextMsg = index < messages.length - 1 ? messages[index + 1] : null;
+
+            const isSameSenderAsPrev =
+              !!prevMsg &&
+              prevMsg.sender === item.sender &&
+              prevMsg.sender !== 'system' &&
+              !prevMsg.bookingInfo &&
+              !item.bookingInfo &&
+              !item.replyTo;
+
+            const isSameSenderAsNext =
+              !!nextMsg &&
+              nextMsg.sender === item.sender &&
+              nextMsg.sender !== 'system' &&
+              !nextMsg.bookingInfo &&
+              !item.bookingInfo &&
+              !nextMsg.replyTo;
+
+            const isSameGroupAsPrev = isSameSenderAsPrev && prevMsg.time === item.time;
+            const isSameGroupAsNext = isSameSenderAsNext && nextMsg.time === item.time;
+
+            const hasReaction = !!item.reaction || Object.values(item.reactionSummary || {}).some((c) => c > 0);
+            const rowSpacingStyle = isSameGroupAsNext
+              ? (hasReaction ? styles.messageRowGroupedWithReaction : styles.messageRowGrouped)
+              : null;
+
+            if (item.sender === 'other') {
+              const isEmoji = isEmojiOnly(item.text);
+
+              let leftGroupingCornerStyle = styles.leftBubbleSingle;
+              if (!isSameGroupAsPrev && isSameGroupAsNext) {
+                leftGroupingCornerStyle = styles.leftBubbleTop;
+              } else if (isSameGroupAsPrev && isSameGroupAsNext) {
+                leftGroupingCornerStyle = styles.leftBubbleMiddle;
+              } else if (isSameGroupAsPrev && !isSameGroupAsNext) {
+                leftGroupingCornerStyle = styles.leftBubbleBottom;
               }
 
-              // Grouping calculations (Messenger style)
-              const prevMsg = index > 0 ? messages[index - 1] : null;
-              const nextMsg = index < messages.length - 1 ? messages[index + 1] : null;
-
-              const isSameSenderAsPrev =
-                !!prevMsg &&
-                prevMsg.sender === item.sender &&
-                prevMsg.sender !== 'system' &&
-                !prevMsg.bookingInfo &&
-                !item.bookingInfo &&
-                !item.replyTo;
-
-              const isSameSenderAsNext =
-                !!nextMsg &&
-                nextMsg.sender === item.sender &&
-                nextMsg.sender !== 'system' &&
-                !nextMsg.bookingInfo &&
-                !item.bookingInfo &&
-                !nextMsg.replyTo;
-
-              const isSameGroupAsPrev = isSameSenderAsPrev && prevMsg.time === item.time;
-              const isSameGroupAsNext = isSameSenderAsNext && nextMsg.time === item.time;
-
-              const hasReaction = !!item.reaction || Object.values(item.reactionSummary || {}).some((c) => c > 0);
-              const rowSpacingStyle = isSameGroupAsNext
-                ? (hasReaction ? styles.messageRowGroupedWithReaction : styles.messageRowGrouped)
-                : null;
-
-              if (item.sender === 'other') {
-                const isEmoji = isEmojiOnly(item.text);
-
-                let leftGroupingCornerStyle = styles.leftBubbleSingle;
-                if (!isSameGroupAsPrev && isSameGroupAsNext) {
-                  leftGroupingCornerStyle = styles.leftBubbleTop;
-                } else if (isSameGroupAsPrev && isSameGroupAsNext) {
-                  leftGroupingCornerStyle = styles.leftBubbleMiddle;
-                } else if (isSameGroupAsPrev && !isSameGroupAsNext) {
-                  leftGroupingCornerStyle = styles.leftBubbleBottom;
-                }
-
-                return (
+              return (
+                <React.Fragment key={`left-frag-${item.id}`}>
+                  {datePillElement}
                   <SwipeableMessageRow
                     key={item.id}
                     align="left"
                     onReply={() => handleInitiateReply(item)}
                     disabled={item.isTyping}
+                    onLayout={(e) => {
+                      messageOffsets.current[item.id] = e.nativeEvent.layout.y;
+                      messageHeights.current[item.id] = e.nativeEvent.layout.height;
+                    }}
                   >
                     <View style={[styles.leftMessageRow, rowSpacingStyle]}>
                       <Pressable
@@ -1424,11 +1714,25 @@ export function ChatDetailScreen({
                             <Text style={styles.replyQuoteLabelLeft}>
                               {item.replyTo.author === 'You' ? `${contactName} replied to you` : `${contactName} replied`}
                             </Text>
-                            <View style={styles.replyQuoteBubbleLeft}>
-                              <Text style={styles.replyQuoteBubbleText} numberOfLines={4}>
+                            <Pressable
+                              onPress={() => scrollToMessage(item.replyTo?.messageId, item.replyTo?.imageUri)}
+                              style={({ pressed }) => [
+                                styles.replyQuoteBubbleLeft,
+                                item.replyTo?.imageUri ? styles.replyQuoteBubbleWithPhoto : null,
+                                pressed && { opacity: 0.75 },
+                              ]}
+                            >
+                              {item.replyTo.imageUri ? (
+                                <Image
+                                  source={{ uri: item.replyTo.imageUri }}
+                                  style={styles.replyQuotePhotoThumb}
+                                  resizeMode="cover"
+                                />
+                              ) : null}
+                              <Text style={styles.replyQuoteBubbleText} numberOfLines={2}>
                                 {item.replyTo.text}
                               </Text>
-                            </View>
+                            </Pressable>
                           </View>
                         ) : null}
 
@@ -1479,31 +1783,36 @@ export function ChatDetailScreen({
                             </View>
                           </Pressable>
                         </View>
-
-                        {!isSameGroupAsNext && item.time ? <Text style={styles.leftTimeText}>{item.time}</Text> : null}
                       </View>
                     </View>
                   </SwipeableMessageRow>
-                );
-              }
+                </React.Fragment>
+              );
+            }
 
-              // Right Message (me)
-              const isEmojiRight = isEmojiOnly(item.text);
+            // Right Message (me)
+            const isEmojiRight = isEmojiOnly(item.text);
 
-              let rightGroupingCornerStyle = styles.rightBubbleSingle;
-              if (!isSameGroupAsPrev && isSameGroupAsNext) {
-                rightGroupingCornerStyle = styles.rightBubbleTop;
-              } else if (isSameGroupAsPrev && isSameGroupAsNext) {
-                rightGroupingCornerStyle = styles.rightBubbleMiddle;
-              } else if (isSameGroupAsPrev && !isSameGroupAsNext) {
-                rightGroupingCornerStyle = styles.rightBubbleBottom;
-              }
+            let rightGroupingCornerStyle = styles.rightBubbleSingle;
+            if (!isSameGroupAsPrev && isSameGroupAsNext) {
+              rightGroupingCornerStyle = styles.rightBubbleTop;
+            } else if (isSameGroupAsPrev && isSameGroupAsNext) {
+              rightGroupingCornerStyle = styles.rightBubbleMiddle;
+            } else if (isSameGroupAsPrev && !isSameGroupAsNext) {
+              rightGroupingCornerStyle = styles.rightBubbleBottom;
+            }
 
-              return (
+            return (
+              <React.Fragment key={`right-frag-${item.id}`}>
+                {datePillElement}
                 <SwipeableMessageRow
                   key={item.id}
                   align="right"
                   onReply={() => handleInitiateReply(item)}
+                  onLayout={(e) => {
+                    messageOffsets.current[item.id] = e.nativeEvent.layout.y;
+                    messageHeights.current[item.id] = e.nativeEvent.layout.height;
+                  }}
                 >
                   <View style={[styles.rightMessageRow, rowSpacingStyle]}>
                     {/* Instagram / Messenger Style Quoted Reply Stack */}
@@ -1512,11 +1821,25 @@ export function ChatDetailScreen({
                         <Text style={styles.replyQuoteLabelRight}>
                           {item.replyTo.author === 'You' ? 'You replied' : `You replied to ${item.replyTo.author}`}
                         </Text>
-                        <View style={styles.replyQuoteBubbleRight}>
-                          <Text style={styles.replyQuoteBubbleText} numberOfLines={4}>
+                        <Pressable
+                          onPress={() => scrollToMessage(item.replyTo?.messageId, item.replyTo?.imageUri)}
+                          style={({ pressed }) => [
+                            styles.replyQuoteBubbleRight,
+                            item.replyTo?.imageUri ? styles.replyQuoteBubbleWithPhoto : null,
+                            pressed && { opacity: 0.75 },
+                          ]}
+                        >
+                          {item.replyTo.imageUri ? (
+                            <Image
+                              source={{ uri: item.replyTo.imageUri }}
+                              style={styles.replyQuotePhotoThumb}
+                              resizeMode="cover"
+                            />
+                          ) : null}
+                          <Text style={styles.replyQuoteBubbleText} numberOfLines={2}>
                             {item.replyTo.text}
                           </Text>
-                        </View>
+                        </Pressable>
                       </View>
                     ) : null}
 
@@ -1565,19 +1888,25 @@ export function ChatDetailScreen({
                         </View>
                       </Pressable>
                     </View>
-
-                    {!isSameGroupAsNext && item.time ? <Text style={styles.rightTimeText}>{item.time}</Text> : null}
                   </View>
                 </SwipeableMessageRow>
-              );
+              </React.Fragment>
+            );
             })}
             {isOtherTyping ? <TypingDotsIndicator avatarUri={resolvedAvatar} /> : null}
           </ScrollView>
         </View>
 
-        {/* Reply Context Banner - Ultra-clean, without yellow line */}
+        {/* Reply Context Banner - Ultra-clean with thumbnail preview */}
         {replyingTo ? (
           <View style={styles.replyBanner}>
+            {replyingTo.imageUri ? (
+              <Image
+                source={{ uri: replyingTo.imageUri }}
+                style={styles.replyBannerPhotoThumb}
+                resizeMode="cover"
+              />
+            ) : null}
             <View style={styles.replyBannerContent}>
               <View style={styles.replyBannerTopRow}>
                 <View style={styles.replyBannerHeaderLeft}>
@@ -2026,16 +2355,12 @@ const styles = StyleSheet.create({
   },
   datePill: {
     alignSelf: 'center',
-    backgroundColor: '#E4E2DC',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
     marginVertical: 14,
   },
   datePillText: {
     fontSize: 12,
-    fontWeight: '500',
-    color: '#666',
+    fontWeight: '600',
+    color: '#8E8E93',
   },
   leftMessageRow: {
     flexDirection: 'row',
@@ -2155,7 +2480,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   messageRowGroupedWithReaction: {
-    marginBottom: 8,
+    marginBottom: 12,
   },
   msgAvatarPlaceholder: {
     width: 28,
@@ -2522,22 +2847,33 @@ const styles = StyleSheet.create({
   },
   reactionBadgePill: {
     position: 'absolute',
-    bottom: -10,
+    bottom: -6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingHorizontal: 5,
-    paddingVertical: 1.5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.12,
     shadowRadius: 2,
     elevation: 3,
     borderWidth: 1,
     borderColor: '#EFEFEF',
+  },
+  reactionBadgeCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  reactionBadgeCapsule: {
+    height: 22,
+    minWidth: 22,
+    borderRadius: 11,
+    paddingHorizontal: 5,
+    paddingVertical: 0,
   },
   reactionBadgePillLeft: {
     right: -4,
@@ -2549,18 +2885,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 1,
   },
   reactionBadgeEmoji: {
-    fontSize: 18,
+    fontSize: 12,
     includeFontPadding: false,
     textAlign: 'center',
   },
   reactionBadgeCount: {
-    fontSize: 11,
+    fontSize: 9.5,
     fontWeight: '700',
     color: '#374151',
-    marginLeft: 2,
+    marginLeft: 1.5,
+    marginRight: 1,
     includeFontPadding: false,
   },
   emojiOnlyBubble: {
@@ -2702,6 +3038,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     maxWidth: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   replyQuoteBubbleText: {
     fontSize: 14,
@@ -2722,14 +3061,32 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   replyQuoteBubbleLeft: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: 'rgba(0, 0, 0, 0.08)',
     borderRadius: 18,
     borderBottomLeftRadius: 4,
     paddingHorizontal: 14,
     paddingVertical: 7,
     maxWidth: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  replyQuoteBubbleWithPhoto: {
+    paddingLeft: 6,
+    paddingVertical: 5,
+  },
+  replyQuotePhotoThumb: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#E5E7EB',
+  },
+  replyBannerPhotoThumb: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
+    marginRight: 10,
+    backgroundColor: '#E5E7EB',
   },
   // Long-Press Action Modal & Reaction Overlay Styles
   actionModalBackdrop: {

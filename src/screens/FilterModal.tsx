@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,6 +11,8 @@ import {
   TouchableWithoutFeedback,
   KeyboardAvoidingView,
   Platform,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,17 +39,19 @@ interface FilterModalProps {
   visible: boolean;
   onClose: () => void;
   onApply: (filters: FeedFilters) => void;
-  initialFilters?: FeedFilters;
-  mode: 'homeowner' | 'kasambahay';
+  initialFilters: FeedFilters;
+  mode: 'homeowner' | 'kasambahay'; // homeowner searches kasambahays; kasambahay searches jobs
 }
 
-const CATEGORY_OPTIONS = [
-  'Cleaning',
-  'Cooking',
-  'Child Care',
-  'Caregiver',
+export const CATEGORY_OPTIONS = [
+  'All-Around',
+  'Yaya / Nanny',
+  'Housemaid',
+  'Cook / Chef',
+  'Elderly Care',
+  'Gardener',
+  'Driver',
   'Laundry',
-  'All-around',
 ];
 
 const BOOKING_TYPES = [
@@ -56,19 +60,19 @@ const BOOKING_TYPES = [
   { label: 'Stay-in', value: 'long_term' },
 ];
 
-const RATE_PRESETS = [500, 800, 1200, 2000];
+export const RATE_PRESETS = [400, 500, 600, 800, 1000];
 
-const SORT_OPTIONS: { label: string; value: 'newest' | 'rate_asc' | 'rate_desc'; icon: keyof typeof Ionicons.glyphMap }[] = [
+export const SORT_OPTIONS: { label: string; value: 'newest' | 'rate_asc' | 'rate_desc'; icon?: keyof typeof Ionicons.glyphMap }[] = [
   { label: 'Newest First', value: 'newest', icon: 'time-outline' },
-  { label: 'Lowest Rate', value: 'rate_asc', icon: 'arrow-down-outline' },
-  { label: 'Highest Rate', value: 'rate_desc', icon: 'arrow-up-outline' },
+  { label: 'Rate: Low to High', value: 'rate_asc', icon: 'arrow-down-outline' },
+  { label: 'Rate: High to Low', value: 'rate_desc', icon: 'arrow-up-outline' },
 ];
 
 export function FilterModal({
   visible,
   onClose,
   onApply,
-  initialFilters = DEFAULT_FILTERS,
+  initialFilters,
   mode,
 }: FilterModalProps) {
   const insets = useSafeAreaInsets();
@@ -84,6 +88,27 @@ export function FilterModal({
     initialFilters.sortBy || 'newest'
   );
 
+  const panY = useRef(new Animated.Value(0)).current;
+  const isClosingRef = useRef(false);
+  const scrollOffset = useRef(0);
+  const contentHeight = useRef(0);
+  const layoutHeight = useRef(0);
+  const canScrollRef = useRef(false);
+
+  const handleClose = useCallback(() => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+    Animated.timing(panY, {
+      toValue: SCREEN_HEIGHT,
+      duration: 220,
+      useNativeDriver: true,
+    }).start(() => {
+      onClose();
+      panY.setValue(0);
+      isClosingRef.current = false;
+    });
+  }, [onClose, panY]);
+
   // Sync state when modal is opened with new initialFilters
   useEffect(() => {
     if (visible) {
@@ -93,8 +118,58 @@ export function FilterModal({
       setCustomRateText(initialFilters.maxRate ? String(initialFilters.maxRate) : '');
       setLocation(initialFilters.location || '');
       setSortBy(initialFilters.sortBy || 'newest');
+      panY.setValue(0);
+      isClosingRef.current = false;
     }
-  }, [visible, initialFilters]);
+  }, [visible, initialFilters, panY]);
+
+  // Single unified PanResponder across the entire bottom sheet
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 4 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        const isVertical = Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+        if (!isVertical || Math.abs(gestureState.dy) < 4) return false;
+        // If pulling down at top of scrollview, capture immediately to drag sheet down
+        if (gestureState.dy > 0 && scrollOffset.current <= 2) return true;
+        // If content fits completely without needing scrolling, capture both up and down drags
+        if (!canScrollRef.current) return true;
+        return false;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // Strictly prevent pulling upward past top resting position
+        panY.setValue(Math.max(0, gestureState.dy));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 80 || (gestureState.dy > 20 && gestureState.vy > 0.4)) {
+          handleClose();
+        } else {
+          Animated.spring(panY, {
+            toValue: 0,
+            damping: 20,
+            stiffness: 240,
+            mass: 0.8,
+            overshootClamping: true,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(panY, {
+          toValue: 0,
+          damping: 20,
+          stiffness: 240,
+          mass: 0.8,
+          overshootClamping: true,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
 
   const toggleCategory = (cat: string) => {
     setCategories((prev) => {
@@ -150,19 +225,19 @@ export function FilterModal({
       location: location.trim(),
       sortBy,
     });
-    onClose();
+    handleClose();
   };
 
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="none"
       transparent
       statusBarTranslucent
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       <View style={styles.overlay}>
-        <TouchableWithoutFeedback onPress={onClose}>
+        <TouchableWithoutFeedback onPress={handleClose}>
           <View style={styles.backdrop} />
         </TouchableWithoutFeedback>
 
@@ -170,38 +245,50 @@ export function FilterModal({
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.sheetWrapper}
         >
-          <View style={[styles.sheetContent, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-            {/* Drag Bar Indicator */}
-            <View style={styles.handleContainer}>
-              <View style={styles.handleBar} />
-            </View>
-
-            {/* Header */}
-            <View style={styles.header}>
-              <View style={styles.headerLeft}>
-                <Ionicons name="funnel" size={20} color="#FFB43B" style={{ marginRight: 8 }} />
-                <Text style={styles.title}>Filter & Sort</Text>
-                {activeFilterCount > 0 && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{activeFilterCount}</Text>
-                  </View>
-                )}
+          <Animated.View
+            style={[
+              styles.sheetContent,
+              {
+                paddingBottom: Math.max(insets.bottom, 16),
+                transform: [{ translateY: panY }],
+              },
+            ]}
+            {...panResponder.panHandlers}
+          >
+            {/* Top Swipable Area */}
+            <View>
+              {/* Drag Bar Indicator */}
+              <View style={styles.handleContainer}>
+                <View style={styles.handleBar} />
               </View>
-              <Pressable
-                style={styles.closeBtn}
-                onPress={onClose}
-                hitSlop={8}
-              >
-                <Ionicons name="close" size={22} color="#666" />
-              </Pressable>
-            </View>
 
-            {/* Subtitle / context */}
-            <Text style={styles.subtitle}>
-              {mode === 'homeowner'
-                ? 'Filter available Kasambahay workers to match your household needs.'
-                : 'Filter available job posts and service requests from homeowners.'}
-            </Text>
+              {/* Header */}
+              <View style={styles.header}>
+                <View style={styles.headerLeft}>
+                  <Ionicons name="funnel" size={20} color="#FFB43B" style={{ marginRight: 8 }} />
+                  <Text style={styles.title}>Filter & Sort</Text>
+                  {activeFilterCount > 0 && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>{activeFilterCount}</Text>
+                    </View>
+                  )}
+                </View>
+                <Pressable
+                  style={styles.closeBtn}
+                  onPress={handleClose}
+                  hitSlop={8}
+                >
+                  <Ionicons name="close" size={22} color="#666" />
+                </Pressable>
+              </View>
+
+              {/* Subtitle / context */}
+              <Text style={styles.subtitle}>
+                {mode === 'homeowner'
+                  ? 'Filter available Kasambahay workers to match your household needs.'
+                  : 'Filter available job posts and service requests from homeowners.'}
+              </Text>
+            </View>
 
             {/* Scrollable Filter Body */}
             <ScrollView
@@ -209,6 +296,20 @@ export function FilterModal({
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
+              bounces={false}
+              scrollEventThrottle={16}
+              onScroll={(e) => {
+                scrollOffset.current = e.nativeEvent.contentOffset.y;
+              }}
+              onContentSizeChange={(_, h) => {
+                contentHeight.current = h;
+                canScrollRef.current = layoutHeight.current > 0 && h > layoutHeight.current + 5;
+              }}
+              onLayout={(e) => {
+                const h = e.nativeEvent.layout.height;
+                layoutHeight.current = h;
+                canScrollRef.current = contentHeight.current > 0 && contentHeight.current > h + 5;
+              }}
             >
               {/* SECTION: Service Category */}
               <View style={styles.section}>
@@ -401,12 +502,14 @@ export function FilterModal({
                 </Text>
               </Pressable>
             </View>
-          </View>
+          </Animated.View>
         </KeyboardAvoidingView>
       </View>
     </Modal>
   );
 }
+
+export default FilterModal;
 
 const styles = StyleSheet.create({
   overlay: {
@@ -427,6 +530,8 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 8,
+    paddingBottom: 80,
+    marginBottom: -80,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.15,
