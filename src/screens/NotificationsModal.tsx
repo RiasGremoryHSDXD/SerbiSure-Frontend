@@ -11,6 +11,7 @@ import {
   RefreshControl,
   Animated,
   PanResponder,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -20,6 +21,15 @@ import {
   type NotificationItem,
 } from '../api/notificationsApi';
 import THEME from '../config/theme';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const EXPANDED_HEIGHT = Math.round(SCREEN_HEIGHT * 0.90);
+const COLLAPSED_HEIGHT = Math.round(SCREEN_HEIGHT * 0.52);
+
+// Snap points in terms of translateY
+const SNAP_EXPANDED = 0;
+const SNAP_COLLAPSED = EXPANDED_HEIGHT - COLLAPSED_HEIGHT;
+const SNAP_DISMISSED = SCREEN_HEIGHT;
 
 interface NotificationsModalProps {
   visible: boolean;
@@ -242,63 +252,202 @@ export function NotificationsModal({
     }
   };
 
-  const panY = useRef(new Animated.Value(0)).current;
+  const panY = useRef(new Animated.Value(SNAP_EXPANDED)).current;
+  const currentSnapRef = useRef<'collapsed' | 'expanded'>('expanded');
+  const [currentSnap, setCurrentSnap] = useState<'collapsed' | 'expanded'>('expanded');
+  const currentTranslateY = useRef(SNAP_EXPANDED);
+  const gestureStartY = useRef(SNAP_EXPANDED);
   const isClosingRef = useRef(false);
+  const scrollOffset = useRef(0);
+  const contentHeight = useRef(0);
+  const layoutHeight = useRef(0);
+  const canScrollRef = useRef(false);
+
+  // Sync currentTranslateY with panY for precise gesture tracking
+  useEffect(() => {
+    const id = panY.addListener(({ value }) => {
+      currentTranslateY.current = value;
+    });
+    return () => {
+      panY.removeListener(id);
+    };
+  }, [panY]);
+
+  // Smooth physics-based snap transition
+  const snapTo = useCallback(
+    (toValue: number, snapName: 'collapsed' | 'expanded', onComplete?: () => void) => {
+      currentSnapRef.current = snapName;
+      setCurrentSnap(snapName);
+      currentTranslateY.current = toValue;
+      Animated.spring(panY, {
+        toValue,
+        damping: 24,
+        stiffness: 260,
+        mass: 0.8,
+        overshootClamping: true,
+        useNativeDriver: true,
+      }).start(onComplete);
+    },
+    [panY]
+  );
 
   const handleClose = useCallback(() => {
     if (isClosingRef.current) return;
     isClosingRef.current = true;
     Animated.timing(panY, {
-      toValue: 700,
+      toValue: SNAP_DISMISSED,
       duration: 220,
       useNativeDriver: true,
     }).start(() => {
       onClose();
-      panY.setValue(0);
       isClosingRef.current = false;
+      currentSnapRef.current = 'expanded';
+      setCurrentSnap('expanded');
+      currentTranslateY.current = SNAP_EXPANDED;
     });
   }, [onClose, panY]);
 
+  // On open, smoothly spring up from bottom to default top expanded height
   useEffect(() => {
     if (visible) {
-      panY.setValue(0);
       isClosingRef.current = false;
+      currentSnapRef.current = 'expanded';
+      setCurrentSnap('expanded');
+      currentTranslateY.current = SNAP_EXPANDED;
+      panY.setValue(SNAP_DISMISSED);
+      Animated.spring(panY, {
+        toValue: SNAP_EXPANDED,
+        damping: 24,
+        stiffness: 260,
+        mass: 0.8,
+        overshootClamping: true,
+        useNativeDriver: true,
+      }).start();
     }
   }, [visible, panY]);
 
-  const panResponder = useRef(
+  // Unified release physics for snap points
+  const handleRelease = useCallback(
+    (gestureState: { dy: number; vy: number }) => {
+      const { dy, vy } = gestureState;
+      const currentY = currentTranslateY.current;
+
+      if (currentSnapRef.current === 'collapsed') {
+        // 1. Swipe up to expand to full-screen view
+        if (dy < -35 || vy < -0.25) {
+          snapTo(SNAP_EXPANDED, 'expanded');
+        }
+        // 2. Swipe down to dismiss completely
+        else if (dy > 55 || vy > 0.35) {
+          handleClose();
+        }
+        // Return to resting collapsed height
+        else {
+          snapTo(SNAP_COLLAPSED, 'collapsed');
+        }
+      } else {
+        // Currently expanded:
+        // 2. Swipe down to collapse back to original height or dismiss
+        if (dy > 0) {
+          // Deep drag down or rapid downward flick -> dismiss completely
+          if (dy > SNAP_COLLAPSED + 50 || vy > 0.95 || currentY > SNAP_COLLAPSED + 60) {
+            handleClose();
+          }
+          // Responsive swipe down -> collapse back to mid height
+          else if (dy > 45 || vy > 0.25 || currentY > SNAP_COLLAPSED * 0.25) {
+            snapTo(SNAP_COLLAPSED, 'collapsed');
+          }
+          // Small nudge -> stay expanded
+          else {
+            snapTo(SNAP_EXPANDED, 'expanded');
+          }
+        } else {
+          // Swiped up while already expanded -> stay expanded
+          snapTo(SNAP_EXPANDED, 'expanded');
+        }
+      }
+    },
+    [snapTo, handleClose]
+  );
+
+  // Dedicated PanResponder for the top handle & header (always moves sheet)
+  const headerPanResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dy) > 4;
+        return Math.abs(gestureState.dy) > 3 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 3 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onPanResponderGrant: () => {
+        gestureStartY.current = currentTranslateY.current;
       },
       onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          // Dragging down: follows finger 1:1
-          panY.setValue(gestureState.dy);
-        } else {
-          // Dragging up: elastic rubber band resistance
-          panY.setValue(gestureState.dy * 0.22);
-        }
+        const rawY = gestureStartY.current + gestureState.dy;
+        const targetY = Math.max(SNAP_EXPANDED, rawY);
+        panY.setValue(targetY);
       },
       onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 90 || (gestureState.dy > 20 && gestureState.vy > 0.4)) {
-          handleClose();
-        } else {
-          Animated.spring(panY, {
-            toValue: 0,
-            damping: 22,
-            stiffness: 260,
-            useNativeDriver: true,
-          }).start();
+        handleRelease(gestureState);
+      },
+      onPanResponderTerminate: (_, gestureState) => {
+        handleRelease(gestureState);
+      },
+    })
+  ).current;
+
+  // Main PanResponder across the sheet body (coordinates with list scrolling)
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        const isVertical = Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+        return isVertical && Math.abs(gestureState.dy) > 3;
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        const isVertical = Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+        if (!isVertical || Math.abs(gestureState.dy) < 3) return false;
+
+        // When collapsed: any vertical drag moves sheet (swipe up expands, swipe down dismisses)
+        if (currentSnapRef.current === 'collapsed') {
+          return true;
         }
+
+        // When expanded: if pulling down at top of scroll list, capture to collapse sheet!
+        if (gestureState.dy > 0 && scrollOffset.current <= 6) {
+          return true;
+        }
+
+        // If list does not have overflow, capture all vertical gestures
+        if (!canScrollRef.current) {
+          return true;
+        }
+
+        return false;
+      },
+      onPanResponderGrant: () => {
+        gestureStartY.current = currentTranslateY.current;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const rawY = gestureStartY.current + gestureState.dy;
+        const targetY = Math.max(SNAP_EXPANDED, rawY);
+        panY.setValue(targetY);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        handleRelease(gestureState);
+      },
+      onPanResponderTerminate: (_, gestureState) => {
+        handleRelease(gestureState);
       },
     })
   ).current;
 
   const backdropOpacity = panY.interpolate({
-    inputRange: [0, 300],
-    outputRange: [1, 0],
+    inputRange: [SNAP_EXPANDED, SNAP_COLLAPSED, SNAP_DISMISSED],
+    outputRange: [1, 0.75, 0],
     extrapolate: 'clamp',
   });
 
@@ -360,7 +509,7 @@ export function NotificationsModal({
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={handleClose}
     >
       <Animated.View style={[styles.modalOverlay, { opacity: backdropOpacity }]}>
@@ -372,13 +521,24 @@ export function NotificationsModal({
               transform: [{ translateY: panY }],
             },
           ]}
+          {...panResponder.panHandlers}
         >
           {/* Swipable Handle & Header Area */}
-          <View {...panResponder.panHandlers} style={styles.swipableHeaderArea}>
+          <View style={styles.swipableHeaderArea} {...headerPanResponder.panHandlers}>
             {/* Sheet Handle */}
-            <View style={styles.sheetHandleContainer}>
+            <Pressable
+              style={styles.sheetHandleContainer}
+              onPress={() => {
+                if (currentSnapRef.current === 'collapsed') {
+                  snapTo(SNAP_EXPANDED, 'expanded');
+                } else {
+                  snapTo(SNAP_COLLAPSED, 'collapsed');
+                }
+              }}
+              hitSlop={12}
+            >
               <View style={styles.sheetHandle} />
-            </View>
+            </Pressable>
 
             {/* Modal Header */}
             <View style={styles.modalHeader}>
@@ -436,14 +596,22 @@ export function NotificationsModal({
               renderItem={renderItem}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={() => loadNotifications(true)}
-                  colors={[THEME.colors.brandDark]}
-                  tintColor={THEME.colors.brandDark}
-                />
-              }
+              bounces={false}
+              overScrollMode="never"
+              scrollEnabled={currentSnap === 'expanded'}
+              scrollEventThrottle={16}
+              onScroll={(e) => {
+                scrollOffset.current = e.nativeEvent.contentOffset.y;
+              }}
+              onContentSizeChange={(_, h) => {
+                contentHeight.current = h;
+                canScrollRef.current = layoutHeight.current > 0 && h > layoutHeight.current + 5;
+              }}
+              onLayout={(e) => {
+                const h = e.nativeEvent.layout.height;
+                layoutHeight.current = h;
+                canScrollRef.current = contentHeight.current > 0 && contentHeight.current > h + 5;
+              }}
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
                   <View style={styles.emptyIconCircle}>
@@ -473,8 +641,9 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.colors.canvas,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
-    height: '84%',
-    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+    height: EXPANDED_HEIGHT + 80,
+    paddingBottom: (Platform.OS === 'ios' ? 34 : 16) + 80,
+    marginBottom: -80,
     overflow: 'hidden',
   },
   swipableHeaderArea: {

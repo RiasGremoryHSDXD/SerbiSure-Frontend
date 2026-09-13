@@ -27,6 +27,8 @@ export function ChatsScreen() {
     role: string;
     avatar: string;
     partnerId?: string;
+    isOnline?: boolean;
+    initialReplyTo?: { author: string; text: string };
   }>({
     visible: false,
     name: 'Joshua Asucal',
@@ -92,11 +94,18 @@ export function ChatsScreen() {
     setIsRefreshing(false);
   };
 
-  const openChat = (name: string, role: string, avatar: string, partnerId?: string) => {
+  const openChat = (
+    name: string,
+    role: string,
+    avatar: string,
+    partnerId?: string,
+    isOnline?: boolean,
+    initialReplyTo?: { author: string; text: string }
+  ) => {
     if (partnerId) {
       chatStore.markAsRead(partnerId);
     }
-    setActiveChat({ visible: true, name, role, avatar, partnerId });
+    setActiveChat({ visible: true, name, role, avatar, partnerId, isOnline, initialReplyTo });
   };
 
   const filteredChats = chatList.filter((c) =>
@@ -188,7 +197,7 @@ export function ChatsScreen() {
                 <Pressable
                   key={chat.id}
                   style={({ pressed }) => [styles.chatCard, pressed && styles.chatCardPressed]}
-                  onPress={() => openChat(chat.name, chat.badge, chat.avatar, chat.partnerId)}
+                  onPress={() => openChat(chat.name, chat.badge, chat.avatar, chat.partnerId, chat.online)}
                 >
                   <View style={styles.avatarContainer}>
                     <View style={styles.avatarPlaceholder}>
@@ -248,6 +257,8 @@ export function ChatsScreen() {
         contactName={activeChat.name}
         contactRole={activeChat.role}
         contactAvatar={activeChat.avatar}
+        isOnline={activeChat.isOnline}
+        initialReplyTo={activeChat.initialReplyTo}
         userRole="kasambahay"
       />
     </View>
