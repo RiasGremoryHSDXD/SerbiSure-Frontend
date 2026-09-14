@@ -152,7 +152,7 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
               const verifiedTypes = new Set(
                 data.documents.filter((d) => d.verification_status === 'Verified').map((d) => d.document_type)
               );
-              if (verifiedTypes.has('national_id_front')) {
+              if (verifiedTypes.has('national_id_front') && verifiedTypes.has('national_id_back')) {
                 derivedStatus = 'Verified';
               }
             }
@@ -173,7 +173,7 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
           .filter((d) => d.verification_status === 'Verified')
           .map((d) => d.document_type)
       );
-      if (verifiedTypes.has('national_id_front')) {
+      if (verifiedTypes.has('national_id_front') && verifiedTypes.has('national_id_back')) {
         return 'Verified';
       }
       const docStatuses = new Set(verificationData.documents.map((d) => d.verification_status));
@@ -183,7 +183,7 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
     return verificationData?.overall_status || user.verificationStatus || 'Unverified';
   }, [verificationData, user.verificationStatus]);
 
-  const isVerified = effectiveVerificationStatus === 'Verified' || user.verificationStatus === 'Verified';
+  const isVerified = effectiveVerificationStatus === 'Verified';
 
 
   React.useEffect(() => {

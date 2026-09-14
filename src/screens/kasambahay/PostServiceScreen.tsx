@@ -20,6 +20,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
 import THEME from '../../config/theme';
 import { useUser } from '../../context/UserContext';
+import { VerificationRequiredModal } from '../../ui/VerificationRequiredModal';
+import { SearchablePickerModal } from '../../ui/SearchablePickerModal';
+import {
+  getRegions,
+  getProvinces,
+  getCities,
+  getBarangays,
+  getZipCodeForCity,
+  Region,
+  Province,
+  CityMunicipality,
+  Barangay,
+  LocationItem,
+} from '../../services/locationService';
 
 const logoSource = require('../../../assets/serbisure-logo.png');
 
@@ -35,9 +49,10 @@ interface PostServiceScreenProps {
   visible: boolean;
   onClose: () => void;
   token?: string | null;
+  onOpenVerification?: () => void;
 }
 
-export function PostServiceScreen({ visible, onClose, token }: PostServiceScreenProps) {
+export function PostServiceScreen({ visible, onClose, token, onOpenVerification }: PostServiceScreenProps) {
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
@@ -49,13 +64,283 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
   const [engagementType, setEngagementType] = useState<'short' | 'long' | null>(null);
   const [setupPreference, setSetupPreference] = useState<'stay-out' | 'stay-in' | null>(null);
   const [selectedTime, setSelectedTime] = useState<'morning' | 'afternoon' | 'night' | null>(null);
-  const [address, setAddress] = useState('');
+
+  // PSGC Location State
+  const [selectedRegion, setSelectedRegion] = useState<Region | null>(null);
+  const [selectedProvince, setSelectedProvince] = useState<Province | null>(null);
+  const [selectedCity, setSelectedCity] = useState<CityMunicipality | null>(null);
+  const [selectedBarangay, setSelectedBarangay] = useState<Barangay | null>(null);
+  const [streetAddress, setStreetAddress] = useState('');
   const [floorUnit, setFloorUnit] = useState('');
+  const [zipcode, setZipcode] = useState('');
+
+  // Location Picker Lists & Modals
+  const [regionsList, setRegionsList] = useState<Region[]>([]);
+  const [provincesList, setProvincesList] = useState<Province[]>([]);
+  const [citiesList, setCitiesList] = useState<CityMunicipality[]>([]);
+  const [barangaysList, setBarangaysList] = useState<Barangay[]>([]);
+  const [loadingLocations, setLoadingLocations] = useState(false);
+  const [activePicker, setActivePicker] = useState<'region' | 'province' | 'city' | 'barangay' | null>(null);
+
   const [instructions, setInstructions] = useState('');
-  const [offerAmount, setOfferAmount] = useState('500');
+  const [offerAmount, setOfferAmount] = useState('600');
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [postedSuccess, setPostedSuccess] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  const [showVerificationRequired, setShowVerificationRequired] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<string>('Unverified');
+
+  // Pre-populate with User Profile Address
+  const [hasAutoFilled, setHasAutoFilled] = useState(false);
+
+  const applyUserProfileAddress = async () => {
+    if (!user) return;
+    try {
+      const regList = regionsList.length > 0 ? regionsList : await getRegions();
+      setRegionsList(regList);
+
+      let matchedReg: Region | null = null;
+      if (user.region) {
+        matchedReg =
+          regList.find(
+            (r) =>
+              r.name.toLowerCase().includes(user.region!.toLowerCase()) ||
+              (r.displayName && r.displayName.toLowerCase().includes(user.region!.toLowerCase())) ||
+              (r.regionName && r.regionName.toLowerCase().includes(user.region!.toLowerCase()))
+          ) || null;
+      }
+      if (!matchedReg) {
+        matchedReg = regList.find((r) => r.code === '100000000') || null;
+      }
+
+      if (matchedReg) {
+        setSelectedRegion(matchedReg);
+        const provs = await getProvinces(matchedReg.code);
+        setProvincesList(provs);
+
+        let matchedProv: Province | null = null;
+        if (user.province) {
+          matchedProv = provs.find((p) => p.name.toLowerCase().includes(user.province!.toLowerCase())) || null;
+        }
+        if (!matchedProv) {
+          matchedProv = provs.find((p) => p.code === '104300000') || null;
+        }
+
+        if (matchedProv) {
+          setSelectedProvince(matchedProv);
+          const cities = await getCities(matchedProv.code, matchedReg.code);
+          setCitiesList(cities);
+
+          let matchedCity: CityMunicipality | null = null;
+          if (user.city) {
+            matchedCity =
+              cities.find(
+                (c) =>
+                  c.name.toLowerCase().includes(user.city!.toLowerCase()) ||
+                  (c.aliases && c.aliases.some((a) => user.city!.toLowerCase().includes(a)))
+              ) || null;
+          }
+          if (!matchedCity) {
+            matchedCity = cities.find((c) => c.code === '104305000') || null;
+          }
+
+          if (matchedCity) {
+            setSelectedCity(matchedCity);
+            const brgys = await getBarangays(matchedCity.code);
+            setBarangaysList(brgys);
+
+            let matchedBrgy: Barangay | null = null;
+            if (user.barangay) {
+              const bLow = user.barangay.toLowerCase();
+              matchedBrgy =
+                brgys.find(
+                  (b) =>
+                    b.name.toLowerCase() === bLow ||
+                    b.name.toLowerCase().includes(bLow) ||
+                    bLow.includes(b.name.toLowerCase())
+                ) || null;
+            }
+
+            if (matchedBrgy) {
+              setSelectedBarangay(matchedBrgy);
+            } else if (user.barangay) {
+              setSelectedBarangay({
+                code: '',
+                name: user.barangay,
+                displayName:
+                  user.barangay.startsWith('Barangay') || user.barangay.startsWith('Brgy')
+                    ? user.barangay
+                    : `Brgy. ${user.barangay}`,
+              });
+            }
+          }
+        }
+      }
+
+      if (user.street) setStreetAddress(user.street);
+      if (user.zipcode) setZipcode(user.zipcode);
+      else setZipcode('9000');
+    } catch (e) {
+      console.warn('[PostServiceScreen] applyUserProfileAddress error:', e);
+      if (user.region) setSelectedRegion({ code: '100000000', name: user.region, displayName: user.region, regionName: user.region });
+      if (user.province) setSelectedProvince({ code: '104300000', name: user.province, displayName: user.province, regionCode: '100000000' });
+      if (user.city) setSelectedCity({ code: '104305000', name: user.city, displayName: user.city });
+      if (user.barangay) setSelectedBarangay({ code: '', name: user.barangay, displayName: user.barangay });
+      if (user.street) setStreetAddress(user.street);
+      if (user.zipcode) setZipcode(user.zipcode);
+    }
+  };
+
+  useEffect(() => {
+    if (!hasAutoFilled && user && (user.barangay || user.city)) {
+      setHasAutoFilled(true);
+      applyUserProfileAddress();
+    }
+  }, [user]);
+
+  const loadRegions = async () => {
+    setLoadingLocations(true);
+    try {
+      const data = await getRegions();
+      setRegionsList(data);
+    } catch (err) {
+      console.warn('[PostServiceScreen] loadRegions error:', err);
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const handleOpenRegionPicker = async () => {
+    setActivePicker('region');
+    if (regionsList.length === 0) {
+      await loadRegions();
+    }
+  };
+
+  const handleSelectRegion = async (item: LocationItem) => {
+    const reg = item as Region;
+    setSelectedRegion(reg);
+    setSelectedProvince(null);
+    setSelectedCity(null);
+    setSelectedBarangay(null);
+    setProvincesList([]);
+    setCitiesList([]);
+    setBarangaysList([]);
+
+    setLoadingLocations(true);
+    try {
+      const provs = await getProvinces(reg.code);
+      setProvincesList(provs);
+      const metroManila = provs.length === 1 && provs[0]?.name === 'Metro Manila' ? provs[0] : null;
+      if (metroManila) {
+        setSelectedProvince(metroManila);
+        const cities = await getCities(metroManila.code, reg.code);
+        setCitiesList(cities);
+      }
+    } catch (err) {
+      console.warn('[PostServiceScreen] handleSelectRegion error:', err);
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const handleOpenProvincePicker = async () => {
+    if (!selectedRegion) {
+      Alert.alert('Select Region First', 'Please select a Region first.');
+      return;
+    }
+    setActivePicker('province');
+    if (provincesList.length === 0) {
+      setLoadingLocations(true);
+      try {
+        const provs = await getProvinces(selectedRegion.code);
+        setProvincesList(provs);
+      } finally {
+        setLoadingLocations(false);
+      }
+    }
+  };
+
+  const handleSelectProvince = async (item: LocationItem) => {
+    const prov = item as Province;
+    setSelectedProvince(prov);
+    setSelectedCity(null);
+    setSelectedBarangay(null);
+    setCitiesList([]);
+    setBarangaysList([]);
+
+    setLoadingLocations(true);
+    try {
+      const cities = await getCities(prov.code, selectedRegion?.code);
+      setCitiesList(cities);
+    } catch (err) {
+      console.warn('[PostServiceScreen] handleSelectProvince error:', err);
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const handleOpenCityPicker = async () => {
+    if (!selectedProvince && !selectedRegion) {
+      Alert.alert('Select Region & Province', 'Please select your Region and Province first.');
+      return;
+    }
+    setActivePicker('city');
+    if (citiesList.length === 0) {
+      setLoadingLocations(true);
+      try {
+        const provCode = selectedProvince?.code || '';
+        const regCode = selectedRegion?.code || '';
+        const cities = await getCities(provCode, regCode);
+        setCitiesList(cities);
+      } finally {
+        setLoadingLocations(false);
+      }
+    }
+  };
+
+  const handleSelectCity = async (item: LocationItem) => {
+    const city = item as CityMunicipality;
+    setSelectedCity(city);
+    setSelectedBarangay(null);
+    setBarangaysList([]);
+
+    const suggestedZip = getZipCodeForCity(city.code, city.name);
+    if (suggestedZip) {
+      setZipcode(suggestedZip);
+    }
+
+    setLoadingLocations(true);
+    try {
+      const brgys = await getBarangays(city.code);
+      setBarangaysList(brgys);
+    } catch (err) {
+      console.warn('[PostServiceScreen] handleSelectCity error:', err);
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const handleOpenBarangayPicker = async () => {
+    if (!selectedCity) {
+      Alert.alert('Select City First', 'Please select your City / Municipality first.');
+      return;
+    }
+    setActivePicker('barangay');
+    if (barangaysList.length === 0) {
+      setLoadingLocations(true);
+      try {
+        const brgys = await getBarangays(selectedCity.code);
+        setBarangaysList(brgys);
+      } finally {
+        setLoadingLocations(false);
+      }
+    }
+  };
+
+  const handleSelectBarangay = (item: LocationItem) => {
+    setSelectedBarangay(item as Barangay);
+  };
 
 
   // Animation values for Logo Loader
@@ -92,6 +377,8 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
     outputRange: ['0deg', '360deg'],
   });
 
+  const BASE_SERVICES = ['Cleaning', 'Child_care', 'Cooking', 'Caregiver', 'Laundry'];
+
   const services = [
     { id: 'Cleaning', label: 'Cleaning', icon: 'sparkles' },
     { id: 'Child_care', label: 'Child Care', icon: 'happy' },
@@ -101,17 +388,58 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
     { id: 'All-around', label: 'All-around', icon: 'home' },
   ];
 
+  const handleToggleService = (id: string) => {
+    // 1. If clicking 'All-around'
+    if (id === 'All-around') {
+      if (selectedServices.includes('All-around')) {
+        setSelectedServices([]);
+      } else {
+        setSelectedServices(['All-around']);
+      }
+      return;
+    }
+
+    // 2. If 'All-around' is currently selected and user clicks one of the specific services:
+    // Switch away from All-around and select ONLY the clicked service!
+    if (selectedServices.includes('All-around')) {
+      setSelectedServices([id]);
+      return;
+    }
+
+    // 3. Normal multi-select toggle
+    let updated: string[];
+    if (selectedServices.includes(id)) {
+      updated = selectedServices.filter((s) => s !== id);
+    } else {
+      updated = [...selectedServices, id];
+    }
+
+    // 4. Check if all 5 base services are selected -> automatically switch to All-around!
+    const hasAllFive = BASE_SERVICES.every((baseId) => updated.includes(baseId));
+    if (hasAllFive) {
+      setSelectedServices(['All-around']);
+    } else {
+      setSelectedServices(updated);
+    }
+  };
+
   const resetForm = () => {
     setStep(1);
     setSelectedServices([]);
     setEngagementType(null);
     setSetupPreference(null);
     setSelectedTime(null);
-    setAddress('');
+    setSelectedRegion(null);
+    setSelectedProvince(null);
+    setSelectedCity(null);
+    setSelectedBarangay(null);
+    setStreetAddress('');
     setFloorUnit('');
+    setZipcode('');
     setInstructions('');
-    setOfferAmount('500');
+    setOfferAmount('600');
     setAgreedTerms(false);
+    setHasAutoFilled(false);
   };
 
   const handleClose = () => {
@@ -122,21 +450,25 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
   const handleEngagementChange = (type: 'short' | 'long') => {
     setEngagementType(type);
     if (type === 'long') {
-      if (offerAmount === '500' || offerAmount === '800') {
+      if (offerAmount === '500' || offerAmount === '600' || offerAmount === '800') {
         setOfferAmount('6500');
       }
     } else {
       if (offerAmount === '6500' || offerAmount === '8000') {
-        setOfferAmount('500');
+        setOfferAmount('600');
       }
     }
   };
 
   const getSelectedRoleLabel = () => {
     if (selectedServices.length === 0) return 'Household Service';
-    return selectedServices
-      .map((s) => services.find((x) => x.id === s)?.label || s.replace(/_/g, ' '))
-      .join(' & ');
+    if (selectedServices.includes('All-around')) return 'All-around';
+    const labels = selectedServices.map(
+      (s) => services.find((x) => x.id === s)?.label || s.replace(/_/g, ' ')
+    );
+    if (labels.length === 1) return labels[0];
+    if (labels.length === 2) return `${labels[0]} & ${labels[1]}`;
+    return `${labels.slice(0, -1).join(', ')} & ${labels[labels.length - 1]}`;
   };
 
   const getTimeLabel = () => {
@@ -148,7 +480,11 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
 
   const buildAutoMessage = () => {
     const roleText = getSelectedRoleLabel();
-    const locText = address.trim() || 'Cagayan de Oro';
+    const locText = selectedBarangay && selectedCity
+      ? `${selectedBarangay.name}, ${selectedCity.name}`
+      : selectedCity
+      ? selectedCity.name
+      : streetAddress.trim() || 'Cagayan de Oro';
     const setupText = setupPreference === 'stay-in' ? 'stay-in' : 'stay-out';
 
     let msg = '';
@@ -187,8 +523,29 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
       }
       setStep(3);
     } else if (step === 3) {
-      if (!address.trim()) {
-        Alert.alert('Address Required', 'Please enter your street, barangay, or city location.');
+      if (!selectedRegion) {
+        Alert.alert('Region Required', 'Please select a Region.');
+        return;
+      }
+      if (!selectedProvince) {
+        Alert.alert('Province Required', 'Please select a Province.');
+        return;
+      }
+      if (!selectedCity) {
+        Alert.alert('City / Municipality Required', 'Please select a City or Municipality.');
+        return;
+      }
+      if (!selectedBarangay) {
+        Alert.alert('Barangay Required', 'Please select a Barangay.');
+        return;
+      }
+      if (!streetAddress.trim()) {
+        Alert.alert('Street / House No. Required', 'Please enter your street address, house number, or zone.');
+        return;
+      }
+      const cleanZip = zipcode.trim();
+      if (!cleanZip || !/^\d{4}$/.test(cleanZip)) {
+        Alert.alert('Zip Code Required', 'Please enter a valid 4-digit zip code (e.g. 9000).');
         return;
       }
       const amount = Number(offerAmount.replace(/[^0-9.]/g, ''));
@@ -239,9 +596,13 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
           service_category: selectedServices,
           start_time: startTime.toISOString(),
           end_time: endTime.toISOString(),
-          service_address: address.trim(),
+          region: selectedRegion?.displayName || selectedRegion?.name,
+          province: selectedProvince?.name,
+          city: selectedCity?.name,
+          barangay: selectedBarangay?.name,
+          street: streetAddress.trim(),
           floor_number: floorUnit.trim() || undefined,
-          zip_code: user?.zipcode || '9000',
+          zip_code: zipcode.trim() || '9000',
           special_instruction: autoMessage,
           daily_rate: offerAmount.trim(),
         };
@@ -258,8 +619,37 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
 
         if (!response.ok) {
           const errorData = await response.json();
-          console.error(errorData);
-          Alert.alert('Posting Error', errorData.detail || JSON.stringify(errorData));
+          console.log('[PostService] Server response:', errorData);
+
+          const rawStr = typeof errorData === 'string' ? errorData : JSON.stringify(errorData);
+          const isVerificationError =
+            response.status === 403 ||
+            /verified|verification/i.test(rawStr) ||
+            errorData?.code === 'account_not_verified';
+
+          if (isVerificationError) {
+            setIsPosting(false);
+            setVerificationStatus(errorData?.verification_status || user?.verificationStatus || 'Unverified');
+            setShowVerificationRequired(true);
+            return;
+          }
+
+          let errorMsg = 'Failed to post service. Please check your entries.';
+          if (typeof errorData === 'string') {
+            errorMsg = errorData;
+          } else if (errorData?.detail) {
+            errorMsg = String(errorData.detail);
+          } else if (typeof errorData === 'object') {
+            const msgs: string[] = [];
+            for (const [k, v] of Object.entries(errorData)) {
+              const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+              const list = Array.isArray(v) ? v : [v];
+              list.forEach(m => msgs.push(`• ${label}: ${m}`));
+            }
+            if (msgs.length > 0) errorMsg = msgs.join('\n');
+          }
+
+          Alert.alert('Unable to Post', errorMsg);
           setIsPosting(false);
           return;
         }
@@ -271,9 +661,9 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
           resetForm();
           onClose();
         }, 1800);
-      } catch (error) {
-        console.error(error);
-        Alert.alert('Network Error', 'Failed to connect to the server.');
+      } catch (error: any) {
+        console.log('[PostService] Network error:', error);
+        Alert.alert('Network Error', error?.message || 'Failed to connect to the server.');
         setIsPosting(false);
       }
     }
@@ -360,15 +750,11 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
                 {services.map((item) => {
                   const isSelected = selectedServices.includes(item.id);
 
-                  const handleToggle = () => {
-                    setSelectedServices([item.id]);
-                  };
-
                   return (
                     <Pressable
                       key={item.id}
                       style={[styles.serviceCard, isSelected && styles.serviceCardActive]}
-                      onPress={handleToggle}
+                      onPress={() => handleToggleService(item.id)}
                     >
                       <Ionicons
                         name={item.icon as any}
@@ -495,23 +881,117 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
             {/* STEP 3: DETAILS, INSTRUCTIONS & RATE */}
             {step === 3 && (
               <View style={styles.step3Container}>
-                <Text style={styles.inputGroupLabel}>SERVICE ADDRESS</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Street, barangay, or city (e.g. Pagatpat, Cagayan de Oro)"
-                  placeholderTextColor="#9CA3AF"
-                  value={address}
-                  onChangeText={setAddress}
-                />
+                {/* Location Header & Profile Address Quick Use */}
+                <View style={styles.locationHeaderRow}>
+                  <Text style={styles.inputGroupLabel}>SERVICE ADDRESS</Text>
+                  {user && (user.barangay || user.city) ? (
+                    <Pressable style={styles.useProfileAddressBtn} onPress={applyUserProfileAddress}>
+                      <Ionicons name="location" size={13} color="#EA580C" />
+                      <Text style={styles.useProfileAddressText}>Use Profile Address</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
 
-                <Text style={styles.inputGroupLabel}>FLOOR / UNIT (OPTIONAL)</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="e.g. Purok 3, Zone 6"
-                  placeholderTextColor="#9CA3AF"
-                  value={floorUnit}
-                  onChangeText={setFloorUnit}
-                />
+                {/* Region Dropdown Button */}
+                <Pressable style={styles.locationSelectButton} onPress={handleOpenRegionPicker}>
+                  <Ionicons name="map-outline" size={18} color="#0D0D11" style={styles.locationIcon} />
+                  <Text
+                    style={[styles.locationSelectText, !selectedRegion && styles.locationPlaceholderText]}
+                    numberOfLines={1}
+                  >
+                    {selectedRegion ? selectedRegion.displayName || selectedRegion.name : 'Select Region'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+                </Pressable>
+
+                {/* Province Dropdown Button */}
+                <Pressable
+                  style={[styles.locationSelectButton, !selectedRegion && styles.locationSelectButtonDisabled]}
+                  onPress={handleOpenProvincePicker}
+                  disabled={!selectedRegion}
+                >
+                  <Ionicons name="business-outline" size={18} color="#0D0D11" style={styles.locationIcon} />
+                  <Text
+                    style={[styles.locationSelectText, !selectedProvince && styles.locationPlaceholderText]}
+                    numberOfLines={1}
+                  >
+                    {selectedProvince ? selectedProvince.displayName || selectedProvince.name : 'Select Province'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+                </Pressable>
+
+                {/* City / Municipality Dropdown Button */}
+                <Pressable
+                  style={[styles.locationSelectButton, !selectedProvince && styles.locationSelectButtonDisabled]}
+                  onPress={handleOpenCityPicker}
+                  disabled={!selectedProvince}
+                >
+                  <Ionicons name="location-outline" size={18} color="#0D0D11" style={styles.locationIcon} />
+                  <Text
+                    style={[styles.locationSelectText, !selectedCity && styles.locationPlaceholderText]}
+                    numberOfLines={1}
+                  >
+                    {selectedCity ? selectedCity.displayName || selectedCity.name : 'Select City / Municipality'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+                </Pressable>
+
+                {/* Barangay Dropdown Button */}
+                <Pressable
+                  style={[styles.locationSelectButton, !selectedCity && styles.locationSelectButtonDisabled]}
+                  onPress={handleOpenBarangayPicker}
+                  disabled={!selectedCity}
+                >
+                  <Ionicons name="home-outline" size={18} color="#0D0D11" style={styles.locationIcon} />
+                  <Text
+                    style={[styles.locationSelectText, !selectedBarangay && styles.locationPlaceholderText]}
+                    numberOfLines={1}
+                  >
+                    {selectedBarangay ? selectedBarangay.displayName || selectedBarangay.name : 'Select Barangay'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+                </Pressable>
+
+                {/* House No. / Street / Zone Input */}
+                <View style={styles.locationInputContainer}>
+                  <Ionicons name="navigate-outline" size={18} color="#0D0D11" style={styles.locationIcon} />
+                  <TextInput
+                    style={styles.locationInput}
+                    placeholder="House No. / Street / Zone / Subdivision"
+                    placeholderTextColor="#9CA3AF"
+                    value={streetAddress}
+                    onChangeText={setStreetAddress}
+                    maxLength={100}
+                  />
+                </View>
+
+                {/* Floor / Unit (Optional) & Zip Code in a row */}
+                <View style={styles.addressSubRow}>
+                  <View style={[styles.locationInputContainer, { flex: 1.2, marginRight: 8 }]}>
+                    <Ionicons name="layers-outline" size={18} color="#0D0D11" style={styles.locationIcon} />
+                    <TextInput
+                      style={styles.locationInput}
+                      placeholder="Floor / Unit (Opt)"
+                      placeholderTextColor="#9CA3AF"
+                      value={floorUnit}
+                      onChangeText={setFloorUnit}
+                      maxLength={30}
+                    />
+                  </View>
+
+                  <View style={[styles.locationInputContainer, { flex: 1 }]}>
+                    <Ionicons name="mail-outline" size={18} color="#0D0D11" style={styles.locationIcon} />
+                    <TextInput
+                      style={styles.locationInput}
+                      placeholder="Zip Code"
+                      placeholderTextColor="#9CA3AF"
+                      keyboardType="number-pad"
+                      maxLength={4}
+                      value={zipcode}
+                      onChangeText={(t) => setZipcode(t.replace(/\D/g, '').slice(0, 4))}
+                    />
+                  </View>
+                </View>
 
                 <Text style={styles.inputGroupLabel}>SPECIFIC INSTRUCTIONS / SKILLS (OPTIONAL)</Text>
                 <TextInput
@@ -546,17 +1026,18 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
                           {engagementType === 'short' ? '/day' : '/month'}
                         </Text>
                       </View>
-                      {isBelowMin ? (
+                      {isBelowMin && (
                         <Text style={styles.invalidRateHint}>
                           {engagementType === 'short'
-                            ? 'Minimum rate is ₱600 / day'
-                            : 'Minimum salary is ₱6,500 / month'}
+                            ? 'Minimum daily rate is ₱600/day.'
+                            : 'Minimum monthly salary is ₱6,500/month (RA 10361).'}
                         </Text>
-                      ) : null}
+                      )}
                     </>
                   );
                 })()}
 
+                {/* Suggested Rate Info Box */}
                 <View style={styles.recommendBox}>
                   <Text style={styles.recommendTitle}>
                     {engagementType === 'short'
@@ -597,6 +1078,15 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
                     <Text style={styles.summaryLabel}>Service</Text>
                     <Text style={[styles.summaryValue, { flex: 1, textAlign: 'right', marginLeft: 16 }]}>
                       {getSelectedRoleLabel()}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryDivider} />
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Location</Text>
+                    <Text style={[styles.summaryValue, { flex: 1, textAlign: 'right', marginLeft: 16 }]} numberOfLines={2}>
+                      {selectedBarangay?.name
+                        ? `${selectedBarangay.name}, ${selectedCity?.name || ''}`
+                        : streetAddress || 'Cagayan de Oro'}
                     </Text>
                   </View>
                   <View style={styles.summaryDivider} />
@@ -697,6 +1187,67 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
             </Animated.View>
           </View>
         )}
+
+        {/* Verification Required Modal */}
+        <VerificationRequiredModal
+          visible={showVerificationRequired}
+          onClose={() => setShowVerificationRequired(false)}
+          onVerify={() => {
+            setShowVerificationRequired(false);
+            if (onOpenVerification) {
+              onOpenVerification();
+            } else {
+              onClose();
+            }
+          }}
+          role="kasambahay"
+          verificationStatus={verificationStatus}
+        />
+
+        {/* Location Picker Modals */}
+        <SearchablePickerModal
+          visible={activePicker === 'region'}
+          title="Select Region"
+          searchPlaceholder="Search region (e.g. Region X, NCR)..."
+          items={regionsList}
+          selectedCode={selectedRegion?.code}
+          loading={loadingLocations}
+          onSelect={handleSelectRegion}
+          onClose={() => setActivePicker(null)}
+        />
+
+        <SearchablePickerModal
+          visible={activePicker === 'province'}
+          title="Select Province"
+          searchPlaceholder="Search province (e.g. Misamis Oriental)..."
+          items={provincesList}
+          selectedCode={selectedProvince?.code}
+          loading={loadingLocations}
+          onSelect={handleSelectProvince}
+          onClose={() => setActivePicker(null)}
+        />
+
+        <SearchablePickerModal
+          visible={activePicker === 'city'}
+          title="Select City / Municipality"
+          searchPlaceholder="Search city (e.g. CDO, Cagayan, Manila)..."
+          items={citiesList}
+          selectedCode={selectedCity?.code}
+          loading={loadingLocations}
+          onSelect={handleSelectCity}
+          onClose={() => setActivePicker(null)}
+        />
+
+        <SearchablePickerModal
+          visible={activePicker === 'barangay'}
+          title="Select Barangay"
+          searchPlaceholder="Search barangay (e.g. Pagatpat, Carmen, Bulua)..."
+          items={barangaysList}
+          selectedCode={selectedBarangay?.code}
+          loading={loadingLocations}
+          onSelect={handleSelectBarangay}
+          onClose={() => setActivePicker(null)}
+        />
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -895,6 +1446,79 @@ const styles = StyleSheet.create({
   // STEP 3 STYLES
   step3Container: {
     width: '100%',
+  },
+  locationHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  useProfileAddressBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF4ED',
+    borderRadius: 14,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+    gap: 4,
+  },
+  useProfileAddressText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#EA580C',
+  },
+  locationSelectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    height: 48,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  locationSelectButtonDisabled: {
+    opacity: 0.55,
+    backgroundColor: '#F3F4F6',
+  },
+  locationSelectText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0D0D11',
+  },
+  locationPlaceholderText: {
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  locationIcon: {
+    marginRight: 10,
+  },
+  locationInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    height: 48,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  locationInput: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0D0D11',
+    height: '100%',
+  },
+  addressSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
   },
   inputGroupLabel: {
     fontSize: 11,

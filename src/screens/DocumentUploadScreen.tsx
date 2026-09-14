@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Image, Pressable, StyleSheet, Text, View, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,7 +35,29 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, onBack, onNex
   const [policeImage, setPoliceImage] = useState<string | null>(null);
   const [nationalFrontImage, setNationalFrontImage] = useState<string | null>(null);
   const [nationalBackImage, setNationalBackImage] = useState<string | null>(null);
+  const [existingDocs, setExistingDocs] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+
+  // Check if any documents were already uploaded in a previous attempt
+  useEffect(() => {
+    if (token) {
+      fetchWithTimeout(`${API_BASE_URL}/api/v1/verifications/status/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && Array.isArray(data.documents)) {
+            const active = new Set<string>(
+              data.documents
+                .filter((d: any) => d.verification_status === 'Pending' || d.verification_status === 'Verified')
+                .map((d: any) => d.document_type)
+            );
+            setExistingDocs(active);
+          }
+        })
+        .catch((err) => console.warn('[DocumentUploadScreen] check status error:', err));
+    }
+  }, [token]);
 
   const handleBoxPress = (box: 'nbi' | 'police' | 'national_front' | 'national_back') => {
     setActiveBox(box);
@@ -50,21 +72,36 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, onBack, onNex
   };
 
   const handleUploadAll = async () => {
-    const uploads = [];
+    const uploads: { type: string; uri: string }[] = [];
     if (role === 'homeowner') {
-      if (!nationalFrontImage || !nationalBackImage) {
+      const hasFront = existingDocs.has('national_id_front') || !!nationalFrontImage;
+      const hasBack = existingDocs.has('national_id_back') || !!nationalBackImage;
+
+      if (!hasFront || !hasBack) {
         Alert.alert("Missing Documents", "Please upload both the front and back of your National ID.");
         return;
       }
-      uploads.push({ type: 'national_id_front', uri: nationalFrontImage });
-      uploads.push({ type: 'national_id_back', uri: nationalBackImage });
+      if (nationalFrontImage && !existingDocs.has('national_id_front')) {
+        uploads.push({ type: 'national_id_front', uri: nationalFrontImage });
+      }
+      if (nationalBackImage && !existingDocs.has('national_id_back')) {
+        uploads.push({ type: 'national_id_back', uri: nationalBackImage });
+      }
     } else {
-      if (!nbiImage && !policeImage) {
+      const hasNbi = existingDocs.has('nbi_clearance') || !!nbiImage;
+      const hasPolice = existingDocs.has('police_clearance') || !!policeImage;
+      if (!hasNbi && !hasPolice) {
         Alert.alert("Missing Documents", "Please upload at least one clearance document.");
         return;
       }
-      if (nbiImage) uploads.push({ type: 'nbi_clearance', uri: nbiImage });
-      if (policeImage) uploads.push({ type: 'police_clearance', uri: policeImage });
+      if (nbiImage && !existingDocs.has('nbi_clearance')) uploads.push({ type: 'nbi_clearance', uri: nbiImage });
+      if (policeImage && !existingDocs.has('police_clearance')) uploads.push({ type: 'police_clearance', uri: policeImage });
+    }
+
+    if (uploads.length === 0) {
+      Alert.alert("Success", "Your documents have been submitted and are under review!");
+      if (onNext) onNext();
+      return;
     }
 
     setLoading(true);
@@ -86,11 +123,16 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, onBack, onNex
         const response = await fetchWithTimeout(`${API_BASE_URL}/api/v1/verifications/upload/`, {
           method: "POST",
           headers: {
-            'Content-Type': 'multipart/form-data',
             "Authorization": token ? `Bearer ${token}` : "",
           },
           body: formData,
-        });
+        }, 45000);
+
+        if (response.status === 409) {
+          // Document was already submitted (pending review) - continue to next upload gracefully!
+          console.log(`[DocumentUploadScreen] ${upload.type} was already submitted, proceeding with remaining uploads.`);
+          continue;
+        }
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
@@ -149,13 +191,19 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, onBack, onNex
           <View>
             {role === 'homeowner' ? (
               <>
-                <Pressable style={[styles.uploadBox, styles.uploadBoxHomeowner, !!nationalFrontImage && styles.uploadBoxHasImage]} onPress={() => handleBoxPress('national_front')}>
+                <Pressable style={[styles.uploadBox, styles.uploadBoxHomeowner, (!!nationalFrontImage || existingDocs.has('national_id_front')) && styles.uploadBoxHasImage]} onPress={() => handleBoxPress('national_front')}>
                   {nationalFrontImage ? (
                     <View style={styles.attachmentContainer}>
                       <Image source={{ uri: nationalFrontImage }} style={[styles.uploadPreview, styles.uploadPreviewHomeowner]} resizeMode="cover" />
                       <Text style={styles.fileNameTextItalic} numberOfLines={1}>
                         {getFileName(nationalFrontImage, 'national_id_front.jpg')}
                       </Text>
+                    </View>
+                  ) : existingDocs.has('national_id_front') ? (
+                    <View style={styles.attachmentContainer}>
+                      <Ionicons name="checkmark-circle" size={32} color="#16A34A" />
+                      <Text style={[styles.uploadTitle, { color: '#16A34A', marginTop: 4 }]}>National ID (Front)</Text>
+                      <Text style={[styles.uploadSubtitle, { color: '#15803D' }]}>Submitted (Under Review)</Text>
                     </View>
                   ) : (
                     <>
@@ -167,13 +215,19 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, onBack, onNex
                   )}
                 </Pressable>
 
-                <Pressable style={[styles.uploadBox, styles.uploadBoxHomeowner, !!nationalBackImage && styles.uploadBoxHasImage]} onPress={() => handleBoxPress('national_back')}>
+                <Pressable style={[styles.uploadBox, styles.uploadBoxHomeowner, (!!nationalBackImage || existingDocs.has('national_id_back')) && styles.uploadBoxHasImage]} onPress={() => handleBoxPress('national_back')}>
                   {nationalBackImage ? (
                     <View style={styles.attachmentContainer}>
                       <Image source={{ uri: nationalBackImage }} style={[styles.uploadPreview, styles.uploadPreviewHomeowner]} resizeMode="cover" />
                       <Text style={styles.fileNameTextItalic} numberOfLines={1}>
                         {getFileName(nationalBackImage, 'national_id_back.jpg')}
                       </Text>
+                    </View>
+                  ) : existingDocs.has('national_id_back') ? (
+                    <View style={styles.attachmentContainer}>
+                      <Ionicons name="checkmark-circle" size={32} color="#16A34A" />
+                      <Text style={[styles.uploadTitle, { color: '#16A34A', marginTop: 4 }]}>National ID (Back)</Text>
+                      <Text style={[styles.uploadSubtitle, { color: '#15803D' }]}>Submitted (Under Review)</Text>
                     </View>
                   ) : (
                     <>

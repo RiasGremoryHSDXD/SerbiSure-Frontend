@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
   BookingItem,
+  formatBookingAddress,
   fetchMyBookings,
   fetchMyAssignedBookings,
   startBooking,
@@ -264,7 +265,7 @@ export function MyBookingsModal({
                   <View style={styles.infoRow}>
                     <Ionicons name="location-outline" size={14} color="#6B7280" />
                     <Text style={styles.infoText} numberOfLines={1}>
-                      {booking.service_address}
+                      {formatBookingAddress(booking)}
                     </Text>
                   </View>
 

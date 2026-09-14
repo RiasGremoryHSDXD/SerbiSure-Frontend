@@ -9,6 +9,7 @@ import { useJobsActivity } from '../../store/savedJobsStore';
 import { NotificationBell } from '../../context/NotificationContext';
 import { JobDetailSheet } from '../../components/JobDetailSheet';
 import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
+import { formatBookingAddress, formatBookingLocationShort } from '../../api/bookingApi';
 import { ChatDetailScreen } from '../ChatDetailScreen';
 
 const logoSource = require('../../../assets/serbisure_new_clean.png');
@@ -107,11 +108,14 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
           const termTag = isLongTerm ? 'Long-term' : 'Part-time';
           const unit = isLongTerm ? '/ month' : '/ day';
 
+          const locShort = formatBookingLocationShort(item, 'Cagayan de Oro');
+          const locForDesc = formatBookingAddress(item, 'residence');
+
           let description = item.special_instruction && item.special_instruction.trim()
             ? item.special_instruction.trim()
             : (isLongTerm
-                ? `I am looking for ${categories.join(' & ')} at ${item.service_address || 'residence'}, capable of working on a stay-in setup.`
-                : `I am looking for ${categories.join(' & ')} at ${item.service_address || 'residence'}, capable of working on a stay-out setup.`);
+                ? `I am looking for ${categories.join(' & ')} at ${locForDesc}, capable of working on a stay-in setup.`
+                : `I am looking for ${categories.join(' & ')} at ${locForDesc}, capable of working on a stay-out setup.`);
 
           const descLower = description.toLowerCase();
           const setupTag = descLower.includes('stay-in') ? 'Stay-in' : descLower.includes('stay-out') ? 'Stay-out' : (isLongTerm ? 'Stay-in' : 'Stay-out');
@@ -122,7 +126,7 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
             employerName: item.name || 'Homeowner',
             avatar: avatarUrl,
             time: formatTimeAgo(item.createdAt),
-            location: item.service_address || 'Cagayan de Oro',
+            location: locShort,
             roleTag: categories[0] || 'Household Service',
             termTag,
             setupTag,

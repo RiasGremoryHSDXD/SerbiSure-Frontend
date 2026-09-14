@@ -1,6 +1,6 @@
 {
   "name": "serbisure-frontend",
-  "version": "0.1.3",
+  "version": "0.1.5",
   "private": true,
   "main": "expo/AppEntry.js",
   "scripts": {
@@ -19,9 +19,7 @@
     "build:android:debug": "powershell -ExecutionPolicy Bypass -File ./scripts/android-build-debug.ps1",
     "android:build": "powershell -ExecutionPolicy Bypass -File ./scripts/android-build.ps1",
     "android:build:debug": "powershell -ExecutionPolicy Bypass -File ./scripts/android-build-debug.ps1",
-    "typecheck": "tsc --noEmit",
-    "admin": "npm --prefix admin run dev",
-    "admin:build": "npm --prefix admin run build"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@expo-google-fonts/nunito": "^0.4.2",

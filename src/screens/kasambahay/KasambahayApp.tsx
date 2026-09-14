@@ -104,6 +104,10 @@ export function KasambahayApp({ avatarUri, onLogout }: { avatarUri?: string | nu
       <PostServiceScreen
         visible={isPostModalVisible}
         onClose={() => setIsPostModalVisible(false)}
+        onOpenVerification={() => {
+          setIsPostModalVisible(false);
+          setActiveTab('profile');
+        }}
       />
     </View>
   );
