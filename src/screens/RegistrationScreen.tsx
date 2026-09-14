@@ -480,14 +480,8 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
 
     setLoading(true);
     try {
-      const brgyLabel = selectedBarangay.name.startsWith('Barangay')
-        ? selectedBarangay.name
-        : `Brgy. ${selectedBarangay.name}`;
-      const combinedStreet = `${brgyLabel}, ${streetAddress.trim()}`.slice(0, 100);
-
       const birthYear = new Date().getFullYear() - (parseInt(age, 10) || 22);
       const approxDob = `${birthYear}-01-01`;
-
       const payload: any = {
         first_name: firstName.trim(),
         middle_name: middleName.trim(),
@@ -497,11 +491,14 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
         account_type: isHomeowner ? "Homeowner" : "Kasambahay",
         contact_number: contactNumber,
         country: "Philippines",
+        region: selectedRegion.displayName || selectedRegion.name,
         province: selectedProvince.name,
         city: selectedCity.name,
-        street: combinedStreet,
+        barangay: selectedBarangay.name,
+        street: streetAddress.trim(),
         zipcode: cleanZip,
       };
+
 
       if (!isHomeowner) {
         payload.date_of_birth = approxDob;
@@ -527,9 +524,11 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
         email: email.trim().toLowerCase(),
         contactNumber,
         country: "Philippines",
+        region: selectedRegion.displayName || selectedRegion.name,
         province: selectedProvince.name,
         city: selectedCity.name,
-        street: combinedStreet,
+        barangay: selectedBarangay.name,
+        street: streetAddress.trim(),
         zipcode: cleanZip,
         userAbout: !isHomeowner ? finalBio : undefined,
         userTags: !isHomeowner ? generatedTags : undefined,
@@ -547,8 +546,8 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
       const data = await response.json();
       if (response.ok) {
         if (!isHomeowner && data.access) {
-          updateUserAbout(data.access, finalBio).catch(() => {});
-          updateUserTags(data.access, generatedTags).catch(() => {});
+          updateUserAbout(data.access, finalBio).catch(() => { });
+          updateUserTags(data.access, generatedTags).catch(() => { });
         }
         Alert.alert("Success", "Account created successfully!");
         if (onNext) onNext(data.access);
@@ -611,17 +610,17 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
                 subStep === 1
                   ? 'Step 1: Account Information'
                   : subStep === 2
-                  ? 'Step 2: What can you do?'
-                  : isHomeowner
-                  ? 'Step 2: Where do you live?'
-                  : 'Step 3: Where do you live?'
+                    ? 'Step 2: What can you do?'
+                    : isHomeowner
+                      ? 'Step 2: Where do you live?'
+                      : 'Step 3: Where do you live?'
               }
               help={
                 subStep === 1
                   ? undefined
                   : subStep === 2
-                  ? 'Select up to 3 roles and set your preferences.'
-                  : 'We use your location to connect you with jobs and household services in your area.'
+                    ? 'Select up to 3 roles and set your preferences.'
+                    : 'We use your location to connect you with jobs and household services in your area.'
               }
             />
 

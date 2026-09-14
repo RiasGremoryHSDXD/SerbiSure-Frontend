@@ -1,5 +1,5 @@
 import { fetchApi } from './apiClient';
-import { VerificationRequest, UserProfile, DashboardStatsResponse } from '../types/admin';
+import { VerificationRequest, UserProfile, DashboardStatsResponse, BookingCompliance } from '../types/admin';
 
 export async function fetchVerificationQueue(
   role?: string, 
@@ -48,3 +48,75 @@ export async function fetchDashboardStats(barangay?: string): Promise<DashboardS
   const query = params.toString() ? `?${params.toString()}` : '';
   return fetchApi<DashboardStatsResponse>(`/api/v1/accounts/admin/dashboard-stats/${query}`);
 }
+
+export async function fetchDashboardActivity(barangay?: string): Promise<{ bookings: BookingCompliance[]; count: number }> {
+  const params = new URLSearchParams();
+  if (barangay && barangay !== 'All Barangays') params.append('barangay', barangay);
+
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return fetchApi<{ bookings: BookingCompliance[]; count: number }>(`/api/v1/accounts/admin/dashboard-activity/${query}`);
+}
+
+export interface MonthlyTrendPoint {
+  month: string;
+  year: number;
+  employed: number;
+  available: number;
+  total: number;
+}
+
+export async function fetchMonthlyTrend(barangay?: string): Promise<{ trend: MonthlyTrendPoint[] }> {
+  const params = new URLSearchParams();
+  if (barangay && barangay !== 'All Barangays') params.append('barangay', barangay);
+
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return fetchApi<{ trend: MonthlyTrendPoint[] }>(`/api/v1/accounts/admin/monthly-trend/${query}`);
+}
+
+export interface AdminLoginResponse {
+  success: boolean;
+  token: string;
+  refresh: string;
+  user: {
+    id: string;
+    username: string;
+    name: string;
+    email: string;
+    role: 'SUPERADMIN' | 'ADMIN';
+    barangay: string;
+    avatar?: string;
+  };
+}
+
+export async function adminLoginApi(username: string, password: string): Promise<AdminLoginResponse> {
+  return fetchApi<AdminLoginResponse>('/api/v1/accounts/admin/login/', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export interface ActiveBarangaysApiResponse {
+  barangays: string[];
+  active_lgus?: string[];
+  user_barangays?: string[];
+}
+
+/**
+ * Returns the canonical list of active LGU barangay names.
+ */
+export async function fetchActiveLguBarangays(): Promise<string[]> {
+  const res = await fetchApi<ActiveBarangaysApiResponse>('/api/v1/accounts/admin/active-barangays/');
+  return Array.isArray(res.barangays) ? res.barangays : [];
+}
+
+/**
+ * Returns all distinct barangays found across registered users (Homeowners and Kasambahays).
+ */
+export async function fetchAllUserBarangays(): Promise<string[]> {
+  const res = await fetchApi<ActiveBarangaysApiResponse>('/api/v1/accounts/admin/active-barangays/');
+  if (Array.isArray(res.user_barangays) && res.user_barangays.length > 0) {
+    return res.user_barangays;
+  }
+  return Array.isArray(res.barangays) ? res.barangays : [];
+}
+

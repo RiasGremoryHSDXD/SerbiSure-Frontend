@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { 
   CheckCircle, 
+  ChevronDown,
   MapPin, 
   Star,
   UserCheck,
@@ -11,20 +12,72 @@ import { useAdmin } from '../../context/AdminContext';
 import { AccountRole, UserProfile } from '../../types/admin';
 
 export const UserDirectory: React.FC = () => {
-  const { users, refreshUsers, isLoadingUsers, currentRole, selectedBarangay } = useAdmin();
+  const { users, refreshUsers, isLoadingUsers, currentRole, selectedBarangay, userBarangays } = useAdmin();
   const [activeTab, setActiveTab] = useState<AccountRole>('HOMEOWNER');
   const [selectedUserId, setSelectedUserId] = useState<string>('usr-homeowner-1');
+  const [barangayFilter, setBarangayFilter] = useState<string>('ALL');
 
-  // Strictly scope user directory to assigned barangay if logged in as local LGU officer
+  // Helper to normalize barangay strings
+  const cleanBarangayName = (name?: string) => {
+    return (name || '').replace(/^(brgy\.?|barangay)\s+/i, '').trim();
+  };
+
+  // Dynamically compute all distinct barangays across registered users
+  const allBarangayOptions = React.useMemo(() => {
+    const map = new Map<string, string>();
+    (userBarangays || []).forEach((b) => {
+      const cleaned = cleanBarangayName(b);
+      if (cleaned && cleaned.toLowerCase() !== 'all' && cleaned.toLowerCase() !== 'all barangays' && cleaned.toLowerCase() !== 'unassigned') {
+        const key = cleaned.toLowerCase();
+        if (!map.has(key)) {
+          const formatted = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+          map.set(key, formatted);
+        }
+      }
+    });
+
+    users.forEach((u) => {
+      const cleaned = cleanBarangayName(u.barangay);
+      if (cleaned && cleaned.toLowerCase() !== 'all' && cleaned.toLowerCase() !== 'all barangays' && cleaned.toLowerCase() !== 'unassigned') {
+        const key = cleaned.toLowerCase();
+        if (!map.has(key)) {
+          const formatted = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+          map.set(key, formatted);
+        }
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+  }, [userBarangays, users]);
+
+  const hasUnassigned = React.useMemo(() => {
+    return users.some(
+      u => u.hasLguCoverage === false || !u.barangay || cleanBarangayName(u.barangay).toLowerCase() === 'unassigned'
+    );
+  }, [users]);
+
+  // Strictly scope user directory to assigned barangay if logged in as local LGU officer or unassigned perspective
   const scopedUsers = (currentRole === 'ADMIN' && selectedBarangay)
     ? users.filter(u => (u.barangay || '').toLowerCase() === selectedBarangay.toLowerCase())
-    : users;
+    : (selectedBarangay === 'UNASSIGNED'
+        ? users.filter(u => u.hasLguCoverage === false || (u.barangay || '').toLowerCase() === 'unassigned')
+        : users);
+
+  // Barangay filter strictly for Superadmin
+  const barangayScopedUsers = (currentRole === 'SUPERADMIN' && barangayFilter !== 'ALL')
+    ? scopedUsers.filter(u => {
+        if (barangayFilter === 'UNASSIGNED') {
+          return u.hasLguCoverage === false || !u.barangay || cleanBarangayName(u.barangay).toLowerCase() === 'unassigned';
+        }
+        return cleanBarangayName(u.barangay).toLowerCase() === cleanBarangayName(barangayFilter).toLowerCase();
+      })
+    : scopedUsers;
 
   // Filter users by active tab
-  const tabUsers = scopedUsers.filter(u => u.role === activeTab);
+  const tabUsers = barangayScopedUsers.filter(u => u.role === activeTab);
   
   // Active selected user or fallback to first
-  const selectedUser: UserProfile = tabUsers.find(u => u.id === selectedUserId) || tabUsers[0] || scopedUsers[0];
+  const selectedUser: UserProfile = tabUsers.find(u => u.id === selectedUserId) || tabUsers[0] || barangayScopedUsers[0];
 
   return (
     <div className="space-y-8">
@@ -35,11 +88,38 @@ export const UserDirectory: React.FC = () => {
             Users
           </h1>
           <p className="text-xs text-zinc-400 font-medium mt-1">
+            {currentRole === 'SUPERADMIN' && barangayFilter !== 'ALL' && (
+              <span className="text-zinc-700 font-bold mr-1">
+                [{barangayFilter === 'UNASSIGNED' ? 'Unassigned' : `Brgy. ${barangayFilter}`}]
+              </span>
+            )}
             Registered homeowners and verified kasambahays directory
           </p>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
+          {/* Barangay Filter Dropdown - SUPERADMIN ONLY */}
+          {currentRole === 'SUPERADMIN' && (
+            <div className="relative">
+              <select
+                value={barangayFilter}
+                onChange={(e) => setBarangayFilter(e.target.value)}
+                className="appearance-none bg-white text-zinc-800 text-xs font-bold py-2.5 pl-3.5 pr-8 rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FFB380]/40 border-0 shadow-xs"
+                title="Filter users by Barangay"
+              >
+                <option value="ALL">All Barangays</option>
+                {allBarangayOptions.map((bgy) => (
+                  <option key={bgy} value={bgy}>
+                    Brgy. {bgy}
+                  </option>
+                ))}
+                {hasUnassigned && (
+                  <option value="UNASSIGNED">Unassigned / No LGU</option>
+                )}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-zinc-600 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+          )}
           {/* Segmented Tab Switcher */}
           <div className="flex items-center bg-[#EAEAE5] p-1 rounded-full">
             <button
@@ -121,11 +201,18 @@ export const UserDirectory: React.FC = () => {
                     <h4 className="text-sm font-black font-display leading-snug truncate text-[#0D0D11]">
                       {user.name}
                     </h4>
-                    <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                      isSelected ? 'bg-white text-zinc-700 font-bold' : 'bg-[#F0F0EC] text-zinc-600'
-                    }`}>
-                      {user.role}
-                    </span>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                        isSelected ? 'bg-white text-zinc-700 font-bold' : 'bg-[#F0F0EC] text-zinc-600'
+                      }`}>
+                        {user.role}
+                      </span>
+                      {user.hasLguCoverage === false && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200" title={`No LGU Account registered for ${user.barangay}`}>
+                          {user.barangay && user.barangay !== 'Unassigned' ? `No LGU (${user.barangay})` : 'No LGU'}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -182,6 +269,11 @@ export const UserDirectory: React.FC = () => {
                   <div className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium">
                     <MapPin className="w-3.5 h-3.5 text-[#FFB380] shrink-0" />
                     <span>{selectedUser.address}</span>
+                    {selectedUser.hasLguCoverage === false && (
+                      <span className="ml-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                        No LGU Account ({selectedUser.barangay || 'Unassigned'})
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

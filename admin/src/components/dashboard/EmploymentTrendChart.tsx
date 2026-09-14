@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronDown, TrendingUp } from 'lucide-react';
+import { useAdmin } from '../../context/AdminContext';
 
 interface MonthlyPoint {
   month: string;
@@ -8,24 +9,27 @@ interface MonthlyPoint {
   total: number;
 }
 
-const MONTHLY_DATA: MonthlyPoint[] = [
-  { month: 'Jan', employed: 110, available: 65, total: 175 },
-  { month: 'Feb', employed: 180, available: 120, total: 300 },
-  { month: 'Mar', employed: 140, available: 90, total: 230 },
-  { month: 'Apr', employed: 220, available: 160, total: 380 },
-  { month: 'May', employed: 200, available: 140, total: 340 },
-  { month: 'Jun', employed: 310, available: 190, total: 500 },
-  { month: 'Jul', employed: 280, available: 210, total: 490 },
-  { month: 'Aug', employed: 420, available: 260, total: 680 },
-  { month: 'Sep', employed: 360, available: 230, total: 590 },
-  { month: 'Oct', employed: 480, available: 290, total: 770 },
-  { month: 'Nov', employed: 430, available: 310, total: 740 },
-  { month: 'Dec', employed: 560, available: 350, total: 910 },
-];
-
 export const EmploymentTrendChart: React.FC = () => {
-  const [hoveredIdx, setHoveredIdx] = useState<number>(7); // Default to Aug
+  const { monthlyTrend, isLoadingMonthlyTrend } = useAdmin();
+  const [hoveredIdx, setHoveredIdx] = useState<number>(7); // Default to Aug position
   const [timeframe, setTimeframe] = useState<'Monthly' | 'Quarterly'>('Monthly');
+
+  // Use live backend data; show zeros as a skeleton when loading or empty
+  const CHART_DATA: MonthlyPoint[] = monthlyTrend.length > 0
+    ? monthlyTrend
+    : Array.from({ length: 12 }, (_, i) => ({
+        month: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i],
+        employed: 0,
+        available: 0,
+        total: 0,
+      }));
+
+  // Calculate YoY or MTD delta for header badge
+  const lastMonth = monthlyTrend.length > 0 ? monthlyTrend[monthlyTrend.length - 1] : null;
+  const prevMonth = monthlyTrend.length > 1 ? monthlyTrend[monthlyTrend.length - 2] : null;
+  const trendDelta = (lastMonth && prevMonth && prevMonth.employed > 0)
+    ? (((lastMonth.employed - prevMonth.employed) / prevMonth.employed) * 100).toFixed(1)
+    : null;
 
   // Chart dimensions
   const width = 640;
@@ -33,19 +37,19 @@ export const EmploymentTrendChart: React.FC = () => {
   const paddingX = 40;
   const paddingY = 30;
 
-  const maxVal = 600;
-  const minVal = 50;
+  const maxVal = Math.max(600, ...CHART_DATA.map(d => d.employed), ...CHART_DATA.map(d => d.available));
+  const minVal = 0;
 
   // Calculate coordinates
-  const points1 = MONTHLY_DATA.map((d, i) => {
-    const x = paddingX + (i / (MONTHLY_DATA.length - 1)) * (width - 2 * paddingX);
-    const y = height - paddingY - ((d.employed - minVal) / (maxVal - minVal)) * (height - 2 * paddingY);
+  const points1 = CHART_DATA.map((d, i) => {
+    const x = paddingX + (i / (CHART_DATA.length - 1)) * (width - 2 * paddingX);
+    const y = height - paddingY - ((d.employed - minVal) / Math.max(1, maxVal - minVal)) * (height - 2 * paddingY);
     return { x, y, data: d };
   });
 
-  const points2 = MONTHLY_DATA.map((d, i) => {
-    const x = paddingX + (i / (MONTHLY_DATA.length - 1)) * (width - 2 * paddingX);
-    const y = height - paddingY - ((d.available - minVal) / (maxVal - minVal)) * (height - 2 * paddingY);
+  const points2 = CHART_DATA.map((d, i) => {
+    const x = paddingX + (i / (CHART_DATA.length - 1)) * (width - 2 * paddingX);
+    const y = height - paddingY - ((d.available - minVal) / Math.max(1, maxVal - minVal)) * (height - 2 * paddingY);
     return { x, y, data: d };
   });
 
@@ -86,13 +90,28 @@ export const EmploymentTrendChart: React.FC = () => {
             <h3 className="text-lg font-black font-display text-[#0D0D11] tracking-tight">
               Employment Trends
             </h3>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-extrabold">
-              <TrendingUp className="w-3 h-3" />
-              +18.4%
-            </span>
+            {isLoadingMonthlyTrend ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-zinc-100 text-zinc-400 text-[11px] font-extrabold animate-pulse">
+                Loading...
+              </span>
+            ) : trendDelta !== null ? (
+              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold ${
+                Number(trendDelta) >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+              }`}>
+                <TrendingUp className="w-3 h-3" />
+                {Number(trendDelta) >= 0 ? '+' : ''}{trendDelta}% MoM
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-zinc-100 text-zinc-400 text-[11px] font-extrabold">
+                No data yet
+              </span>
+            )}
           </div>
           <p className="text-xs text-zinc-400 mt-0.5 font-medium">
             Active verified placements vs available workforce
+            {monthlyTrend.length > 0 && (
+              <span className="ml-1 text-emerald-600 font-bold">• Live</span>
+            )}
           </p>
         </div>
 
@@ -142,8 +161,8 @@ export const EmploymentTrendChart: React.FC = () => {
           </defs>
 
           {/* Horizontal Grid lines */}
-          {[100, 200, 300, 400, 500].map((val) => {
-            const y = height - paddingY - ((val - minVal) / (maxVal - minVal)) * (height - 2 * paddingY);
+          {[Math.round(maxVal * 0.2), Math.round(maxVal * 0.4), Math.round(maxVal * 0.6), Math.round(maxVal * 0.8)].map((val) => {
+            const y = height - paddingY - ((val - minVal) / Math.max(1, maxVal - minVal)) * (height - 2 * paddingY);
             return (
               <g key={val}>
                 <line
