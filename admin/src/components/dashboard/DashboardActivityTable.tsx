@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Search, Calendar, CheckCircle2, AlertTriangle, ArrowUpRight } from 'lucide-react';
+import { Search, Calendar, CheckCircle2, AlertTriangle, ArrowUpRight, Loader2, Inbox } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 
 export const DashboardActivityTable: React.FC = () => {
-  const { verifications, bookings, setActiveNav, currentRole, selectedBarangay } = useAdmin();
+  const { verifications, bookings, isLoadingDashboardActivity, setActiveNav, currentRole, selectedBarangay } = useAdmin();
   const [activeTab, setActiveTab] = useState<'DEPLOYMENTS' | 'VERIFICATIONS' | 'COMPLIANCE'>('DEPLOYMENTS');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -72,7 +72,7 @@ export const DashboardActivityTable: React.FC = () => {
 
           <div className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#F0F0EC] rounded-full text-xs font-bold text-zinc-700">
             <Calendar className="w-3.5 h-3.5 text-[#FFB380]" />
-            <span>Aug 2026</span>
+            <span>{new Date().toLocaleString('default', { month: 'short', year: 'numeric' })}</span>
           </div>
 
           <button
@@ -88,6 +88,20 @@ export const DashboardActivityTable: React.FC = () => {
       {/* Table Content */}
       <div className="overflow-x-auto mt-2">
         {activeTab === 'DEPLOYMENTS' && (
+          isLoadingDashboardActivity ? (
+            // Loading skeleton
+            <div className="flex flex-col items-center justify-center py-10 gap-2 text-zinc-400">
+              <Loader2 className="w-5 h-5 animate-spin text-[#FFB380]" />
+              <p className="text-xs font-medium">Loading live placement data...</p>
+            </div>
+          ) : scopedBookings.length === 0 ? (
+            // Empty state
+            <div className="flex flex-col items-center justify-center py-10 gap-2 text-zinc-400">
+              <Inbox className="w-8 h-8 text-zinc-300" />
+              <p className="text-xs font-bold text-zinc-500">No active placements found</p>
+              <p className="text-[11px] text-zinc-400">Bookings will appear here once workers are assigned.</p>
+            </div>
+          ) : (
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="text-zinc-400 font-extrabold font-display uppercase tracking-wider text-[11px]">
@@ -125,16 +139,19 @@ export const DashboardActivityTable: React.FC = () => {
                     <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold ${
                       b.status === 'COMPLIANT'
                         ? 'bg-emerald-50 text-emerald-700'
+                        : b.status === 'BELOW_MINIMUM_WAGE'
+                        ? 'bg-rose-50 text-rose-700'
                         : 'bg-amber-50 text-amber-700'
                     }`}>
                       {b.status === 'COMPLIANT' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />}
-                      <span>{b.status === 'COMPLIANT' ? 'Compliant' : 'Flagged'}</span>
+                      <span>{b.status === 'COMPLIANT' ? 'Compliant' : b.status === 'BELOW_MINIMUM_WAGE' ? 'Below Min. Wage' : 'Flagged'}</span>
                     </span>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          )
         )}
 
         {activeTab === 'VERIFICATIONS' && (
