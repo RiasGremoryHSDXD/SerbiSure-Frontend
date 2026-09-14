@@ -16,9 +16,11 @@ type UserData = {
   resumeUrl?: string | null;
   resumeUploadedAt?: string | null;
   verificationStatus?: string;
-  street?: string;
-  city?: string;
+  region?: string;
   province?: string;
+  city?: string;
+  barangay?: string;
+  street?: string;
   zipcode?: string;
   country?: string;
 };

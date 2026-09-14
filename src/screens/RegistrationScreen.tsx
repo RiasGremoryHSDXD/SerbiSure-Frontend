@@ -346,11 +346,6 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
 
     setLoading(true);
     try {
-      const brgyLabel = selectedBarangay.name.startsWith('Barangay')
-        ? selectedBarangay.name
-        : `Brgy. ${selectedBarangay.name}`;
-      const combinedStreet = `${brgyLabel}, ${streetAddress.trim()}`.slice(0, 100);
-
       const payload = {
         first_name: firstName.trim(),
         middle_name: middleName.trim(),
@@ -360,9 +355,11 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
         account_type: isHomeowner ? "Homeowner" : "Kasambahay",
         contact_number: contactNumber,
         country: "Philippines",
+        region: selectedRegion.displayName || selectedRegion.name,
         province: selectedProvince.name,
         city: selectedCity.name,
-        street: combinedStreet,
+        barangay: selectedBarangay.name,
+        street: streetAddress.trim(),
         zipcode: cleanZip,
       };
 
@@ -383,9 +380,11 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
         email: email.trim().toLowerCase(),
         contactNumber,
         country: "Philippines",
+        region: selectedRegion.displayName || selectedRegion.name,
         province: selectedProvince.name,
         city: selectedCity.name,
-        street: combinedStreet,
+        barangay: selectedBarangay.name,
+        street: streetAddress.trim(),
         zipcode: cleanZip,
       });
 
