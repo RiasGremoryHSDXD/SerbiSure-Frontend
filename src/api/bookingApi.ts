@@ -18,9 +18,14 @@ export interface BookingItem {
   service_category: string[];
   start_time: string;
   end_time?: string | null;
-  service_address: string;
+  region?: string | null;
+  province?: string | null;
+  city?: string | null;
+  barangay?: string | null;
+  street?: string | null;
+  full_address?: string | null;
   floor_number?: string | null;
-  zip_code?: string;
+  zip_code?: string | null;
   special_instruction?: string | null;
   daily_rate: string;
   createdAt: string;
@@ -28,6 +33,59 @@ export interface BookingItem {
   assigned_partner?: BookingParticipant | null;
   has_reviewed?: boolean;
   proposals_count?: number;
+}
+
+/**
+ * Formats a booking address gracefully and idiot-proof.
+ * Falls back to Cagayan de Oro or custom fallback if all fields are empty.
+ */
+export function formatBookingAddress(
+  booking?: {
+    full_address?: string | null;
+    street?: string | null;
+    barangay?: string | null;
+    city?: string | null;
+    province?: string | null;
+    region?: string | null;
+    zip_code?: string | null;
+  } | null,
+  fallback = 'Cagayan de Oro'
+): string {
+  if (!booking) return fallback;
+  if (booking.full_address && booking.full_address.trim()) {
+    return booking.full_address.trim();
+  }
+  const parts = [booking.street, booking.barangay, booking.city, booking.province]
+    .map(p => (p || '').trim())
+    .filter(Boolean);
+  if (parts.length > 0) {
+    return parts.join(', ');
+  }
+  return fallback;
+}
+
+/**
+ * Formats a short location for compact card badges (e.g., "Pagatpat, Cagayan de Oro")
+ */
+export function formatBookingLocationShort(
+  booking?: {
+    barangay?: string | null;
+    city?: string | null;
+    full_address?: string | null;
+  } | null,
+  fallback = 'Cagayan de Oro'
+): string {
+  if (!booking) return fallback;
+  const parts = [booking.barangay, booking.city]
+    .map(p => (p || '').trim())
+    .filter(Boolean);
+  if (parts.length > 0) {
+    return parts.join(', ');
+  }
+  if (booking.full_address && booking.full_address.trim()) {
+    return booking.full_address.trim();
+  }
+  return fallback;
 }
 
 export interface BookingProposal {

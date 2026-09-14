@@ -24,6 +24,7 @@ import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
 
 import { useUser } from '../../context/UserContext';
 import { NotificationBell } from '../../context/NotificationContext';
+import { formatBookingAddress, formatBookingLocationShort } from '../../api/bookingApi';
 import THEME from '../../config/theme';
 import { useJobsActivity, SavedJobItem } from '../../store/savedJobsStore';
 import { JobDetailSheet } from '../../components/JobDetailSheet';
@@ -268,11 +269,14 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
           const termTag = isLongTerm ? 'Long-term' : 'Part-time';
           const unit = isLongTerm ? 'per month' : 'per day';
 
+          const locShort = formatBookingLocationShort(item, 'Cagayan de Oro');
+          const locForDesc = formatBookingAddress(item, 'residence');
+
           let description = item.special_instruction && item.special_instruction.trim()
             ? item.special_instruction.trim()
             : (isLongTerm
-                ? `I am looking for ${categories.join(' & ')} at ${item.service_address || 'residence'}, capable of working on a stay-in setup.`
-                : `I am looking for ${categories.join(' & ')} at ${item.service_address || 'residence'}, capable of working on a stay-out setup.`);
+                ? `I am looking for ${categories.join(' & ')} at ${locForDesc}, capable of working on a stay-in setup.`
+                : `I am looking for ${categories.join(' & ')} at ${locForDesc}, capable of working on a stay-out setup.`);
 
           const descLower = description.toLowerCase();
           const setupTag = descLower.includes('stay-in') ? 'Stay-in' : descLower.includes('stay-out') ? 'Stay-out' : (isLongTerm ? 'Stay-in' : 'Stay-out');
@@ -282,7 +286,7 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
             partnerId: item.poster_id,
             employerName: item.name || 'Homeowner',
             title: categories.join(' & ') || 'Household Service',
-            location: item.service_address || 'Cagayan de Oro',
+            location: locShort,
             description,
             price: `P ${item.daily_rate || '0'}`,
             unit,

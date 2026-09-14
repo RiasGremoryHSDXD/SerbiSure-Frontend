@@ -21,6 +21,7 @@ import { UserProfileModal } from '../UserProfileModal';
 import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
 import { useUser } from '../../context/UserContext';
 import { NotificationBell } from '../../context/NotificationContext';
+import { formatBookingLocationShort } from '../../api/bookingApi';
 import THEME from '../../config/theme';
 
 const logoSource = require('../../../assets/serbisure_new_clean.png');
@@ -191,7 +192,7 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
             id: item.booking_id,
             partnerId: item.poster_id,
             name: item.name || 'Anonymous User',
-            location: item.service_address || 'Unknown City',
+            location: formatBookingLocationShort(item, 'Cagayan de Oro'),
             role: categories.join(', '),
             years: item.booking_type === 'long_term' ? 'Stay-in' : 'Part-time',
             tags: categories,
