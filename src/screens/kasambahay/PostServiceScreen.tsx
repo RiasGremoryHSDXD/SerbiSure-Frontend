@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
 import THEME from '../../config/theme';
 import { useUser } from '../../context/UserContext';
+import { VerificationRequiredModal } from '../../ui/VerificationRequiredModal';
 
 const logoSource = require('../../../assets/serbisure-logo.png');
 
@@ -35,9 +36,10 @@ interface PostServiceScreenProps {
   visible: boolean;
   onClose: () => void;
   token?: string | null;
+  onOpenVerification?: () => void;
 }
 
-export function PostServiceScreen({ visible, onClose, token }: PostServiceScreenProps) {
+export function PostServiceScreen({ visible, onClose, token, onOpenVerification }: PostServiceScreenProps) {
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
@@ -56,6 +58,8 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [postedSuccess, setPostedSuccess] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  const [showVerificationRequired, setShowVerificationRequired] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<string>('Unverified');
 
 
   // Animation values for Logo Loader
@@ -92,6 +96,8 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
     outputRange: ['0deg', '360deg'],
   });
 
+  const BASE_SERVICES = ['Cleaning', 'Child_care', 'Cooking', 'Caregiver', 'Laundry'];
+
   const services = [
     { id: 'Cleaning', label: 'Cleaning', icon: 'sparkles' },
     { id: 'Child_care', label: 'Child Care', icon: 'happy' },
@@ -100,6 +106,41 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
     { id: 'Laundry', label: 'Laundry', icon: 'shirt' },
     { id: 'All-around', label: 'All-around', icon: 'home' },
   ];
+
+  const handleToggleService = (id: string) => {
+    // 1. If clicking 'All-around'
+    if (id === 'All-around') {
+      if (selectedServices.includes('All-around')) {
+        setSelectedServices([]);
+      } else {
+        setSelectedServices(['All-around']);
+      }
+      return;
+    }
+
+    // 2. If 'All-around' is currently selected and user clicks one of the specific services:
+    // Switch away from All-around and select ONLY the clicked service!
+    if (selectedServices.includes('All-around')) {
+      setSelectedServices([id]);
+      return;
+    }
+
+    // 3. Normal multi-select toggle
+    let updated: string[];
+    if (selectedServices.includes(id)) {
+      updated = selectedServices.filter((s) => s !== id);
+    } else {
+      updated = [...selectedServices, id];
+    }
+
+    // 4. Check if all 5 base services are selected -> automatically switch to All-around!
+    const hasAllFive = BASE_SERVICES.every((baseId) => updated.includes(baseId));
+    if (hasAllFive) {
+      setSelectedServices(['All-around']);
+    } else {
+      setSelectedServices(updated);
+    }
+  };
 
   const resetForm = () => {
     setStep(1);
@@ -134,9 +175,13 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
 
   const getSelectedRoleLabel = () => {
     if (selectedServices.length === 0) return 'Household Service';
-    return selectedServices
-      .map((s) => services.find((x) => x.id === s)?.label || s.replace(/_/g, ' '))
-      .join(' & ');
+    if (selectedServices.includes('All-around')) return 'All-around';
+    const labels = selectedServices.map(
+      (s) => services.find((x) => x.id === s)?.label || s.replace(/_/g, ' ')
+    );
+    if (labels.length === 1) return labels[0];
+    if (labels.length === 2) return `${labels[0]} & ${labels[1]}`;
+    return `${labels.slice(0, -1).join(', ')} & ${labels[labels.length - 1]}`;
   };
 
   const getTimeLabel = () => {
@@ -258,8 +303,37 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
 
         if (!response.ok) {
           const errorData = await response.json();
-          console.error(errorData);
-          Alert.alert('Posting Error', errorData.detail || JSON.stringify(errorData));
+          console.log('[PostService] Server response:', errorData);
+
+          const rawStr = typeof errorData === 'string' ? errorData : JSON.stringify(errorData);
+          const isVerificationError =
+            response.status === 403 ||
+            /verified|verification/i.test(rawStr) ||
+            errorData?.code === 'account_not_verified';
+
+          if (isVerificationError) {
+            setIsPosting(false);
+            setVerificationStatus(errorData?.verification_status || user?.verificationStatus || 'Unverified');
+            setShowVerificationRequired(true);
+            return;
+          }
+
+          let errorMsg = 'Failed to post service. Please check your entries.';
+          if (typeof errorData === 'string') {
+            errorMsg = errorData;
+          } else if (errorData?.detail) {
+            errorMsg = String(errorData.detail);
+          } else if (typeof errorData === 'object') {
+            const msgs: string[] = [];
+            for (const [k, v] of Object.entries(errorData)) {
+              const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+              const list = Array.isArray(v) ? v : [v];
+              list.forEach(m => msgs.push(`• ${label}: ${m}`));
+            }
+            if (msgs.length > 0) errorMsg = msgs.join('\n');
+          }
+
+          Alert.alert('Unable to Post', errorMsg);
           setIsPosting(false);
           return;
         }
@@ -271,9 +345,9 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
           resetForm();
           onClose();
         }, 1800);
-      } catch (error) {
-        console.error(error);
-        Alert.alert('Network Error', 'Failed to connect to the server.');
+      } catch (error: any) {
+        console.log('[PostService] Network error:', error);
+        Alert.alert('Network Error', error?.message || 'Failed to connect to the server.');
         setIsPosting(false);
       }
     }
@@ -360,15 +434,11 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
                 {services.map((item) => {
                   const isSelected = selectedServices.includes(item.id);
 
-                  const handleToggle = () => {
-                    setSelectedServices([item.id]);
-                  };
-
                   return (
                     <Pressable
                       key={item.id}
                       style={[styles.serviceCard, isSelected && styles.serviceCardActive]}
-                      onPress={handleToggle}
+                      onPress={() => handleToggleService(item.id)}
                     >
                       <Ionicons
                         name={item.icon as any}
@@ -697,6 +767,22 @@ export function PostServiceScreen({ visible, onClose, token }: PostServiceScreen
             </Animated.View>
           </View>
         )}
+
+        {/* Verification Required Modal */}
+        <VerificationRequiredModal
+          visible={showVerificationRequired}
+          onClose={() => setShowVerificationRequired(false)}
+          onVerify={() => {
+            setShowVerificationRequired(false);
+            if (onOpenVerification) {
+              onOpenVerification();
+            } else {
+              onClose();
+            }
+          }}
+          role="kasambahay"
+          verificationStatus={verificationStatus}
+        />
       </KeyboardAvoidingView>
     </Modal>
   );
