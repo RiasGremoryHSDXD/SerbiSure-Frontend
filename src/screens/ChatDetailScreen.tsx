@@ -1757,6 +1757,8 @@ export function ChatDetailScreen({
                               {item.imageUri ? (
                                 <Pressable
                                   onPress={() => setSelectedImageUri(item.imageUri || null)}
+                                  delayLongPress={200}
+                                  onLongPress={() => handleOpenActionMenu(item)}
                                   style={styles.chatImageWrapper}
                                 >
                                   <Image source={{ uri: item.imageUri }} style={styles.chatImage} resizeMode="cover" />
@@ -1864,6 +1866,8 @@ export function ChatDetailScreen({
                           {item.imageUri ? (
                             <Pressable
                               onPress={() => setSelectedImageUri(item.imageUri || null)}
+                              delayLongPress={200}
+                              onLongPress={() => handleOpenActionMenu(item)}
                               style={styles.chatImageWrapper}
                             >
                               <Image source={{ uri: item.imageUri }} style={styles.chatImage} resizeMode="cover" />
