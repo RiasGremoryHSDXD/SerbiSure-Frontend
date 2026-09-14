@@ -2,9 +2,9 @@ export type AdminRole = 'SUPERADMIN' | 'ADMIN';
 
 export type AccountRole = 'KASAMBAHAY' | 'HOMEOWNER';
 
-export type DocumentType = 'NBI CLEARANCE' | 'Police Clearance' | 'National ID';
+export type DocumentType = 'NBI CLEARANCE' | 'Police Clearance' | 'National ID' | 'Clearances (NBI + Police)' | string;
 
-export type VerificationStatus = 'PENDING / REVIEW' | 'VERIFIED' | 'REJECTED';
+export type VerificationStatus = 'PENDING / REVIEW' | 'VERIFIED' | 'REJECTED' | 'NO_DOCUMENTS';
 
 export interface BarangayStats {
   name: string;
@@ -41,9 +41,53 @@ export interface VerificationRequest {
   issuedDate: string;
   validityDate: string;
   status: VerificationStatus;
+  primaryStatus?: VerificationStatus;
   recordStatus: 'Clear Record' | 'Under Review' | 'Flagged';
   documentImage: string;
   documentImageBack?: string;
+  hasDocuments?: boolean;
+  hasLguCoverage?: boolean;
+  userId?: string;
+  address?: string;
+
+  // Package & Secondary Companion Document Fields
+  isPackage?: boolean;
+  packageLabel?: string;
+  secondaryDocumentId?: string;
+  secondaryDocumentImage?: string;
+  secondaryDocumentType?: string;
+  secondaryDocumentNumber?: string;
+  secondaryIssuedDate?: string;
+  secondaryValidityDate?: string;
+  secondaryStatus?: string;
+  secondaryNotes?: string;
+  secondaryOcrData?: {
+    full_name?: string;
+    first_name?: string;
+    middle_name?: string;
+    last_name?: string;
+    document_number?: string;
+    clearance_number?: string;
+    philsys_number?: string;
+    purpose?: string;
+    document_type_label?: string;
+    issuing_office?: string;
+    date_issued?: string;
+    valid_until?: string;
+    date_of_birth?: string;
+    barangay?: string;
+    city?: string;
+    [key: string]: any;
+  };
+  secondaryOcrDiscrepancies?: Array<{
+    field: string;
+    message?: string;
+    severity?: 'low' | 'medium' | 'high' | 'critical';
+    similarity?: number;
+    profile_value?: string;
+    document_value?: string;
+  }>;
+
   barangay: string;
   contactNumber: string;
   email: string;
@@ -98,6 +142,7 @@ export interface UserProfile {
   barangay: string;
   city: string;
   verified: boolean;
+  hasLguCoverage?: boolean;
   skills?: string[];
   hourlyRate?: number;
   status: 'ACTIVE' | 'PENDING' | 'SUSPENDED';
@@ -133,5 +178,5 @@ export interface BookingCompliance {
   };
   startDate: string;
   barangay?: string;
-  status: 'ACTIVE' | 'FLAGGED_THROTTLED' | 'COMPLIANT' | 'DISPUTED';
+  status: 'ACTIVE' | 'FLAGGED_THROTTLED' | 'COMPLIANT' | 'DISPUTED' | 'BELOW_MINIMUM_WAGE';
 }

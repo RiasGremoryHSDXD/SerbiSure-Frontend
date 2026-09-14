@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, ChevronDown, Check, Building2, Shield, LogOut } from 'lucide-react';
+import { Search, ChevronDown, Check, Building2, Shield, LogOut, MapPinOff } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { AdminRole } from '../../types/admin';
 
@@ -11,9 +11,17 @@ export const Header: React.FC = () => {
     setCurrentRole(role);
     if (brgy) {
       setSelectedBarangay(brgy);
+    } else {
+      setSelectedBarangay('All Barangays');
     }
     setDropdownOpen(false);
   };
+
+  const pillLabel = currentRole === 'ADMIN'
+    ? `BRGY. ${selectedBarangay}`
+    : selectedBarangay === 'UNASSIGNED'
+    ? 'NO LGU COVERAGE'
+    : 'SUPERADMIN';
 
   return (
     <header className="h-20 bg-white/80 backdrop-blur-md px-8 flex items-center justify-between sticky top-0 z-30">
@@ -50,9 +58,13 @@ export const Header: React.FC = () => {
               className="flex items-center gap-2 px-5 py-2 bg-[#0D0D11] hover:bg-black text-white rounded-full text-xs font-extrabold tracking-tight transition-all cursor-pointer"
               title="Click to switch perspective / jurisdiction"
             >
-              <Shield className="w-3.5 h-3.5 text-[#FFB380]" />
+              {selectedBarangay === 'UNASSIGNED' ? (
+                <MapPinOff className="w-3.5 h-3.5 text-amber-400" />
+              ) : (
+                <Shield className="w-3.5 h-3.5 text-[#FFB380]" />
+              )}
               <span className="font-display font-black tracking-wider uppercase text-[11px]">
-                {currentRole === 'SUPERADMIN' ? 'SUPERADMIN' : `BRGY. ${selectedBarangay}`}
+                {pillLabel}
               </span>
               <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
             </button>
@@ -90,22 +102,43 @@ export const Header: React.FC = () => {
                     Switch Perspective
                   </div>
                   
+                  {/* Superadmin Citywide */}
                   <button
-                    onClick={() => toggleRole('SUPERADMIN')}
+                    onClick={() => toggleRole('SUPERADMIN', 'All Barangays')}
                     className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-left text-xs font-bold transition-all cursor-pointer ${
-                      currentRole === 'SUPERADMIN' ? 'bg-[#0D0D11] text-white' : 'text-zinc-700 hover:bg-[#F6F5F2]'
+                      currentRole === 'SUPERADMIN' && selectedBarangay === 'All Barangays' ? 'bg-[#0D0D11] text-white' : 'text-zinc-700 hover:bg-[#F6F5F2]'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <Shield className={`w-4 h-4 ${currentRole === 'SUPERADMIN' ? 'text-[#FFB380]' : 'text-zinc-400'}`} />
-                      <span className="font-extrabold font-display">Superadmin</span>
+                      <Shield className={`w-4 h-4 ${currentRole === 'SUPERADMIN' && selectedBarangay === 'All Barangays' ? 'text-[#FFB380]' : 'text-zinc-400'}`} />
+                      <div>
+                        <span className="font-extrabold font-display">Superadmin</span>
+                        <div className="text-[10px] text-zinc-400 font-normal">All Barangays Citywide</div>
+                      </div>
                     </div>
-                    {currentRole === 'SUPERADMIN' && <Check className="w-4 h-4 text-[#FFB380]" />}
+                    {currentRole === 'SUPERADMIN' && selectedBarangay === 'All Barangays' && <Check className="w-4 h-4 text-[#FFB380]" />}
                   </button>
 
-                  <div className="my-1.5" />
+                  {/* Unassigned / Inactive Barangays */}
+                  <button
+                    onClick={() => toggleRole('SUPERADMIN', 'UNASSIGNED')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-left text-xs font-bold transition-all cursor-pointer mt-1 ${
+                      currentRole === 'SUPERADMIN' && selectedBarangay === 'UNASSIGNED' ? 'bg-[#0D0D11] text-white' : 'text-zinc-700 hover:bg-[#F6F5F2]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <MapPinOff className={`w-4 h-4 ${currentRole === 'SUPERADMIN' && selectedBarangay === 'UNASSIGNED' ? 'text-[#FFB380]' : 'text-amber-500'}`} />
+                      <div>
+                        <span className="font-extrabold font-display">No LGU Coverage</span>
+                        <div className="text-[10px] text-zinc-400 font-normal">Unassigned / Inactive Barangays</div>
+                      </div>
+                    </div>
+                    {currentRole === 'SUPERADMIN' && selectedBarangay === 'UNASSIGNED' && <Check className="w-4 h-4 text-[#FFB380]" />}
+                  </button>
+
+                  <div className="my-1.5 border-t border-zinc-100" />
                   <div className="px-3 py-1.5 text-[10px] font-black text-zinc-400 uppercase tracking-wider font-display">
-                    Barangay LGU Portals
+                    Active LGU Portals
                   </div>
 
                   {barangays.map((b) => (
@@ -128,7 +161,7 @@ export const Header: React.FC = () => {
                     </button>
                   ))}
 
-                  <div className="my-1.5" />
+                  <div className="my-1.5 border-t border-zinc-100" />
                 </>
               )}
 
