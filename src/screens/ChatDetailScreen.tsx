@@ -466,7 +466,7 @@ function TypingDotsIndicator({ avatarUri }: { avatarUri: string }) {
   return (
     <View style={styles.typingRow}>
       <Image source={{ uri: avatarUri }} style={styles.msgAvatar} />
-      <View style={styles.typingBubble}>
+      <View style={styles.typingDotsBubble}>
         <Animated.View style={[styles.typingDot, { transform: [{ translateY: dot1 }] }]} />
         <Animated.View style={[styles.typingDot, { transform: [{ translateY: dot2 }] }]} />
         <Animated.View style={[styles.typingDot, { transform: [{ translateY: dot3 }] }]} />
@@ -1463,8 +1463,8 @@ export function ChatDetailScreen({
                 <Ionicons name="chevron-forward" size={13} color="#8E8E93" />
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                <Text style={[styles.contactSub, isOtherTyping && styles.contactSubTyping]}>
-                  {isOtherTyping ? 'Typing...' : (partnerOnline ? 'Active now' : 'Inactive')}
+                <Text style={styles.contactSub}>
+                  {partnerOnline ? 'Active now' : 'Inactive'}
                 </Text>
                 <Text style={{ color: '#C4C4C4', fontSize: 10 }}>•</Text>
                 <View style={styles.headerRoleBadge}>
@@ -1741,6 +1741,7 @@ export function ChatDetailScreen({
                             messageRefs.current[item.id] = el;
                           }}
                           collapsable={false}
+                          style={{ alignSelf: 'flex-start' }}
                         >
                           <Pressable delayLongPress={200} onLongPress={() => handleOpenActionMenu(item)}>
                             <View
@@ -1756,6 +1757,8 @@ export function ChatDetailScreen({
                               {item.imageUri ? (
                                 <Pressable
                                   onPress={() => setSelectedImageUri(item.imageUri || null)}
+                                  delayLongPress={200}
+                                  onLongPress={() => handleOpenActionMenu(item)}
                                   style={styles.chatImageWrapper}
                                 >
                                   <Image source={{ uri: item.imageUri }} style={styles.chatImage} resizeMode="cover" />
@@ -1848,6 +1851,7 @@ export function ChatDetailScreen({
                         messageRefs.current[item.id] = el;
                       }}
                       collapsable={false}
+                      style={{ alignSelf: 'flex-end' }}
                     >
                       <Pressable delayLongPress={200} onLongPress={() => handleOpenActionMenu(item)}>
                         <View
@@ -1862,6 +1866,8 @@ export function ChatDetailScreen({
                           {item.imageUri ? (
                             <Pressable
                               onPress={() => setSelectedImageUri(item.imageUri || null)}
+                              delayLongPress={200}
+                              onLongPress={() => handleOpenActionMenu(item)}
                               style={styles.chatImageWrapper}
                             >
                               <Image source={{ uri: item.imageUri }} style={styles.chatImage} resizeMode="cover" />
@@ -2376,6 +2382,7 @@ const styles = StyleSheet.create({
   },
   leftMessageCol: {
     maxWidth: '78%',
+    alignItems: 'flex-start',
   },
   leftBubble: {
     backgroundColor: '#FFFFFF',
@@ -2384,6 +2391,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     minWidth: 46,
+    alignSelf: 'flex-start',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -2422,6 +2430,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     minWidth: 46,
+    alignSelf: 'flex-end',
   },
   // Messenger Outgoing (Right) Grouping Corner Styles
   rightBubbleSingle: {
@@ -2923,27 +2932,21 @@ const styles = StyleSheet.create({
   typingDotsBubble: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    backgroundColor: '#E4E6EB',
     borderRadius: 18,
     borderBottomLeftRadius: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
     gap: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 2,
+    alignSelf: 'flex-start',
+    minHeight: 34,
   },
   typingDot: {
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: '#9CA3AF',
-  },
-  contactSubTyping: {
-    color: '#FFA51F',
-    fontWeight: '700',
+    backgroundColor: '#65676B',
   },
   swipeRowContainer: {
     position: 'relative',
@@ -3021,6 +3024,7 @@ const styles = StyleSheet.create({
   },
   replyQuoteStackRight: {
     alignItems: 'flex-end',
+    alignSelf: 'flex-end',
     marginBottom: 2,
     maxWidth: '100%',
   },
@@ -3038,6 +3042,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     maxWidth: '100%',
+    alignSelf: 'flex-end',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -3050,6 +3055,7 @@ const styles = StyleSheet.create({
   },
   replyQuoteStackLeft: {
     alignItems: 'flex-start',
+    alignSelf: 'flex-start',
     marginBottom: 2,
     maxWidth: '100%',
   },
@@ -3067,6 +3073,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     maxWidth: '100%',
+    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,

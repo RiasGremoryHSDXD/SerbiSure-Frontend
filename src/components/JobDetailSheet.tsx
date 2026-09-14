@@ -44,6 +44,8 @@ export interface JobDetailSheetProps {
   isApplied: boolean;
   isSaved?: boolean;
   onToggleSave?: (job: any) => void;
+  ctaText?: string;
+  ctaNotice?: string;
 }
 
 export function JobDetailSheet({
@@ -54,6 +56,8 @@ export function JobDetailSheet({
   isApplied,
   isSaved = false,
   onToggleSave,
+  ctaText,
+  ctaNotice,
 }: JobDetailSheetProps) {
   const insets = useSafeAreaInsets();
   const panY = useRef(new Animated.Value(SNAP_EXPANDED)).current;
@@ -371,11 +375,13 @@ export function JobDetailSheet({
                   <Text style={styles.applyBtnText}>Application Submitted</Text>
                 </View>
               ) : (
-                <Text style={styles.applyBtnText}>Apply Now</Text>
+                <Text style={styles.applyBtnText}>{ctaText || 'Apply Now'}</Text>
               )}
             </Pressable>
 
-            <Text style={styles.applyNotice}>Your application goes directly to the employer</Text>
+            <Text style={styles.applyNotice}>
+              {ctaNotice || 'Your application goes directly to the employer'}
+            </Text>
           </View>
         </Animated.View>
       </View>
