@@ -23,6 +23,10 @@ type UserData = {
   street?: string;
   zipcode?: string;
   country?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  nationality?: string;
+  religion?: string;
 };
 
 type UserContextType = {
@@ -48,6 +52,7 @@ const defaultUser: UserData = {
   province: 'Misamis Oriental',
   zipcode: '9000',
   country: 'Philippines',
+  nationality: 'Filipino',
 };
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -108,14 +113,18 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
           province: decoded.province || '',
           zipcode: decoded.zipcode || '',
           country: decoded.country || 'Philippines',
+          dateOfBirth: decoded.date_of_birth || undefined,
+          gender: decoded.gender || undefined,
+          nationality: decoded.nationality || 'Filipino',
+          religion: decoded.religion || undefined,
         });
       }
       else {
-        setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', email: '', contactNumber: '', showContactNumber: false, userTags: [], profileLink: null, accountType: '', street: '', city: '', province: '', zipcode: '', country: '' });
+        setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', email: '', contactNumber: '', showContactNumber: false, userTags: [], profileLink: null, accountType: '', street: '', city: '', province: '', zipcode: '', country: '', nationality: 'Filipino' });
       }
     }
     else {
-      setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', email: '', contactNumber: '', showContactNumber: false, userTags: [], accountType: '', street: '', city: '', province: '', zipcode: '', country: '' });
+      setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', email: '', contactNumber: '', showContactNumber: false, userTags: [], accountType: '', street: '', city: '', province: '', zipcode: '', country: '', nationality: 'Filipino' });
     }
   }, [token])
 

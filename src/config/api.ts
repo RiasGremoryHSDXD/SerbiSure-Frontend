@@ -72,8 +72,11 @@ export async function fetchWithTimeout(
     }
   }
 
-  // Use a snappy 2s timeout when probing local backend so app never hangs
-  const effectiveTimeout = isLocalUrl ? Math.min(timeoutMs, 2000) : timeoutMs;
+  // Use a 5s timeout when probing local backend.
+  // Django's dev runserver is single-threaded: on app load it queues many parallel requests,
+  // each waiting behind the previous one. 2s was too tight and caused healthy local servers
+  // to be falsely declared unreachable, triggering the Vercel fallback.
+  const effectiveTimeout = isLocalUrl ? Math.min(timeoutMs, 5000) : timeoutMs;
   const primaryTimer = createTimer(effectiveTimeout);
 
   try {
@@ -88,7 +91,7 @@ export async function fetchWithTimeout(
     return response;
   } catch (primaryError) {
     if (isLocalUrl) {
-      localBackendOfflineUntil = Date.now() + 60000; // 60-second cooldown
+      localBackendOfflineUntil = Date.now() + 20000; // 20-second cooldown (down from 60s for faster recovery)
       const fallbackUrl = url.replace(API_BASE_URL, VERCEL_API_URL);
       console.log(`[API] Local backend unreachable (${url}). Automatically falling back to Vercel: ${fallbackUrl}`);
       
