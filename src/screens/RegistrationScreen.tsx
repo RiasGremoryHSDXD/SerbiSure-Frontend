@@ -19,6 +19,8 @@ import { API_BASE_URL, fetchWithTimeout } from '../config/api';
 import { updateUserAbout, updateUserTags } from '../api/accountApi';
 import { useUser } from '../context/UserContext';
 import { SearchablePickerModal } from '../ui/SearchablePickerModal';
+import { DateOfBirthPickerModal } from '../ui/DateOfBirthPickerModal';
+import { DemographicPickerModal, DemographicOption } from '../ui/DemographicPickerModal';
 import {
   getRegions,
   getProvinces,
@@ -33,6 +35,7 @@ import {
 } from '../services/locationService';
 import THEME from '../config/theme';
 import { RegistrationStepper } from '../components/RegistrationStepper';
+import { RegistrationErrorModal } from '../ui/RegistrationErrorModal';
 
 const logoSource = require('../../assets/serbisure_new_clean.png');
 
@@ -49,14 +52,52 @@ const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widowed', 'Separated'] as co
 const CHILDREN_OPTIONS = ['No Children', 'With Children'] as const;
 const DIALECT_OPTIONS = ['Bisaya', 'Tagalog', 'English'] as const;
 
+const NATIONALITY_OPTIONS: DemographicOption[] = [
+  { id: 'Filipino', label: 'Filipino', badge: '🇵🇭' },
+  { id: 'American', label: 'American', badge: '🇺🇸' },
+  { id: 'Chinese', label: 'Chinese', badge: '🇨🇳' },
+  { id: 'Japanese', label: 'Japanese', badge: '🇯🇵' },
+  { id: 'British', label: 'British', badge: '🇬🇧' },
+  { id: 'Canadian', label: 'Canadian', badge: '🇨🇦' },
+  { id: 'Australian', label: 'Australian', badge: '🇦🇺' },
+  { id: 'Korean', label: 'Korean', badge: '🇰🇷' },
+  { id: 'Spanish', label: 'Spanish', badge: '🇪🇸' },
+  { id: 'OTHER_CUSTOM', label: 'Other Nationality...' },
+];
+
+const RELIGION_OPTIONS: DemographicOption[] = [
+  { id: 'Roman Catholic', label: 'Roman Catholic', sublabel: 'Christianity (Catholic)' },
+  { id: 'Islam', label: 'Islam', sublabel: 'Muslim' },
+  { id: 'Iglesia ni Cristo', label: 'Iglesia ni Cristo', sublabel: 'INC' },
+  { id: 'Evangelical / Born Again', label: 'Evangelical / Born Again', sublabel: 'Christian' },
+  { id: 'Seventh-day Adventist', label: 'Seventh-day Adventist', sublabel: 'SDA' },
+  { id: 'Protestant', label: 'Protestant', sublabel: 'Christian' },
+  { id: 'Jehovah\'s Witnesses', label: 'Jehovah\'s Witnesses' },
+  { id: 'Baptist', label: 'Baptist', sublabel: 'Christian' },
+  { id: 'None / Prefer not to say', label: 'None / Prefer not to say' },
+  { id: 'OTHER_CUSTOM', label: 'Other Religion...' },
+];
+
+/**
+ * Formats a raw Philippine mobile phone number into 3-4-3 grouped blocks for high readability:
+ * e.g. "9123456789" -> "912 3456 789"
+ */
+export const formatPhilippinePhoneNumber = (value: string): string => {
+  const digits = value.replace(/\D/g, '').slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+  return `${digits.slice(0, 3)} ${digits.slice(3, 7)} ${digits.slice(7, 10)}`;
+};
+
 type RegistrationScreenProps = {
   role: 'homeowner' | 'kasambahay';
   onBack?: () => void;
   onNext?: (token?: string) => void;
   onCancel?: () => void;
+  onNavigateToLogin?: () => void;
 };
 
-export function RegistrationScreen({ role, onBack, onNext, onCancel }: RegistrationScreenProps) {
+export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateToLogin }: RegistrationScreenProps) {
   const insets = useSafeAreaInsets();
   const { updateUser } = useUser();
 
@@ -69,6 +110,13 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState(''); // ISO: YYYY-MM-DD
+  const [calculatedAge, setCalculatedAge] = useState<number | null>(null);
+  const [gender, setGender] = useState<'Male' | 'Female' | 'Other' | null>(null);
+  const [nationality, setNationality] = useState('Filipino');
+  const [religion, setReligion] = useState<string | null>(null);
+  const [showDobPicker, setShowDobPicker] = useState(false);
+  const [activeDemographicPicker, setActiveDemographicPicker] = useState<'nationality' | 'religion' | null>(null);
   const [rawPhone, setRawPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -111,6 +159,9 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
   // Form submission loading
   const [loading, setLoading] = useState(false);
 
+  // Server & Validation Error State for Error Modal
+  const [serverError, setServerError] = useState<any | null>(null);
+
   const isHomeowner = role === 'homeowner';
 
   const formatDjangoError = (data: any): string => {
@@ -144,13 +195,37 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
   };
 
   const handlePhoneChange = (text: string) => {
-    let digits = text.replace(/\D/g, '');
-    if (digits.startsWith('0')) {
-      digits = digits.substring(1);
+    const currentFormatted = formatPhilippinePhoneNumber(rawPhone);
+    let cleanText = text;
+
+    // Edge Case: If user pressed backspace on a space separator
+    if (text.length < currentFormatted.length) {
+      let diffIndex = 0;
+      while (diffIndex < text.length && text[diffIndex] === currentFormatted[diffIndex]) {
+        diffIndex++;
+      }
+      if (currentFormatted[diffIndex] === ' ' && diffIndex > 0) {
+        cleanText = currentFormatted.slice(0, diffIndex - 1) + currentFormatted.slice(diffIndex);
+      }
     }
+
+    let digits = cleanText.replace(/\D/g, '');
+
+    // Edge Case: If pasted with international prefix (+63 or 63)
+    if (digits.startsWith('63') && digits.length > 10) {
+      digits = digits.slice(2);
+    }
+
+    // Edge Case: If typed or pasted with domestic leading 0 (09...)
+    if (digits.startsWith('0')) {
+      digits = digits.slice(1);
+    }
+
+    // Edge Case: Enforce maximum of 10 digits
     if (digits.length > 10) {
       digits = digits.slice(0, 10);
     }
+
     setRawPhone(digits);
   };
 
@@ -177,7 +252,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
 
   const computedBio = useMemo(() => {
     const fullName = `${firstName.trim()} ${lastName.trim()}`.trim() || 'Kasambahay';
-    const ageNum = parseInt(age, 10);
+    const ageNum = calculatedAge || parseInt(age, 10);
     const agePart = ageNum ? `, ${ageNum} years old` : '';
 
     const cityStr = selectedCity?.name;
@@ -205,7 +280,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
     const livingStr = livingArrangement ? livingArrangement.toLowerCase() : 'stay-in';
 
     return `I am ${fullName}${agePart}${fromPart}, ${rolesPart}. My minimum expected salary is ${salaryFormatted} per month on a ${livingStr} setup.`;
-  }, [firstName, lastName, age, selectedCity, selectedProvince, selectedRoles, desiredSalary, livingArrangement]);
+  }, [firstName, lastName, calculatedAge, age, selectedCity, selectedProvince, selectedRoles, desiredSalary, livingArrangement]);
 
   const finalBio = computedBio;
 
@@ -218,27 +293,43 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
     const cleanDigits = rawPhone.replace(/\D/g, '').replace(/^0+/, '');
 
     if (!firstName.trim()) {
-      Alert.alert("Missing Field", "Please enter your First Name.");
+      setServerError({ first_name: ["Please enter your First Name."] });
       return;
     }
     if (!lastName.trim()) {
-      Alert.alert("Missing Field", "Please enter your Last Name.");
+      setServerError({ last_name: ["Please enter your Last Name."] });
+      return;
+    }
+    if (!dateOfBirth) {
+      setServerError({ date_of_birth: ["Please select your Date of Birth."] });
+      return;
+    }
+    if (calculatedAge === null || calculatedAge < 18) {
+      setServerError({ date_of_birth: ["You must be at least 18 years old to register under Philippine Labor Law (RA 10361)."] });
+      return;
+    }
+    if (!gender) {
+      setServerError({ gender: ["Please select your Gender."] });
+      return;
+    }
+    if (!nationality.trim()) {
+      setServerError({ nationality: ["Please select your Nationality."] });
       return;
     }
     if (!email.trim() || !email.includes('@')) {
-      Alert.alert("Invalid Email", "Please enter a valid email address.");
+      setServerError({ email: ["Please enter a valid email address."] });
       return;
     }
     if (cleanDigits.length !== 10 || !cleanDigits.startsWith('9')) {
-      Alert.alert("Invalid Contact Number", "Please enter a valid 10-digit mobile number starting with 9 (e.g. 9123456789).");
+      setServerError({ contact_number: ["Please enter a valid 10-digit mobile number starting with 9 (e.g. 912 3456 789)."] });
       return;
     }
     if (password.length < 8) {
-      Alert.alert("Password Requirements", "Password must be at least 8 characters long.");
+      setServerError({ password: ["Password must be at least 8 characters long."] });
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert("Password Mismatch", "Password and Confirm Password do not match.");
+      setServerError({ password: ["Password and Confirm Password do not match."] });
       return;
     }
 
@@ -255,40 +346,39 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
   // --- Step 2 Validation & Transition ---
   const handleProceedFromStep2 = () => {
     if (selectedRoles.length === 0) {
-      Alert.alert("Select Role", "Please select at least one role you can perform (up to 3).");
+      setServerError({ roles: ["Please select at least one role you can perform (up to 3)."] });
       return;
     }
     const salaryNum = parseFloat(desiredSalary.replace(/[^\d.]/g, ''));
     if (!desiredSalary.trim() || isNaN(salaryNum) || salaryNum <= 0) {
-      Alert.alert("Desired Salary", "Please enter your expected minimum monthly salary.");
+      setServerError({ desired_salary: ["Please enter your expected minimum monthly salary."] });
       return;
     }
     if (salaryNum < 6500) {
-      Alert.alert(
-        "Minimum Monthly Salary",
-        "Under Batas Kasambahay (RA 10361), minimum monthly salary cannot be below ₱6,500/month."
-      );
+      setServerError({
+        desired_salary: ["Under Batas Kasambahay (RA 10361), minimum monthly salary cannot be below ₱6,500/month."]
+      });
       return;
     }
     if (!livingArrangement) {
-      Alert.alert("Work Setup", "Please select whether you prefer Stay-In or Stay-Out.");
+      setServerError({ roles: ["Please select whether you prefer Stay-In or Stay-Out."] });
       return;
     }
-    const ageNum = parseInt(age, 10);
-    if (!age.trim() || isNaN(ageNum) || ageNum < 18 || ageNum > 80) {
-      Alert.alert("Invalid Age", "Kasambahay applicants must be at least 18 years old.");
+    const ageNum = calculatedAge || parseInt(age, 10);
+    if (!ageNum || ageNum < 18 || ageNum > 85) {
+      setServerError({ date_of_birth: ["Kasambahay applicants must be at least 18 years old."] });
       return;
     }
     if (!civilStatus) {
-      Alert.alert("Civil Status", "Please select your civil status.");
+      setServerError({ civil_status: ["Please select your civil status."] });
       return;
     }
     if (!childrenStatus) {
-      Alert.alert("Children Status", "Please indicate if you have children or not.");
+      setServerError({ children: ["Please indicate if you have children or not."] });
       return;
     }
     if (selectedDialects.length === 0) {
-      Alert.alert("Spoken Dialect", "Please select at least one spoken dialect.");
+      setServerError({ language: ["Please select at least one spoken dialect."] });
       return;
     }
 
@@ -443,49 +533,51 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
     setSelectedBarangay(item as Barangay);
   };
 
-  // --- Step 2 Final Submission ---
+  // --- Step 3 Final Submission ---
   const handleRegister = async () => {
     const cleanDigits = rawPhone.replace(/\D/g, '').replace(/^0+/, '');
     const contactNumber = `+63${cleanDigits}`;
 
     if (!selectedRegion) {
-      Alert.alert("Missing Location", "Please select your Region.");
+      setServerError({ region: ["Please select your Region."] });
       return;
     }
     if (!selectedProvince) {
-      Alert.alert("Missing Location", "Please select your Province.");
+      setServerError({ province: ["Please select your Province."] });
       return;
     }
     if (!selectedCity) {
-      Alert.alert("Missing Location", "Please select your City or Municipality.");
+      setServerError({ city: ["Please select your City or Municipality."] });
       return;
     }
     if (!selectedBarangay) {
-      Alert.alert("Missing Location", "Please select your Barangay.");
+      setServerError({ barangay: ["Please select your Barangay."] });
       return;
     }
     if (!streetAddress.trim()) {
-      Alert.alert("Missing Field", "Please enter your Street / House Number / Zone.");
+      setServerError({ street: ["Please enter your Street / House Number / Zone."] });
       return;
     }
     const cleanZip = zipcode.trim();
     if (!cleanZip || !/^\d{4}$/.test(cleanZip)) {
-      Alert.alert("Invalid Zip Code", "Zip Code must be exactly 4 digits (e.g. 9000).");
+      setServerError({ zipcode: ["Zip Code must be exactly 4 digits (e.g. 9000)."] });
       return;
     }
     if (!termsAccepted || !privacyAccepted) {
-      Alert.alert("Consent Required", "Please accept both the Terms & Conditions and Data Privacy Policy.");
+      setServerError({ consent: ["Please accept both the Terms & Conditions and Data Privacy Policy to continue."] });
       return;
     }
 
     setLoading(true);
     try {
-      const birthYear = new Date().getFullYear() - (parseInt(age, 10) || 22);
-      const approxDob = `${birthYear}-01-01`;
       const payload: any = {
         first_name: firstName.trim(),
         middle_name: middleName.trim(),
         last_name: lastName.trim(),
+        date_of_birth: dateOfBirth,
+        gender: gender,
+        nationality: nationality,
+        religion: religion || '',
         email: email.trim().toLowerCase(),
         password: password,
         account_type: isHomeowner ? "Homeowner" : "Kasambahay",
@@ -499,9 +591,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
         zipcode: cleanZip,
       };
 
-
       if (!isHomeowner) {
-        payload.date_of_birth = approxDob;
         payload.language = selectedDialects.join(', ');
         payload.user_about = finalBio;
         payload.user_tags = generatedTags;
@@ -516,24 +606,6 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
 
       const idempotencyKey = generateUUID();
 
-      // Save user location & details globally in UserContext
-      updateUser({
-        firstName: firstName.trim(),
-        middleName: middleName.trim(),
-        lastName: lastName.trim(),
-        email: email.trim().toLowerCase(),
-        contactNumber,
-        country: "Philippines",
-        region: selectedRegion.displayName || selectedRegion.name,
-        province: selectedProvince.name,
-        city: selectedCity.name,
-        barangay: selectedBarangay.name,
-        street: streetAddress.trim(),
-        zipcode: cleanZip,
-        userAbout: !isHomeowner ? finalBio : undefined,
-        userTags: !isHomeowner ? generatedTags : undefined,
-      });
-
       const response = await fetchWithTimeout(`${API_BASE_URL}/api/v1/accounts/register/`, {
         method: "POST",
         headers: {
@@ -545,6 +617,28 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
 
       const data = await response.json();
       if (response.ok) {
+        // Save user location & details globally in UserContext ONLY upon successful account creation
+        updateUser({
+          firstName: firstName.trim(),
+          middleName: middleName.trim(),
+          lastName: lastName.trim(),
+          dateOfBirth: dateOfBirth,
+          gender: gender || undefined,
+          nationality: nationality,
+          religion: religion || undefined,
+          email: email.trim().toLowerCase(),
+          contactNumber,
+          country: "Philippines",
+          region: selectedRegion.displayName || selectedRegion.name,
+          province: selectedProvince.name,
+          city: selectedCity.name,
+          barangay: selectedBarangay.name,
+          street: streetAddress.trim(),
+          zipcode: cleanZip,
+          userAbout: !isHomeowner ? finalBio : undefined,
+          userTags: !isHomeowner ? generatedTags : undefined,
+        });
+
         if (!isHomeowner && data.access) {
           updateUserAbout(data.access, finalBio).catch(() => { });
           updateUserTags(data.access, generatedTags).catch(() => { });
@@ -552,11 +646,10 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
         Alert.alert("Success", "Account created successfully!");
         if (onNext) onNext(data.access);
       } else {
-        const cleanErrorMessage = formatDjangoError(data);
-        Alert.alert("Registration Failed", cleanErrorMessage);
+        setServerError(data);
       }
     } catch (error: any) {
-      Alert.alert("Network Error", error.message || "Unable to connect to the server.");
+      setServerError(error);
     } finally {
       setLoading(false);
     }
@@ -666,6 +759,101 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
                     />
                   </View>
 
+                  {/* Date of Birth Picker Button */}
+                  <Pressable
+                    style={[styles.inputContainer, styles.pickerPressable]}
+                    onPress={() => setShowDobPicker(true)}
+                  >
+                    <Ionicons name="calendar-outline" size={18} color="#000000" style={styles.inputIcon} />
+                    <Text
+                      style={[
+                        styles.pickerText,
+                        !dateOfBirth && styles.pickerPlaceholderText,
+                      ]}
+                    >
+                      {dateOfBirth ? `${dateOfBirth} (${calculatedAge} yrs old)` : 'Date of Birth (YYYY-MM-DD)'}
+                    </Text>
+                    <View style={styles.pickerRightBadge}>
+                      {calculatedAge ? (
+                        <View style={styles.agePillBadge}>
+                          <Text style={styles.agePillText}>{calculatedAge} yrs</Text>
+                        </View>
+                      ) : null}
+                      <Ionicons name="chevron-down" size={16} color="#8A8985" />
+                    </View>
+                  </Pressable>
+
+                  {/* Gender Segmented Selection */}
+                  <View style={styles.demographicFieldBlock}>
+                    <Text style={styles.fieldSubLabel}>Gender</Text>
+                    <View style={styles.genderRow}>
+                      {(['Male', 'Female', 'Other'] as const).map((g) => {
+                        const isSelected = gender === g;
+                        return (
+                          <Pressable
+                            key={g}
+                            style={[
+                              styles.genderPill,
+                              isSelected && styles.genderPillSelected,
+                            ]}
+                            onPress={() => setGender(g)}
+                          >
+                            {isSelected && (
+                              <Ionicons name="checkmark-circle" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                            )}
+                            <Text
+                              style={[
+                                styles.genderPillText,
+                                isSelected && styles.genderPillTextSelected,
+                              ]}
+                            >
+                              {g}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  {/* Nationality & Religion (2 Columns) */}
+                  <View style={styles.demographicRow}>
+                    {/* Nationality */}
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <Text style={styles.fieldSubLabel}>Nationality</Text>
+                      <Pressable
+                        style={[styles.compactInputContainer, styles.compactPickerPressable]}
+                        onPress={() => setActiveDemographicPicker('nationality')}
+                      >
+                        <Ionicons name="globe-outline" size={15} color="#0D0D11" style={{ marginRight: 6 }} />
+                        <Text style={styles.compactPickerText} numberOfLines={1}>
+                          {nationality || 'Filipino'}
+                        </Text>
+                        <Ionicons name="chevron-down" size={13} color="#8A8985" style={{ marginLeft: 'auto' }} />
+                      </Pressable>
+                    </View>
+
+                    {/* Religion */}
+                    <View style={{ flex: 1.1 }}>
+                      <Text style={styles.fieldSubLabel}>Religion</Text>
+                      <Pressable
+                        style={[styles.compactInputContainer, styles.compactPickerPressable]}
+                        onPress={() => setActiveDemographicPicker('religion')}
+                      >
+                        <Ionicons name="heart-outline" size={15} color="#0D0D11" style={{ marginRight: 6 }} />
+                        <Text
+                          style={[
+                            styles.compactPickerText,
+                            !religion && styles.compactPickerPlaceholder,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {religion || 'Select'}
+                        </Text>
+                        <Ionicons name="chevron-down" size={13} color="#8A8985" style={{ marginLeft: 'auto' }} />
+                      </Pressable>
+                    </View>
+                  </View>
+
                   <View style={styles.inputContainer}>
                     <View style={styles.countryCodeBadge}>
                       <Text style={styles.flagEmoji}>🇵🇭</Text>
@@ -674,11 +862,11 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
                     <View style={styles.phoneVerticalLine} />
                     <TextInput
                       style={styles.input}
-                      placeholder="9123456789"
+                      placeholder="912 3456 789"
                       placeholderTextColor="#999"
                       keyboardType="phone-pad"
-                      maxLength={10}
-                      value={rawPhone}
+                      maxLength={12}
+                      value={formatPhilippinePhoneNumber(rawPhone)}
                       onChangeText={handlePhoneChange}
                     />
                   </View>
@@ -818,18 +1006,13 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
 
                   {/* Age, Civil Status & Children (3 in a row) */}
                   <View style={styles.compactRow}>
-                    <View style={{ width: 66, marginRight: 8 }}>
+                    <View style={{ width: 68, marginRight: 8 }}>
                       <Text style={styles.compactLabel}>Age</Text>
-                      <View style={styles.compactInputContainer}>
-                        <TextInput
-                          style={[styles.compactInputText, { textAlign: 'center', paddingHorizontal: 2 }]}
-                          placeholder="Age"
-                          placeholderTextColor="#9CA3AF"
-                          keyboardType="number-pad"
-                          maxLength={2}
-                          value={age}
-                          onChangeText={(t) => setAge(t.replace(/\D/g, ''))}
-                        />
+                      <View style={[styles.compactInputContainer, styles.compactAgeContainer]}>
+                        <Text style={styles.compactAgeText}>
+                          {calculatedAge || age || '--'}
+                        </Text>
+                        <Ionicons name="lock-closed" size={10} color="#6B7280" style={{ marginLeft: 3 }} />
                       </View>
                     </View>
 
@@ -1177,6 +1360,59 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel }: Registrat
             </View>
           </Pressable>
         </Modal>
+
+        {/* Date of Birth Picker Modal */}
+        <DateOfBirthPickerModal
+          visible={showDobPicker}
+          currentValue={dateOfBirth}
+          onSelect={(dob, ageVal) => {
+            setDateOfBirth(dob);
+            setCalculatedAge(ageVal);
+            setAge(String(ageVal));
+            setShowDobPicker(false);
+          }}
+          onClose={() => setShowDobPicker(false)}
+        />
+
+        {/* Demographic Picker Modal (Nationality / Religion) */}
+        <DemographicPickerModal
+          visible={activeDemographicPicker !== null}
+          title={activeDemographicPicker === 'nationality' ? 'Select Nationality' : 'Select Religion'}
+          subtitle={
+            activeDemographicPicker === 'nationality'
+              ? 'Choose your country of citizenship'
+              : 'Select your religious affiliation or preference'
+          }
+          options={activeDemographicPicker === 'nationality' ? NATIONALITY_OPTIONS : RELIGION_OPTIONS}
+          selectedValue={activeDemographicPicker === 'nationality' ? nationality : religion}
+          searchPlaceholder={
+            activeDemographicPicker === 'nationality'
+              ? 'Search nationality (e.g. Filipino)...'
+              : 'Search religion...'
+          }
+          allowCustomInput={true}
+          onSelect={(val) => {
+            if (activeDemographicPicker === 'nationality') {
+              setNationality(val);
+            } else if (activeDemographicPicker === 'religion') {
+              setReligion(val);
+            }
+            setActiveDemographicPicker(null);
+          }}
+          onClose={() => setActiveDemographicPicker(null)}
+        />
+
+        {/* Branded & Idiot-Proof Registration Error Modal */}
+        <RegistrationErrorModal
+          visible={Boolean(serverError)}
+          errorData={serverError}
+          onClose={() => setServerError(null)}
+          onGoToStep={(step) => {
+            setServerError(null);
+            setSubStep(step);
+          }}
+          onNavigateToLogin={onNavigateToLogin}
+        />
       </View>
     </KeyboardAvoidingView>
   );
@@ -1638,6 +1874,105 @@ const styles = StyleSheet.create({
   preferenceOptionTextSelected: {
     color: '#111827',
     fontWeight: '700',
+  },
+  pickerPressable: {
+    justifyContent: 'space-between',
+    paddingRight: 14,
+  },
+  pickerText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '600',
+  },
+  pickerPlaceholderText: {
+    color: '#9CA3AF',
+    fontWeight: '400',
+  },
+  pickerRightBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  agePillBadge: {
+    backgroundColor: '#DEF7EC',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  agePillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#03543F',
+  },
+  demographicFieldBlock: {
+    marginBottom: 10,
+  },
+  demographicRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  fieldSubLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4B5563',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  genderRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  genderPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  genderPillSelected: {
+    backgroundColor: '#111827',
+    borderColor: '#111827',
+  },
+  genderPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  genderPillTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  compactPickerPressable: {
+    justifyContent: 'space-between',
+  },
+  compactPickerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  compactPickerPlaceholder: {
+    color: '#9CA3AF',
+    fontWeight: '400',
+  },
+  compactAgeContainer: {
+    backgroundColor: '#E5E7EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    paddingHorizontal: 4,
+  },
+  compactAgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
   },
 });
 
