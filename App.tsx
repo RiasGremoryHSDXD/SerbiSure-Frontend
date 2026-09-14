@@ -3,7 +3,7 @@ import { ActivityIndicator, LogBox, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-LogBox.ignoreLogs(['Unable to activate keep awake']);
+LogBox.ignoreLogs(['Unable to activate keep awake', '[PostService]', '[PostJob]']);
 import {
   useFonts,
   Nunito_400Regular,
@@ -115,6 +115,7 @@ export default function App() {
                 setFlowState('registration2');
               }}
               onCancel={() => setFlowState('landing')}
+              onNavigateToLogin={() => setFlowState('login')}
             />
           )}
 

@@ -208,9 +208,25 @@ export function BottomTabNavigator({ role = 'homeowner', avatarUri: oldAvatarUri
       </View>
 
       {isKasambahay ? (
-        <PostServiceScreen visible={postJobVisible} onClose={() => setPostJobVisible(false)} token={token} />
+        <PostServiceScreen
+          visible={postJobVisible}
+          onClose={() => setPostJobVisible(false)}
+          token={token}
+          onOpenVerification={() => {
+            setPostJobVisible(false);
+            setActiveTab('profile');
+          }}
+        />
       ) : (
-        <PostJobScreen visible={postJobVisible} onClose={() => setPostJobVisible(false)} token={token} />
+        <PostJobScreen
+          visible={postJobVisible}
+          onClose={() => setPostJobVisible(false)}
+          token={token}
+          onOpenVerification={() => {
+            setPostJobVisible(false);
+            setActiveTab('profile');
+          }}
+        />
       )}
     </View>
   );
