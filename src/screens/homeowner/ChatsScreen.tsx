@@ -242,24 +242,6 @@ export function ChatsScreen() {
           )}
         </View>
 
-        <Text style={[styles.sectionHeader, { marginTop: 24 }]}>BOOKING UPDATES</Text>
-
-        <View style={{ paddingHorizontal: 20 }}>
-          <Pressable
-            style={styles.bookingCard}
-            onPress={() => openChat('Vincente Ganda', 'Cleaner', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=300')}
-          >
-            <View style={styles.bookingIconContainer}>
-              <Ionicons name="document-text" size={22} color="#FFFFFF" />
-            </View>
-            <View style={styles.bookingInfo}>
-              <Text style={styles.bookingTitle}>Vincente Ganda booked.</Text>
-              <Text style={styles.bookingSubtext}>Start date: May 11  •  Tap to review</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-          </Pressable>
-        </View>
-
         <View style={{ height: 100 }} />
       </ScrollView>
 
@@ -461,36 +443,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     includeFontPadding: false,
-  },
-  bookingCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  bookingIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: THEME.colors.brandDark,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  bookingInfo: {
-    flex: 1,
-  },
-  bookingTitle: {
-    fontSize: 14,
-    fontFamily: THEME.typography.fontFamily.display,
-    color: THEME.colors.ink,
-  },
-  bookingSubtext: {
-    fontSize: 12,
-    fontFamily: THEME.typography.fontFamily.secondaryRegular,
-    color: '#6B7280',
-    marginTop: 2,
   },
   emptyCard: {
     backgroundColor: '#FFFFFF',
