@@ -72,11 +72,11 @@ export async function fetchWithTimeout(
     }
   }
 
-  // Use a 5s timeout when probing local backend.
-  // Django's dev runserver is single-threaded: on app load it queues many parallel requests,
-  // each waiting behind the previous one. 2s was too tight and caused healthy local servers
-  // to be falsely declared unreachable, triggering the Vercel fallback.
-  const effectiveTimeout = isLocalUrl ? Math.min(timeoutMs, 5000) : timeoutMs;
+  // Use a 5s timeout when probing local backend for quick JSON requests.
+  // Do NOT clamp to 5s for file uploads (FormData) or explicit long-running requests (e.g. OCR).
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const isLongOperation = isFormData || timeoutMs > DEFAULT_TIMEOUT_MS;
+  const effectiveTimeout = (isLocalUrl && !isLongOperation) ? Math.min(timeoutMs, 5000) : timeoutMs;
   const primaryTimer = createTimer(effectiveTimeout);
 
   try {

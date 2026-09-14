@@ -33,7 +33,7 @@ interface VerificationStatusModalProps {
 const DOCUMENT_NAMES: Record<string, string> = {
   nbi_clearance: 'NBI Clearance',
   police_clearance: 'Police Clearance',
-  national_id_front: 'National ID',
+  national_id_front: 'National ID (Front)',
   national_id_back: 'National ID (Back)',
 };
 
@@ -243,7 +243,7 @@ export function VerificationStatusModal({
   const needsNbi = effectiveRole === 'kasambahay' && (!activeTypes.has('nbi_clearance') || !!nbiImage);
   const needsPolice = effectiveRole === 'kasambahay' && (!activeTypes.has('police_clearance') || !!policeImage);
   const needsFront = effectiveRole === 'homeowner' && (!activeTypes.has('national_id_front') || !!nationalFrontImage);
-  const needsBack = false;
+  const needsBack = effectiveRole === 'homeowner' && (!activeTypes.has('national_id_back') || !!nationalBackImage);
 
   const hasAnyNeeds = needsNbi || needsPolice || needsFront || needsBack;
   const hasAnySelected = !!(nbiImage || policeImage || nationalFrontImage || nationalBackImage);
@@ -257,23 +257,23 @@ export function VerificationStatusModal({
     const uploads: { type: string; uri: string }[] = [];
 
     if (effectiveRole === 'homeowner') {
-      if (needsFront && !nationalFrontImage) {
+      if (needsFront && !nationalFrontImage && !activeTypes.has('national_id_front')) {
         Alert.alert('Missing Document', 'Please upload the front of your National ID.');
         return;
       }
-      if (needsBack && !nationalBackImage) {
+      if (needsBack && !nationalBackImage && !activeTypes.has('national_id_back')) {
         Alert.alert('Missing Document', 'Please upload the back of your National ID.');
         return;
       }
-      if (nationalFrontImage) uploads.push({ type: 'national_id_front', uri: nationalFrontImage });
-      if (nationalBackImage) uploads.push({ type: 'national_id_back', uri: nationalBackImage });
+      if (nationalFrontImage && !activeTypes.has('national_id_front')) uploads.push({ type: 'national_id_front', uri: nationalFrontImage });
+      if (nationalBackImage && !activeTypes.has('national_id_back')) uploads.push({ type: 'national_id_back', uri: nationalBackImage });
     } else {
       if (needsNbi && !nbiImage && needsPolice && !policeImage) {
         Alert.alert('Missing Documents', 'Please upload at least one clearance document.');
         return;
       }
-      if (nbiImage) uploads.push({ type: 'nbi_clearance', uri: nbiImage });
-      if (policeImage) uploads.push({ type: 'police_clearance', uri: policeImage });
+      if (nbiImage && !activeTypes.has('nbi_clearance')) uploads.push({ type: 'nbi_clearance', uri: nbiImage });
+      if (policeImage && !activeTypes.has('police_clearance')) uploads.push({ type: 'police_clearance', uri: policeImage });
     }
 
     if (uploads.length === 0) {
@@ -300,11 +300,15 @@ export function VerificationStatusModal({
         const response = await fetchWithTimeout(`${API_BASE_URL}/api/v1/verifications/upload/`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'multipart/form-data',
             Authorization: `Bearer ${token}`,
           },
           body: formData,
-        });
+        }, 45000);
+
+        if (response.status === 409) {
+          console.log(`[VerificationStatusModal] ${upload.type} already submitted, continuing.`);
+          continue;
+        }
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
@@ -793,7 +797,7 @@ export function VerificationStatusModal({
 
         {needsFront ? (
           <UploadBox
-            title="National ID"
+            title="National ID (Front)"
             subtitle="Tap or upload image"
             image={nationalFrontImage}
             defaultFilename="national_id_front.jpg"
