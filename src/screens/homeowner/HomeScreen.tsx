@@ -20,6 +20,7 @@ import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
 import { formatBookingLocationShort } from '../../api/bookingApi';
 import { UserProfileModal } from '../UserProfileModal';
 import { ChatDetailScreen } from '../ChatDetailScreen';
+import { JobDetailSheet } from '../../components/JobDetailSheet';
 
 const logoSource = require('../../../assets/serbisure_new_clean.png');
 
@@ -168,6 +169,7 @@ export function HomeScreen({
   // Modals state
   const [selectedKasambahay, setSelectedKasambahay] = useState<KasambahayPost | null>(null);
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
+  const [selectedPostForDetail, setSelectedPostForDetail] = useState<KasambahayPost | null>(null);
   const [activeChat, setActiveChat] = useState<{
     visible: boolean;
     partnerId?: string;
@@ -182,6 +184,22 @@ export function HomeScreen({
     role: '',
     avatar: '',
   });
+
+  const detailJobData = selectedPostForDetail
+    ? {
+        id: selectedPostForDetail.id,
+        employerName: selectedPostForDetail.name,
+        avatar: selectedPostForDetail.avatar,
+        time: selectedPostForDetail.time,
+        location: selectedPostForDetail.location,
+        roleTag: selectedPostForDetail.role,
+        termTag: selectedPostForDetail.termTag,
+        price: selectedPostForDetail.rate,
+        unit: selectedPostForDetail.rateUnit,
+        aboutText: selectedPostForDetail.description,
+        tags: selectedPostForDetail.tags,
+      }
+    : null;
 
   const fetchKasambahayPosts = async () => {
     try {
@@ -520,7 +538,7 @@ export function HomeScreen({
                   </Text>
                 ) : null}
 
-                {/* Card Action Buttons: View Profile & Message */}
+                {/* Card Action Buttons: View Profile & See Details */}
                 <View style={styles.cardActionsRow}>
                   <Pressable
                     style={styles.viewProfileBtn}
@@ -529,11 +547,10 @@ export function HomeScreen({
                     <Text style={styles.viewProfileText}>View Profile</Text>
                   </Pressable>
                   <Pressable
-                    style={styles.messageBtn}
-                    onPress={() => handleOpenMessage(post)}
+                    style={styles.seeDetailsBtn}
+                    onPress={() => setSelectedPostForDetail(post)}
                   >
-                    <Ionicons name="chatbubble-ellipses" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
-                    <Text style={styles.messageBtnText}>Message</Text>
+                    <Text style={styles.seeDetailsBtnText}>See Details</Text>
                   </Pressable>
                 </View>
               </View>
@@ -569,6 +586,23 @@ export function HomeScreen({
         contactAvatar={activeChat.avatar}
         initialMessage={activeChat.initialMessage}
         userRole="homeowner"
+      />
+
+      {/* Kasambahay Post Details Modal Sheet */}
+      <JobDetailSheet
+        visible={!!selectedPostForDetail}
+        job={detailJobData}
+        onClose={() => setSelectedPostForDetail(null)}
+        onApply={() => {
+          if (selectedPostForDetail) {
+            const target = selectedPostForDetail;
+            setSelectedPostForDetail(null);
+            handleOpenMessage(target);
+          }
+        }}
+        isApplied={false}
+        ctaText="Message Kasambahay"
+        ctaNotice="Start a direct chat with this kasambahay"
       />
     </View>
   );
@@ -909,16 +943,15 @@ const styles = StyleSheet.create({
     fontFamily: THEME.typography.fontFamily.display,
     fontSize: 12.5,
   },
-  messageBtn: {
+  seeDetailsBtn: {
     flex: 1,
     backgroundColor: '#FFB43B',
     borderRadius: THEME.roundness.pill,
     paddingVertical: 11,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  messageBtnText: {
+  seeDetailsBtnText: {
     color: '#FFFFFF',
     fontFamily: THEME.typography.fontFamily.display,
     fontSize: 12.5,
