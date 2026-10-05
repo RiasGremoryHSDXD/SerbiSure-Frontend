@@ -5,32 +5,39 @@ export const VERCEL_API_URL = 'https://serbisure-backend-rho.vercel.app';
 
 /**
  * Checks whether the application is running as an installed standalone APK / production binary.
- * In a standalone APK:
- * 1. Constants.appOwnership is null or 'standalone' (NOT 'expo')
- * 2. Constants.executionEnvironment is 'standalone' or 'bare' (NOT StoreClient)
- * 3. Metro bundler hostUri is absent / undefined
- * 4. In release builds, __DEV__ is false
+ * Priority order:
+ * 1. Release builds (__DEV__ === false) → always APK.
+ * 2. Metro hostUri present → definitively NOT an APK (covers Expo Go AND dev-client).
+ * 3. executionEnvironment Standalone/Bare → APK.
+ * 4. appOwnership not 'expo' with no Metro host → APK.
  */
 export function isRunningInApk(): boolean {
   if (!__DEV__) {
     // Release builds are ALWAYS standalone APKs
     return true;
   }
-  if (Constants.appOwnership !== 'expo') {
-    // Standalone or bare React Native build (not Expo Go)
-    return true;
+
+  // If Metro bundler host is present we ARE connected to a dev server.
+  // This covers both Expo Go AND expo-dev-client (--dev-client) sessions.
+  // Must be checked BEFORE appOwnership, because dev-client sets appOwnership
+  // to something other than 'expo' even while Metro is active.
+  const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest2?.extra?.expoGo?.debuggerHost;
+  if (hostUri) {
+    return false; // Connected to Metro → local dev mode, NOT an APK
   }
+
   if (
     Constants.executionEnvironment === ExecutionEnvironment.Standalone ||
     Constants.executionEnvironment === ExecutionEnvironment.Bare
   ) {
     return true;
   }
-  // Check if Metro host is absent (not connected to Expo dev server)
-  const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest2?.extra?.expoGo?.debuggerHost;
-  if (!hostUri) {
+
+  if (Constants.appOwnership !== 'expo') {
+    // Standalone / bare build with no Metro connection
     return true;
   }
+
   return false;
 }
 
@@ -54,11 +61,13 @@ function getApiBaseUrl(): string {
     return VERCEL_API_URL;
   }
 
-  // Step 1: In local Expo Go development, try to dynamically grab the real WiFi IP from Expo's Metro bundler.
+  // Step 1: In local dev (Expo Go or dev-client), grab the real WiFi IP from Metro's hostUri.
+  // This works without any .env file — Expo injects the host automatically.
   const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest2?.extra?.expoGo?.debuggerHost;
   if (hostUri) {
     const ip = hostUri.split(':')[0];
     if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
+      console.log(`[API] Dev mode detected via Metro (${hostUri}). Targeting local backend: http://${ip}:8000`);
       return `http://${ip}:8000`;
     }
   }
@@ -111,11 +120,12 @@ export async function fetchWithTimeout(
     }
   }
 
-  // Use a 3s timeout when probing local backend for quick JSON requests in dev.
+  // Use a 5s timeout when probing the local backend — local Django may need a moment
+  // to process requests (migrations, first-query cold start, etc.).
   // Do NOT clamp for file uploads (FormData) or explicit long-running requests (e.g. OCR).
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const isLongOperation = isFormData || timeoutMs > DEFAULT_TIMEOUT_MS;
-  const effectiveTimeout = (isLocalUrl && !isLongOperation) ? Math.min(timeoutMs, 3000) : timeoutMs;
+  const effectiveTimeout = (isLocalUrl && !isLongOperation) ? Math.min(timeoutMs, 5000) : timeoutMs;
   const primaryTimer = createTimer(effectiveTimeout);
 
   try {
