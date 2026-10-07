@@ -52,6 +52,7 @@ export function MyBookingsModal({
   const [reviewBooking, setReviewBooking] = useState<{
     id: string;
     revieweeName: string;
+    isMandatory?: boolean;
   } | null>(null);
 
   // Proposals Modal State
@@ -125,8 +126,21 @@ export function MyBookingsModal({
         onPress: async () => {
           const res = await completeBooking(token, bookingId);
           if (res.success) {
-            Alert.alert('Job Completed', 'Booking marked as Completed! Please leave a review.');
             loadData();
+            const matchingBooking = bookings.find((b) => b.booking_id === bookingId);
+            const target = accountType === 'Homeowner' ? matchingBooking?.assigned_partner : matchingBooking?.poster;
+            const targetName = target ? target.name : 'Partner';
+
+            Alert.alert(
+              'Job Completed',
+              'Booking marked as Completed! Mandatory quality feedback is now required under SerbiSure QA.'
+            );
+
+            setReviewBooking({
+              id: bookingId,
+              revieweeName: targetName,
+              isMandatory: true,
+            });
           } else {
             Alert.alert('Error', res.error || 'Failed to complete job.');
           }
@@ -135,24 +149,116 @@ export function MyBookingsModal({
     ]);
   };
 
+  const handleConfirmCancellation = async (bookingId: string) => {
+    if (!token) return;
+    Alert.alert(
+      'Confirm Cancellation',
+      'Are you sure you want to approve this cancellation? Both parties will have confirmed, and the booking will be cancelled.',
+      [
+        { text: 'Keep Booking', style: 'cancel' },
+        {
+          text: 'Confirm Cancellation',
+          style: 'destructive',
+          onPress: async () => {
+            const res = await cancelBooking(token, bookingId, { action: 'confirm' });
+            if (res.success) {
+              Alert.alert('Booking Cancelled', 'Both parties agreed. The booking has been cancelled.');
+              loadData();
+            } else {
+              Alert.alert('Error', res.error || 'Failed to confirm cancellation.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeclineCancellation = async (bookingId: string, isWithdrawal = false) => {
+    if (!token) return;
+    Alert.alert(
+      isWithdrawal ? 'Withdraw Request' : 'Decline Cancellation',
+      isWithdrawal
+        ? 'Do you want to withdraw your cancellation request? The booking will remain active.'
+        : 'Do you want to decline this cancellation request? The booking will remain active.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: isWithdrawal ? 'Withdraw Request' : 'Decline Request',
+          onPress: async () => {
+            const res = await cancelBooking(token, bookingId, { action: 'decline' });
+            if (res.success) {
+              Alert.alert(
+                isWithdrawal ? 'Request Withdrawn' : 'Request Declined',
+                isWithdrawal ? 'Your cancellation request was withdrawn.' : 'Cancellation request was declined. The booking remains active.'
+              );
+              loadData();
+            } else {
+              Alert.alert('Error', res.error || 'Failed to update cancellation.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleCancel = async (bookingId: string) => {
     if (!token) return;
-    Alert.alert('Cancel Booking', 'Are you sure you want to cancel this booking?', [
-      { text: 'Keep Booking', style: 'cancel' },
-      {
-        text: 'Yes, Cancel',
-        style: 'destructive',
-        onPress: async () => {
-          const res = await cancelBooking(token, bookingId);
-          if (res.success) {
-            Alert.alert('Cancelled', 'Booking has been cancelled.');
-            loadData();
-          } else {
-            Alert.alert('Error', res.error || 'Failed to cancel booking.');
-          }
+    const booking = bookings.find((b) => b.booking_id === bookingId);
+    if (!booking) return;
+
+    if (booking.booking_status === 'Pending') {
+      Alert.alert('Cancel Booking', 'Are you sure you want to cancel this booking posting?', [
+        { text: 'Keep Booking', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            const res = await cancelBooking(token, bookingId);
+            if (res.success) {
+              Alert.alert('Cancelled', 'Booking has been cancelled.');
+              loadData();
+            } else {
+              Alert.alert('Error', res.error || 'Failed to cancel booking.');
+            }
+          },
         },
-      },
-    ]);
+      ]);
+      return;
+    }
+
+    // Confirmed booking ('Accepted' or 'InProgress')
+    if (booking.can_cancel === false) {
+      Alert.alert(
+        'Cancellation Window Expired',
+        'Under SerbiSure policy, cancellations are only applicable within 2 hours of booking confirmation.\n\nBeyond 2 hours, contracts cannot be cancelled. Please contact support if you need assistance.'
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Request Cancellation (2-Hour Policy)',
+      'Are you sure you want to request cancellation?\n\n' +
+      '• Cancellation is only permitted within 2 hours of confirmation.\n' +
+      '• BOTH you and the other party must confirm before cancellation takes effect.\n' +
+      '• Cancelling confirmed bookings three (3) times will lead to account restriction.\n\n' +
+      'Do you wish to submit this cancellation request?',
+      [
+        { text: 'Keep Booking', style: 'cancel' },
+        {
+          text: 'Request Cancellation',
+          style: 'destructive',
+          onPress: async () => {
+            const res = await cancelBooking(token, bookingId, { action: 'request' });
+            if (res.success) {
+              Alert.alert('Cancellation Requested', res.message || 'Waiting for the other party to confirm.');
+              loadData();
+            } else {
+              Alert.alert('Cannot Cancel', res.error || 'Failed to request cancellation.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getStatusBadgeStyle = (status: string) => {
@@ -183,6 +289,38 @@ export function MyBookingsModal({
           </Text>
           <View style={{ width: 40 }} />
         </View>
+
+        {/* Mandatory Quality Feedback Banner for Completed Bookings */}
+        {(() => {
+          const pendingFeedback = bookings.find((b) => b.booking_status === 'Completed' && !b.has_reviewed);
+          if (!pendingFeedback) return null;
+          const target = accountType === 'Homeowner' ? pendingFeedback.assigned_partner : pendingFeedback.poster;
+          const targetName = target ? target.name : 'Partner';
+
+          return (
+            <Pressable
+              style={styles.mandatoryFeedbackBanner}
+              onPress={() => {
+                setReviewBooking({
+                  id: pendingFeedback.booking_id,
+                  revieweeName: targetName,
+                  isMandatory: true,
+                });
+              }}
+            >
+              <View style={styles.mandatoryFeedbackIconWrap}>
+                <Ionicons name="chatbubbles" size={18} color="#D97706" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.mandatoryFeedbackTitle}>Mandatory Service Feedback</Text>
+                <Text style={styles.mandatoryFeedbackSub} numberOfLines={2}>
+                  You have a completed booking with {targetName} awaiting required review. Tap to complete.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#D97706" />
+            </Pressable>
+          );
+        })()}
 
         {/* Tab Switcher */}
         <View style={styles.tabsRow}>
@@ -322,6 +460,54 @@ export function MyBookingsModal({
                     </View>
                   )}
 
+                  {/* Mutual Cancellation Request Alert (Counterparty requested) */}
+                  {booking.pending_cancel_approval && (
+                    <View style={styles.cancelRequestBanner}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                        <Ionicons name="alert-circle" size={18} color="#DC2626" style={{ marginRight: 6 }} />
+                        <Text style={styles.cancelRequestTitle}>
+                          Cancellation Requested by {booking.cancel_requested_by?.name || counterparty?.name || 'Partner'}
+                        </Text>
+                      </View>
+                      <Text style={styles.cancelRequestSub}>
+                        Both parties must confirm cancellation within the 2-hour window. If you decline, this booking remains active.
+                      </Text>
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                        <Pressable
+                          style={[styles.cancelBannerBtn, { backgroundColor: '#EF4444' }]}
+                          onPress={() => handleConfirmCancellation(booking.booking_id)}
+                        >
+                          <Text style={styles.cancelBannerBtnText}>Confirm Cancel</Text>
+                        </Pressable>
+                        <Pressable
+                          style={[styles.cancelBannerBtn, { backgroundColor: '#4B5563' }]}
+                          onPress={() => handleDeclineCancellation(booking.booking_id)}
+                        >
+                          <Text style={styles.cancelBannerBtnText}>Decline & Keep</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Cancellation Request Pending (Current user requested) */}
+                  {booking.cancel_requested_by_me && (
+                    <View style={styles.cancelPendingMyBanner}>
+                      <Ionicons name="time" size={16} color="#D97706" style={{ marginRight: 6 }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.cancelPendingMyTitle}>Cancellation Pending Approval</Text>
+                        <Text style={styles.cancelPendingMySub}>
+                          Waiting for {counterparty?.name || 'Partner'} to confirm or decline.
+                        </Text>
+                      </View>
+                      <Pressable
+                        style={styles.cancelWithdrawBtn}
+                        onPress={() => handleDeclineCancellation(booking.booking_id, true)}
+                      >
+                        <Text style={styles.cancelWithdrawBtnText}>Withdraw</Text>
+                      </Pressable>
+                    </View>
+                  )}
+
                   {/* Action Buttons Row */}
                   <View style={styles.actionRow}>
                     {/* Proposals view button */}
@@ -392,13 +578,23 @@ export function MyBookingsModal({
                       </Pressable>
                     )}
 
-                    {['Pending', 'Accepted'].includes(booking.booking_status) && (
-                      <Pressable
-                        style={styles.actionBtnDanger}
-                        onPress={() => handleCancel(booking.booking_id)}
-                      >
-                        <Text style={styles.actionBtnDangerText}>Cancel</Text>
-                      </Pressable>
+                    {['Pending', 'Accepted'].includes(booking.booking_status) && !booking.cancel_requested_by_me && !booking.pending_cancel_approval && (
+                      booking.can_cancel === false ? (
+                        <Pressable
+                          style={[styles.actionBtnDanger, { backgroundColor: '#F3F4F6', borderColor: '#E5E7EB' }]}
+                          onPress={() => handleCancel(booking.booking_id)}
+                        >
+                          <Ionicons name="lock-closed" size={12} color="#9CA3AF" style={{ marginRight: 3 }} />
+                          <Text style={[styles.actionBtnDangerText, { color: '#9CA3AF' }]}>Locked (2h Expired)</Text>
+                        </Pressable>
+                      ) : (
+                        <Pressable
+                          style={styles.actionBtnDanger}
+                          onPress={() => handleCancel(booking.booking_id)}
+                        >
+                          <Text style={styles.actionBtnDangerText}>Cancel</Text>
+                        </Pressable>
+                      )
                     )}
                   </View>
                 </View>
@@ -424,6 +620,7 @@ export function MyBookingsModal({
             onClose={() => setReviewBooking(null)}
             bookingId={reviewBooking.id}
             revieweeName={reviewBooking.revieweeName}
+            isMandatory={reviewBooking.isMandatory ?? true}
             token={token}
             onSuccess={() => loadData()}
           />
@@ -696,6 +893,73 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#DC2626',
   },
+  cancelRequestBanner: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  cancelRequestTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#991B1B',
+  },
+  cancelRequestSub: {
+    fontSize: 12,
+    color: '#4B5563',
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  cancelBannerBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBannerBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  cancelPendingMyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  cancelPendingMyTitle: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  cancelPendingMySub: {
+    fontSize: 11.5,
+    color: '#6B7280',
+    marginTop: 1,
+  },
+  cancelWithdrawBtn: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  cancelWithdrawBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
   emptyCard: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -713,5 +977,42 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     maxWidth: 240,
+  },
+  mandatoryFeedbackBanner: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#FDE68A',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  mandatoryFeedbackIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  mandatoryFeedbackTitle: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  mandatoryFeedbackSub: {
+    fontSize: 11,
+    color: '#B45309',
+    marginTop: 2,
+    lineHeight: 15,
   },
 });

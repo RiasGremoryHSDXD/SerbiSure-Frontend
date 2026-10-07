@@ -1,9 +1,122 @@
-import { API_BASE_URL, fetchWithTimeout } from '../config/api';
+import { API_BASE_URL, fetchWithTimeout, HUGGINGFACE_SENTIMENT_SPACE_URL, HUGGINGFACE_API_TOKEN } from '../config/api';
 import { generateUUID } from './chatApi';
 
 const REVIEW_BASE = `${API_BASE_URL}/api/v1/reviews`;
 
 export type SentimentType = 'Positive' | 'Neutral' | 'Negative';
+
+export interface NlpSentimentResult {
+  sentiment: SentimentType;
+  confidence?: number;
+  source: 'huggingface' | 'local_fallback';
+  probabilities?: Record<string, number>;
+}
+
+/**
+ * Predicts sentiment using the SerbiSure Hugging Face Space (XLM-RoBERTa / FiReCS):
+ * https://riasgremory2-serbisure-sentiment-api.hf.space
+ * Analyzes strictly based on the text comment, independently of star rating.
+ */
+export async function predictSentimentViaHuggingFace(
+  text: string
+): Promise<NlpSentimentResult> {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return {
+      sentiment: 'Neutral',
+      source: 'local_fallback',
+    };
+  }
+
+  try {
+    // Step 1: Initiate prediction call
+    const postHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (HUGGINGFACE_API_TOKEN) {
+      postHeaders['Authorization'] = `Bearer ${HUGGINGFACE_API_TOKEN}`;
+    }
+
+    const postRes = await fetchWithTimeout(
+      `${HUGGINGFACE_SENTIMENT_SPACE_URL}/gradio_api/call/predict`,
+      {
+        method: 'POST',
+        headers: postHeaders,
+        body: JSON.stringify({ data: [trimmed] }),
+      },
+      12000
+    );
+
+    if (!postRes.ok) {
+      throw new Error(`HF Space returned status ${postRes.status}`);
+    }
+
+    const { event_id } = await postRes.json();
+    if (!event_id) {
+      throw new Error('No event_id in HF Space response');
+    }
+
+    // Step 2: Fetch result event stream
+    const streamHeaders: Record<string, string> = {};
+    if (HUGGINGFACE_API_TOKEN) {
+      streamHeaders['Authorization'] = `Bearer ${HUGGINGFACE_API_TOKEN}`;
+    }
+
+    const streamRes = await fetchWithTimeout(
+      `${HUGGINGFACE_SENTIMENT_SPACE_URL}/gradio_api/call/predict/${event_id}`,
+      {
+        headers: streamHeaders,
+      },
+      12000
+    );
+
+    if (!streamRes.ok) {
+      throw new Error(`HF Stream returned status ${streamRes.status}`);
+    }
+
+    const streamText = await streamRes.text();
+    for (const line of streamText.split('\n')) {
+      if (line.startsWith('data:')) {
+        const parsed = JSON.parse(line.slice(5).trim());
+        if (Array.isArray(parsed) && parsed[0]?.label) {
+          const rawLabel = String(parsed[0].label).trim().toLowerCase();
+          let sentiment: SentimentType = 'Neutral';
+          if (rawLabel.includes('negative')) sentiment = 'Negative';
+          else if (rawLabel.includes('neutral')) sentiment = 'Neutral';
+          else if (rawLabel.includes('positive')) sentiment = 'Positive';
+
+          return {
+            sentiment,
+            confidence: typeof parsed[1] === 'number' ? parsed[1] : undefined,
+            probabilities: parsed[2] || undefined,
+            source: 'huggingface',
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[ReviewApi] HuggingFace Space call failed, using text fallback:', err);
+  }
+
+  // Fallback to text analysis only (no star-based override)
+  const lower = trimmed.toLowerCase();
+  const positiveWords = ['great', 'good', 'excellent', 'amazing', 'super', 'satisfied', 'recommend', 'mabait', 'maayo', 'sipag', 'masipag', 'kugihan', 'buotan', 'malinis', 'limpyo'];
+  const negativeWords = ['bad', 'poor', 'terrible', 'horrible', 'worst', 'disappointed', 'late', 'rude', 'bastos', 'tamad', 'tapulan', 'hugaw', 'madumi', 'salbahe', 'unprofessional', 'guba'];
+  
+  let pos = 0;
+  let neg = 0;
+  for (const w of positiveWords) { if (lower.includes(w)) pos++; }
+  for (const w of negativeWords) { if (lower.includes(w)) neg++; }
+
+  let fallbackSentiment: SentimentType = 'Neutral';
+  if (pos > neg) fallbackSentiment = 'Positive';
+  else if (neg > pos) fallbackSentiment = 'Negative';
+
+  return {
+    sentiment: fallbackSentiment,
+    source: 'local_fallback',
+  };
+}
 
 export interface ReviewItem {
   review_id: string;

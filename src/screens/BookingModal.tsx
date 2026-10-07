@@ -64,6 +64,9 @@ interface BookingModalProps {
   } | null;
   onConfirm?: (bookingDetails: BookingConfirmData) => void;
   onKasambahayConfirm?: () => void;
+  onKasambahayDecline?: () => void;
+  isDeclined?: boolean;
+  isAcquired?: boolean;
 }
 
 const ALL_DAYS = ['M', 'T', 'W', 'Th', 'F', 'S', 'Su'];
@@ -104,6 +107,9 @@ export function BookingModal({
   initialDetails = null,
   onConfirm,
   onKasambahayConfirm,
+  onKasambahayDecline,
+  isDeclined = false,
+  isAcquired = false,
 }: BookingModalProps) {
   const insets = useSafeAreaInsets();
 
@@ -263,18 +269,33 @@ export function BookingModal({
       }
     }
 
-    onConfirm?.({
-      startDate,
-      endDate,
-      workHours,
-      location: location.trim(),
-      days: selectedDays,
-      salary: salary.trim(),
-      bookingType: selectedBookingType,
-      jobPost: effectiveJobPost,
-    });
-
-    handleClose();
+    Alert.alert(
+      'Notice: Cancellation Policy',
+      'Please note the following booking terms:\n\n' +
+      '• 2-Hour Cancellation: Cancellation is applicable within 2 hours of booking confirmation only. Beyond 2 hours, you cannot cancel.\n' +
+      '• Mutual Confirmation: BOTH parties must be prompted and confirm before cancellation takes effect.\n' +
+      '• 3-Strike Restriction: Cancelling confirmed bookings three times will lead to account restriction.\n\n' +
+      'Do you want to send this booking offer?',
+      [
+        { text: 'Review Again', style: 'cancel' },
+        {
+          text: 'Confirm & Send',
+          onPress: () => {
+            onConfirm?.({
+              startDate,
+              endDate,
+              workHours,
+              location: location.trim(),
+              days: selectedDays,
+              salary: salary.trim(),
+              bookingType: selectedBookingType,
+              jobPost: effectiveJobPost,
+            });
+            handleClose();
+          },
+        },
+      ]
+    );
   };
 
   // Calendar Date Picker Helpers
@@ -602,31 +623,114 @@ export function BookingModal({
               </Text>
             )}
           </View>
+
+          {/* CANCELLATION POLICY NOTICE */}
+          <View style={styles.policyCard}>
+            <View style={styles.policyCardHeader}>
+              <Ionicons name="shield-checkmark" size={17} color="#D97706" style={{ marginRight: 6 }} />
+              <Text style={styles.policyCardTitle}>Important Cancellation Policy</Text>
+            </View>
+            <View style={styles.policyCardItem}>
+              <Ionicons name="time-outline" size={14} color="#B45309" style={{ marginRight: 6, marginTop: 2 }} />
+              <Text style={styles.policyCardText}>
+                <Text style={styles.policyCardBold}>2-Hour Window: </Text>
+                Cancellation is only applicable within 2 hours of booking confirmation. Beyond 2 hours, you cannot cancel the booking.
+              </Text>
+            </View>
+            <View style={styles.policyCardItem}>
+              <Ionicons name="people-outline" size={14} color="#B45309" style={{ marginRight: 6, marginTop: 2 }} />
+              <Text style={styles.policyCardText}>
+                <Text style={styles.policyCardBold}>Mutual Confirmation: </Text>
+                BOTH parties must be prompted to cancel and confirm cancellation before it takes effect.
+              </Text>
+            </View>
+            <View style={styles.policyCardItem}>
+              <Ionicons name="alert-circle-outline" size={14} color="#DC2626" style={{ marginRight: 6, marginTop: 2 }} />
+              <Text style={styles.policyCardText}>
+                <Text style={[styles.policyCardBold, { color: '#DC2626' }]}>3-Strike Restriction: </Text>
+                Three (3) times cancelling confirmed bookings will lead to account restriction.
+              </Text>
+            </View>
+          </View>
         </ScrollView>
 
         {/* Action Button Footer */}
         <View style={styles.footerContainer}>
           {readOnly ? (
-            isKasambahayUser && !isConfirmed ? (
-              <Pressable
-                style={({ pressed }) => [styles.agreeBtn, pressed && styles.pressedBtn]}
-                onPress={() => {
-                  onKasambahayConfirm?.();
-                  handleClose();
-                }}
-              >
-                <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.agreeBtnText}>Agree & Accept Booking</Text>
-              </Pressable>
+            isAcquired ? (
+              <View style={[styles.pendingBanner, { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1' }]}>
+                <Ionicons name="lock-closed" size={18} color="#64748B" style={{ marginRight: 6 }} />
+                <Text style={[styles.pendingBannerText, { color: '#475569' }]}>This job position has already been acquired.</Text>
+              </View>
+            ) : isDeclined ? (
+              <View style={[styles.pendingBanner, { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5' }]}>
+                <Ionicons name="close-circle" size={18} color="#EF4444" style={{ marginRight: 6 }} />
+                <Text style={[styles.pendingBannerText, { color: '#B91C1C' }]}>Booking Offer Declined</Text>
+              </View>
             ) : isConfirmed ? (
               <View style={styles.confirmedBanner}>
                 <Ionicons name="checkmark-circle" size={20} color="#4CAF50" style={{ marginRight: 6 }} />
-                <Text style={styles.confirmedBannerText}>Booking Confirmed & Active</Text>
+                <Text style={styles.confirmedBannerText}>Booking Confirmed & Active Contract</Text>
+              </View>
+            ) : isKasambahayUser ? (
+              <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+                <Pressable
+                  style={({ pressed }) => [styles.declineBtn, pressed && styles.pressedBtn]}
+                  onPress={() => {
+                    Alert.alert(
+                      'Decline Booking Offer',
+                      `Are you sure you want to decline this booking offer from ${contactName}? They will be notified.`,
+                      [
+                        { text: 'Keep Reviewing', style: 'cancel' },
+                        {
+                          text: 'Decline Offer',
+                          style: 'destructive',
+                          onPress: () => {
+                            onKasambahayDecline?.();
+                            handleClose();
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                >
+                  <Ionicons name="close-circle-outline" size={18} color="#DC2626" style={{ marginRight: 6 }} />
+                  <Text style={styles.declineBtnText}>Decline</Text>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [styles.agreeBtn, { flex: 1 }, pressed && styles.pressedBtn]}
+                  onPress={() => {
+                    Alert.alert(
+                      'Confirm Contract Agreement',
+                      'Please note the following cancellation policy:\n\n' +
+                      '• 2-Hour Window: Cancellation is applicable within 2 hours of confirmation only. Beyond 2 hours, you cannot cancel.\n' +
+                      '• Dual Confirmation: BOTH parties must prompt and confirm to cancel.\n' +
+                      '• 3-Strike Restriction: Three times cancelling confirmed bookings will lead to account restriction.\n\n' +
+                      'Do you agree and accept this contract?',
+                      [
+                        { text: 'Review Details', style: 'cancel' },
+                        {
+                          text: 'Agree & Accept',
+                          onPress: () => {
+                            onKasambahayConfirm?.();
+                            handleClose();
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                >
+                  <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.agreeBtnText}>Agree & Accept</Text>
+                </Pressable>
               </View>
             ) : (
               <View style={styles.pendingBanner}>
                 <Ionicons name="time-outline" size={18} color="#D97706" style={{ marginRight: 6 }} />
-                <Text style={styles.pendingBannerText}>Waiting for Kasambahay Confirmation...</Text>
+                <Text style={styles.pendingBannerText}>
+                  Offer Sent • Waiting for {contactName || 'Kasambahay'} to accept or decline
+                </Text>
               </View>
             )
           ) : (
@@ -634,7 +738,7 @@ export function BookingModal({
               style={({ pressed }) => [styles.confirmBtn, pressed && styles.pressedBtn]}
               onPress={handleConfirm}
             >
-              <Text style={styles.confirmBtnText}>Confirm Booking ➔</Text>
+              <Text style={styles.confirmBtnText}>Send Booking Offer to Kasambahay ➔</Text>
             </Pressable>
           )}
         </View>
@@ -1241,6 +1345,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
   },
+  declineBtn: {
+    flex: 0.45,
+    height: 50,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEF2F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  declineBtnText: {
+    color: '#DC2626',
+    fontWeight: '700',
+    fontSize: 14,
+    fontFamily: THEME.typography.fontFamily.mainBold,
+  },
   pressedBtn: {
     opacity: 0.85,
     transform: [{ scale: 0.98 }],
@@ -1412,5 +1533,40 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '800',
     fontSize: 14,
+  },
+  policyCard: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    padding: 14,
+    marginTop: 10,
+    marginBottom: 16,
+  },
+  policyCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  policyCardTitle: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#92400E',
+    letterSpacing: 0.3,
+  },
+  policyCardItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 6,
+  },
+  policyCardText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#4B5563',
+  },
+  policyCardBold: {
+    fontWeight: '700',
+    color: '#1F2937',
   },
 });

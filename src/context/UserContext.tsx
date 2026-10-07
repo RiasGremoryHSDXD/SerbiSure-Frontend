@@ -27,6 +27,8 @@ type UserData = {
   gender?: string;
   nationality?: string;
   religion?: string;
+  cancellationStrikes?: number;
+  isRestricted?: boolean;
 };
 
 type UserContextType = {
@@ -119,6 +121,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
           gender: decoded.gender || undefined,
           nationality: decoded.nationality || 'Filipino',
           religion: decoded.religion || undefined,
+          cancellationStrikes: decoded.cancellation_strikes ?? 0,
+          isRestricted: decoded.is_restricted ?? false,
         });
       }
       else {

@@ -21,6 +21,7 @@ type StoreListener = () => void;
 class SavedJobsStore {
   private savedMap: Map<string | number, SavedJobItem> = new Map();
   private appliedMap: Map<string | number, SavedJobItem> = new Map();
+  private closedJobs: Set<string | number> = new Set();
   private listeners: Set<StoreListener> = new Set();
 
   constructor() {
@@ -60,6 +61,41 @@ class SavedJobsStore {
     return this.appliedMap.has(id);
   }
 
+  markJobClosed(id?: string | number | null, ...extraKeys: (string | number | undefined | null)[]) {
+    if (id !== undefined && id !== null) {
+      this.closedJobs.add(id);
+      this.closedJobs.add(String(id));
+      if (typeof id === 'string') {
+        this.closedJobs.add(id.trim().toLowerCase());
+      }
+    }
+    extraKeys.forEach((key) => {
+      if (key !== undefined && key !== null) {
+        this.closedJobs.add(key);
+        this.closedJobs.add(String(key));
+        if (typeof key === 'string') {
+          this.closedJobs.add(key.trim().toLowerCase());
+        }
+      }
+    });
+    this.notify();
+  }
+
+  isClosed(id?: string | number | null): boolean {
+    if (id === undefined || id === null) return false;
+    if (this.closedJobs.has(id) || this.closedJobs.has(String(id))) return true;
+    if (typeof id === 'string' && this.closedJobs.has(id.trim().toLowerCase())) return true;
+    return false;
+  }
+
+  isJobClosed(job?: any): boolean {
+    if (!job) return false;
+    if (job.id && this.isClosed(job.id)) return true;
+    if (job.partnerId && this.isClosed(job.partnerId)) return true;
+    if (job.employerName && this.isClosed(job.employerName)) return true;
+    return false;
+  }
+
   getSavedJobs(): SavedJobItem[] {
     return Array.from(this.savedMap.values());
   }
@@ -96,6 +132,10 @@ export function useJobsActivity() {
     appliedCount: savedJobsStore.getAppliedCount(),
     isSaved: (id: string | number) => savedJobsStore.isSaved(id),
     isApplied: (id: string | number) => savedJobsStore.isApplied(id),
+    isClosed: (id?: string | number | null) => savedJobsStore.isClosed(id),
+    isJobClosed: (job?: any) => savedJobsStore.isJobClosed(job),
+    markJobClosed: (id?: string | number | null, ...extraKeys: (string | number | undefined | null)[]) =>
+      savedJobsStore.markJobClosed(id, ...extraKeys),
     toggleSave: (job: SavedJobItem) => savedJobsStore.toggleSave(job),
     applyJob: (job: SavedJobItem) => savedJobsStore.applyJob(job),
   };

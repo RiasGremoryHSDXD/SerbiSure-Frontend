@@ -53,3 +53,6 @@ __pycache__/
 *.sqlite3
 venv/
 .venv/
+
+# Standalone admin repo
+serbisure-admin/

@@ -27,6 +27,7 @@ import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
 import { MyBookingsModal } from '../MyBookingsModal';
 import { ManageTagsModal } from '../ManageTagsModal';
 import { ManageSocialLinksModal } from '../ManageSocialLinksModal';
+import { AllReviewsModal } from '../AllReviewsModal';
 import { NotificationBell } from '../../context/NotificationContext';
 import { formatRegisteredLocation } from '../../services/locationService';
 import THEME from '../../config/theme';
@@ -91,6 +92,8 @@ export function ProfileScreen({
   const [tags, setTags] = useState<string[]>(user.userTags || []);
   const [isManageTagsModalVisible, setIsManageTagsModalVisible] = useState(false);
   const [isManageSocialLinksModalVisible, setIsManageSocialLinksModalVisible] = useState(false);
+  const [isAllReviewsModalVisible, setIsAllReviewsModalVisible] = useState(false);
+  const [isReviewsExpanded, setIsReviewsExpanded] = useState(false);
   const [showContactNumber, setShowContactNumber] = useState<boolean>(user.showContactNumber ?? false);
   const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -346,31 +349,11 @@ export function ProfileScreen({
       ? Math.round((reviews.filter((r) => r.nlp_sentiment === 'Positive').length / reviews.length) * 100)
       : null;
 
-  const handlePickImage = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permission Required', 'Permission to access photo gallery is required!');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const uri = result.assets[0]?.uri;
-        if (uri) {
-          setLocalAvatar(uri);
-          onUpdateAvatar?.(uri);
-        }
-      }
-    } catch (e) {
-      console.log('Error picking profile picture:', e);
-    }
+  const handlePickImage = () => {
+    Alert.alert(
+      'Biometrically Verified Photo',
+      'Your profile photo is verified via camera biometric liveness detection during onboarding. It cannot be altered manually from your photo gallery to maintain platform safety and trust.'
+    );
   };
 
   const handlePickAndUploadResume = async () => {
@@ -487,8 +470,8 @@ export function ProfileScreen({
                   source={{ uri: localAvatar || avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }}
                   style={styles.personalAvatar}
                 />
-                <View style={styles.cameraIconBadge}>
-                  <Ionicons name="camera" size={13} color="#FFFFFF" />
+                <View style={[styles.cameraIconBadge, { backgroundColor: '#10B981' }]}>
+                  <Ionicons name="shield-checkmark" size={13} color="#FFFFFF" />
                 </View>
               </Pressable>
 
@@ -738,8 +721,8 @@ export function ProfileScreen({
                     {analyticsData ? analyticsData.average_rating.toFixed(1) : (summary?.average_rating ? summary.average_rating.toFixed(1) : '5.0')}
                   </Text>
                   <View style={styles.metricLabelRow}>
-                    <Ionicons name="star" size={12} color="#FFB380" />
-                    <Text style={styles.metricLabel}> Rating</Text>
+                    <Ionicons name="star" size={12} color="#F59E0B" style={{ marginRight: 3 }} />
+                    <Text style={styles.metricLabel}>Rating</Text>
                   </View>
                 </View>
 
@@ -747,21 +730,18 @@ export function ProfileScreen({
                   <Text style={styles.metricVal}>
                     {analyticsData ? analyticsData.total_jobs_completed : '0'}
                   </Text>
-                  <Text style={styles.metricLabel}>Jobs Done</Text>
+                  <View style={styles.metricLabelRow}>
+                    <Text style={styles.metricLabel}>Jobs Done</Text>
+                  </View>
                 </View>
 
                 <View style={styles.metricTile}>
                   <Text style={styles.metricVal}>
                     {analyticsData ? `${analyticsData.positive_percentage}%` : (positivePercentage !== null ? `${positivePercentage}%` : '100%')}
                   </Text>
-                  <Text style={styles.metricLabel}>Positive</Text>
-                </View>
-
-                <View style={styles.metricTile}>
-                  <Text style={styles.metricVal}>
-                    {summary?.total_reviews ? '0%' : '0%'}
-                  </Text>
-                  <Text style={styles.metricLabel}>Cancel Rate</Text>
+                  <View style={styles.metricLabelRow}>
+                    <Text style={styles.metricLabel}>Positive</Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -771,36 +751,65 @@ export function ProfileScreen({
               <View style={styles.reviewsHeader}>
                 <Text style={styles.reviewsSectionTitle}>{t.recentReviews}</Text>
                 {totalReviews >= 2 ? (
-                  <Text style={styles.viewAllPill}>{t.viewAll} ({totalReviews})</Text>
+                  <Pressable
+                    onPress={() => setIsReviewsExpanded((prev) => !prev)}
+                    hitSlop={15}
+                    style={({ pressed }) => [styles.viewAllBtnWrap, pressed && { opacity: 0.7 }]}
+                  >
+                    <Text style={styles.viewAllPill}>
+                      {isReviewsExpanded ? 'Show Less' : `${t.viewAll} (${totalReviews})`}
+                    </Text>
+                    <Ionicons
+                      name={isReviewsExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={13}
+                      color="#F97316"
+                      style={{ marginLeft: 3 }}
+                    />
+                  </Pressable>
                 ) : null}
               </View>
 
               {reviews.length > 0 ? (
-                reviews.slice(0, 3).map((r) => (
-                  <View key={r.review_id} style={styles.reviewCard}>
-                    <View style={styles.reviewCardHeader}>
-                      <View style={styles.starsRow}>
-                        {[1, 2, 3, 4, 5].map((i) => (
-                          <Ionicons
-                            key={i}
-                            name={i <= r.rating ? 'star' : 'star-outline'}
-                            size={14}
-                            color="#FFB380"
-                            style={{ marginRight: 2 }}
-                          />
-                        ))}
+                <>
+                  {(isReviewsExpanded ? reviews : reviews.slice(0, 3)).map((r) => {
+                    const badgeBg = r.nlp_sentiment === 'Negative'
+                      ? '#FFF1F2'
+                      : r.nlp_sentiment === 'Neutral'
+                      ? '#F1F5F9'
+                      : '#ECFDF5';
+                    const badgeColor = r.nlp_sentiment === 'Negative'
+                      ? '#BE123C'
+                      : r.nlp_sentiment === 'Neutral'
+                      ? '#475569'
+                      : '#065F46';
+
+                    return (
+                      <View key={r.review_id} style={styles.reviewCard}>
+                        <View style={styles.reviewCardHeader}>
+                          <View style={styles.starsRow}>
+                            {[1, 2, 3, 4, 5].map((i) => (
+                              <Ionicons
+                                key={i}
+                                name={i <= (Number(r.rating) || 5) ? 'star' : 'star-outline'}
+                                size={14}
+                                color="#FFB380"
+                                style={{ marginRight: 2 }}
+                              />
+                            ))}
+                          </View>
+                          <View style={[styles.positiveBadge, { backgroundColor: badgeBg }]}>
+                            <Text style={[styles.positiveBadgeText, { color: badgeColor }]}>{r.nlp_sentiment || 'Positive'}</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.reviewText}>"{r.unstructured_feedback}"</Text>
+                        <Text style={styles.reviewAuthor}>
+                          — {r.reviewer_name || 'Verified Client'}
+                          {r.createdAt ? `, ${new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : ''}
+                        </Text>
                       </View>
-                      <View style={styles.positiveBadge}>
-                        <Text style={styles.positiveBadgeText}>{r.nlp_sentiment || 'Positive'}</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.reviewText}>"{r.unstructured_feedback}"</Text>
-                    <Text style={styles.reviewAuthor}>
-                      — {r.reviewer_name || 'Verified Client'}
-                      {r.createdAt ? `, ${new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : ''}
-                    </Text>
-                  </View>
-                ))
+                    );
+                  })}
+                </>
               ) : (
                 <View style={styles.emptyReviewsCard}>
                   <Ionicons name="chatbubbles-outline" size={32} color="#D1D5DB" />
@@ -825,8 +834,8 @@ export function ProfileScreen({
                     source={{ uri: localAvatar || avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }}
                     style={styles.avatar}
                   />
-                  <View style={styles.cameraIconBadge}>
-                    <Ionicons name="camera" size={11} color="#FFF" />
+                  <View style={[styles.cameraIconBadge, { backgroundColor: '#10B981' }]}>
+                    <Ionicons name="shield-checkmark" size={11} color="#FFF" />
                   </View>
                 </Pressable>
 
@@ -1222,6 +1231,16 @@ export function ProfileScreen({
         visible={isManageSocialLinksModalVisible}
         onClose={() => setIsManageSocialLinksModalVisible(false)}
         token={user.token}
+      />
+
+      {/* All Reviews Modal */}
+      <AllReviewsModal
+        visible={isAllReviewsModalVisible}
+        onClose={() => setIsAllReviewsModalVisible(false)}
+        reviews={reviews}
+        averageRating={analyticsData?.average_rating ?? summary?.average_rating}
+        positivePercentage={positivePercentage}
+        title="Client Reviews"
       />
     </View>
   );
@@ -1717,30 +1736,35 @@ const styles = StyleSheet.create({
   metricsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 8,
+    alignItems: 'stretch',
+    gap: 10,
   },
   metricTile: {
     flex: 1,
     backgroundColor: '#F9FAFB',
     borderRadius: 18,
-    paddingVertical: 12,
-    paddingHorizontal: 6,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   metricVal: {
     fontFamily: THEME.typography.fontFamily.mainExtraBold,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '800',
     color: '#0D0D11',
+    lineHeight: 24,
   },
   metricLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
+    justifyContent: 'center',
+    marginTop: 4,
+    minHeight: 18,
   },
   metricLabel: {
     fontFamily: THEME.typography.fontFamily.secondaryMedium,
-    fontSize: 10,
+    fontSize: 11.5,
     fontWeight: '600',
     color: '#6B7280',
   },
@@ -1761,11 +1785,17 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0D0D11',
   },
+  viewAllBtnWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
   viewAllPill: {
     fontFamily: THEME.typography.fontFamily.mainBold,
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#FFB380',
+    color: '#F97316',
   },
   reviewCard: {
     backgroundColor: '#FFFFFF',

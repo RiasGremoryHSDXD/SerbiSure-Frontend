@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
   },
   heroContainer: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
     width: '100%',
     flex: 1,
   },
@@ -397,27 +397,28 @@ const styles = StyleSheet.create({
   },
   contentBlock: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 18,
   },
   title: {
     color: THEME.colors.ink,
     fontSize: 28,
     fontFamily: THEME.typography.fontFamily.display,
     textAlign: 'center',
-    lineHeight: 34,
+    lineHeight: 33,
     letterSpacing: THEME.typography.tracking.tight,
-    marginBottom: 10,
+    marginBottom: 5,
   },
   subtitle: {
     color: THEME.colors.textSecondary,
     fontSize: 15,
     fontFamily: THEME.typography.fontFamily.body,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 21,
   },
   footer: {
     marginTop: 'auto',
     alignItems: 'center',
+    paddingBottom: 16,
   },
   primaryButton: {
     backgroundColor: THEME.colors.ink,
@@ -426,8 +427,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    height: 54,
-    marginBottom: 16,
+    height: 52,
+    marginBottom: 14,
   },
   buttonPressed: {
     opacity: 0.88,
