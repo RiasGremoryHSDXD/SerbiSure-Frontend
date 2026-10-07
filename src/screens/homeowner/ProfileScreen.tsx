@@ -35,6 +35,7 @@ import { PrivacyPolicyModal } from '../PrivacyPolicyModal';
 import { MyBookingsModal } from '../MyBookingsModal';
 import { ManageTagsModal } from '../ManageTagsModal';
 import { ManageSocialLinksModal } from '../ManageSocialLinksModal';
+import { AllReviewsModal } from '../AllReviewsModal';
 import { NotificationBell } from '../../context/NotificationContext';
 import { fetchNotifications } from '../../api/notificationsApi';
 import { formatRegisteredLocation } from '../../services/locationService';
@@ -80,6 +81,8 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
   const [tags, setTags] = useState<string[]>(user.userTags || []);
   const [isManageTagsModalVisible, setIsManageTagsModalVisible] = useState(false);
   const [isManageSocialLinksModalVisible, setIsManageSocialLinksModalVisible] = useState(false);
+  const [isAllReviewsModalVisible, setIsAllReviewsModalVisible] = useState(false);
+  const [isReviewsExpanded, setIsReviewsExpanded] = useState(false);
   const [showContactNumber, setShowContactNumber] = useState<boolean>(user.showContactNumber ?? false);
   const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -278,31 +281,11 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
       ? Math.round((reviews.filter((r) => r.nlp_sentiment === 'Positive').length / reviews.length) * 100)
       : null;
 
-  const handlePickImage = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permission Required', 'Permission to access photo gallery is required!');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const uri = result.assets[0]?.uri;
-        if (uri) {
-          setLocalAvatar(uri);
-          onUpdateAvatar?.(uri);
-        }
-      }
-    } catch (e) {
-      console.log('Error picking profile picture:', e);
-    }
+  const handlePickImage = () => {
+    Alert.alert(
+      'Biometrically Verified Photo',
+      'Your profile photo is verified via camera biometric liveness detection during onboarding. It cannot be altered manually from your photo gallery to maintain platform safety and trust.'
+    );
   };
 
   return (
@@ -350,8 +333,8 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                   source={{ uri: localAvatar || avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }}
                   style={styles.personalAvatar}
                 />
-                <View style={styles.cameraIconBadge}>
-                  <Ionicons name="camera" size={13} color="#FFFFFF" />
+                <View style={[styles.cameraIconBadge, { backgroundColor: '#10B981' }]}>
+                  <Ionicons name="shield-checkmark" size={13} color="#FFFFFF" />
                 </View>
               </Pressable>
 
@@ -518,36 +501,65 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
               <View style={styles.reviewsHeader}>
                 <Text style={styles.reviewsSectionTitle}>{t.recentReviews}</Text>
                 {totalReviews >= 2 ? (
-                  <Text style={styles.viewAllPill}>{t.viewAll} ({totalReviews})</Text>
+                  <Pressable
+                    onPress={() => setIsReviewsExpanded((prev) => !prev)}
+                    hitSlop={15}
+                    style={({ pressed }) => [styles.viewAllBtnWrap, pressed && { opacity: 0.7 }]}
+                  >
+                    <Text style={styles.viewAllPill}>
+                      {isReviewsExpanded ? 'Show Less' : `${t.viewAll} (${totalReviews})`}
+                    </Text>
+                    <Ionicons
+                      name={isReviewsExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={13}
+                      color="#F97316"
+                      style={{ marginLeft: 3 }}
+                    />
+                  </Pressable>
                 ) : null}
               </View>
 
               {reviews.length > 0 ? (
-                reviews.slice(0, 3).map((r) => (
-                  <View key={r.review_id} style={styles.reviewCard}>
-                    <View style={styles.reviewCardHeader}>
-                      <View style={styles.starsRow}>
-                        {[1, 2, 3, 4, 5].map((i) => (
-                          <Ionicons
-                            key={i}
-                            name={i <= r.rating ? 'star' : 'star-outline'}
-                            size={14}
-                            color="#FFB380"
-                            style={{ marginRight: 2 }}
-                          />
-                        ))}
+                <>
+                  {(isReviewsExpanded ? reviews : reviews.slice(0, 3)).map((r) => {
+                    const badgeBg = r.nlp_sentiment === 'Negative'
+                      ? '#FFF1F2'
+                      : r.nlp_sentiment === 'Neutral'
+                      ? '#F1F5F9'
+                      : '#ECFDF5';
+                    const badgeColor = r.nlp_sentiment === 'Negative'
+                      ? '#BE123C'
+                      : r.nlp_sentiment === 'Neutral'
+                      ? '#475569'
+                      : '#065F46';
+
+                    return (
+                      <View key={r.review_id} style={styles.reviewCard}>
+                        <View style={styles.reviewCardHeader}>
+                          <View style={styles.starsRow}>
+                            {[1, 2, 3, 4, 5].map((i) => (
+                              <Ionicons
+                                key={i}
+                                name={i <= (Number(r.rating) || 5) ? 'star' : 'star-outline'}
+                                size={14}
+                                color="#FFB380"
+                                style={{ marginRight: 2 }}
+                              />
+                            ))}
+                          </View>
+                          <View style={[styles.positiveBadge, { backgroundColor: badgeBg }]}>
+                            <Text style={[styles.positiveBadgeText, { color: badgeColor }]}>{r.nlp_sentiment || 'Positive'}</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.reviewText}>"{r.unstructured_feedback}"</Text>
+                        <Text style={styles.reviewAuthor}>
+                          — {r.reviewer_name || 'Verified Worker'}
+                          {r.createdAt ? `, ${new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : ''}
+                        </Text>
                       </View>
-                      <View style={styles.positiveBadge}>
-                        <Text style={styles.positiveBadgeText}>{r.nlp_sentiment || 'Positive'}</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.reviewText}>"{r.unstructured_feedback}"</Text>
-                    <Text style={styles.reviewAuthor}>
-                      — {r.reviewer_name || 'Verified Worker'}
-                      {r.createdAt ? `, ${new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : ''}
-                    </Text>
-                  </View>
-                ))
+                    );
+                  })}
+                </>
               ) : (
                 <View style={styles.emptyReviewsCard}>
                   <Ionicons name="chatbubbles-outline" size={32} color="#D1D5DB" />
@@ -572,8 +584,8 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
                     source={{ uri: localAvatar || avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }}
                     style={styles.avatar}
                   />
-                  <View style={styles.cameraIconBadge}>
-                    <Ionicons name="camera" size={11} color="#FFF" />
+                  <View style={[styles.cameraIconBadge, { backgroundColor: '#10B981' }]}>
+                    <Ionicons name="shield-checkmark" size={11} color="#FFF" />
                   </View>
                 </Pressable>
 
@@ -946,6 +958,16 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
         visible={isManageSocialLinksModalVisible}
         onClose={() => setIsManageSocialLinksModalVisible(false)}
         token={user.token}
+      />
+
+      {/* All Reviews Modal */}
+      <AllReviewsModal
+        visible={isAllReviewsModalVisible}
+        onClose={() => setIsAllReviewsModalVisible(false)}
+        reviews={reviews}
+        averageRating={summary?.average_rating}
+        positivePercentage={positivePercentage}
+        title="Worker Reviews"
       />
     </View>
   );
@@ -1364,11 +1386,17 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0D0D11',
   },
+  viewAllBtnWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
   viewAllPill: {
     fontFamily: THEME.typography.fontFamily.mainBold,
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#FFB380',
+    color: '#F97316',
   },
   reviewCard: {
     backgroundColor: '#FFFFFF',

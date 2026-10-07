@@ -134,8 +134,6 @@ export default function App() {
                 setFlowState('registration3');
               }}
               onBack={() => setFlowState('registration1')}
-              onCancel={() => setFlowState('registration3')}
-              onSkip={() => setFlowState('registration3')}
             />
           )}
 

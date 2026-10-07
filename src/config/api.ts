@@ -3,6 +3,13 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 
 export const VERCEL_API_URL = 'https://serbisure-backend-rho.vercel.app';
 
+export const HUGGINGFACE_SENTIMENT_SPACE_URL =
+  process.env.EXPO_PUBLIC_HUGGINGFACE_SENTIMENT_SPACE_URL ||
+  'https://riasgremory2-serbisure-sentiment-api.hf.space';
+
+export const HUGGINGFACE_API_TOKEN =
+  process.env.EXPO_PUBLIC_HUGGINGFACE_API_TOKEN || '';
+
 /**
  * Checks whether the application is running as an installed standalone APK / production binary.
  * Priority order:

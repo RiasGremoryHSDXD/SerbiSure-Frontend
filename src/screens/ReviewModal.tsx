@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { submitReview, SentimentType } from '../api/reviewApi';
+import { submitReview, predictSentimentViaHuggingFace, SentimentType } from '../api/reviewApi';
 
 export interface ReviewModalProps {
   visible: boolean;
@@ -23,9 +23,44 @@ export interface ReviewModalProps {
   revieweeName?: string;
   token?: string | null;
   onSuccess?: () => void;
+  isMandatory?: boolean;
 }
 
 const RATING_LABELS = ['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent!'];
+
+// Multi-lingual NLP Sentiment Keyword Lexicon (English, Tagalog, Bisaya)
+const POSITIVE_LEXICON = [
+  'great', 'good', 'excellent', 'amazing', 'super', 'satisfied', 'recommend', 'rekomenda',
+  'mabait', 'maayo', 'sipag', 'masipag', 'kugihan', 'buotan', 'malinis', 'limpyo',
+  'punctual', 'ontime', 'on-time', 'trusted', 'salamat', 'respectful', 'professional',
+  'honest', 'friendly', 'fast', 'pulido', 'aasahan', 'maasahan'
+];
+
+const NEGATIVE_LEXICON = [
+  'bad', 'poor', 'terrible', 'horrible', 'worst', 'disappointed', 'late', 'rude',
+  'bastos', 'tamad', 'tinamad', 'tapulan', 'hugaw', 'madumi', 'salbahe', 'unprofessional',
+  'scam', 'damage', 'stole', 'complaint', 'walang modo', 'disrespectful', 'liar',
+  'slow', 'unreliable', 'attitude'
+];
+
+export function analyzeNlpSentiment(text: string): SentimentType {
+  const lower = text.toLowerCase().trim();
+  if (!lower) return 'Neutral';
+
+  let posCount = 0;
+  let negCount = 0;
+
+  for (const word of POSITIVE_LEXICON) {
+    if (lower.includes(word)) posCount++;
+  }
+  for (const word of NEGATIVE_LEXICON) {
+    if (lower.includes(word)) negCount++;
+  }
+
+  if (posCount > negCount) return 'Positive';
+  if (negCount > posCount) return 'Negative';
+  return 'Neutral';
+}
 
 export function ReviewModal({
   visible,
@@ -34,23 +69,61 @@ export function ReviewModal({
   revieweeName = 'Service Partner',
   token,
   onSuccess,
+  isMandatory = false,
 }: ReviewModalProps) {
   const insets = useSafeAreaInsets();
 
   const [rating, setRating] = useState<number>(5);
   const [feedback, setFeedback] = useState<string>('');
-  const [sentiment, setSentiment] = useState<SentimentType>('Positive');
+  const [sentiment, setSentiment] = useState<SentimentType>('Neutral');
+  const [isAnalyzingHf, setIsAnalyzingHf] = useState<boolean>(false);
+  const [hfConfidence, setHfConfidence] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const hfDebounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const runHuggingFacePrediction = (text: string) => {
+    if (hfDebounceTimer.current) {
+      clearTimeout(hfDebounceTimer.current);
+    }
+    const trimmed = text.trim();
+    if (trimmed.length < 4) {
+      setHfConfidence(null);
+      return;
+    }
+
+    hfDebounceTimer.current = setTimeout(async () => {
+      setIsAnalyzingHf(true);
+      try {
+        const res = await predictSentimentViaHuggingFace(trimmed);
+        setSentiment(res.sentiment);
+        if (typeof res.confidence === 'number') {
+          setHfConfidence(res.confidence);
+        }
+      } catch (err) {
+        console.warn('[ReviewModal] HF prediction error:', err);
+      } finally {
+        setIsAnalyzingHf(false);
+      }
+    }, 600);
+  };
+
   const handleStarPress = (score: number) => {
+    // Star rating only sets the star rating — NLP sentiment is determined strictly by the comment text!
     setRating(score);
-    if (score >= 4) {
-      setSentiment('Positive');
-    } else if (score === 3) {
-      setSentiment('Neutral');
+  };
+
+  const handleFeedbackChange = (text: string) => {
+    setFeedback(text);
+    if (errorMsg) setErrorMsg(null);
+    if (text.trim().length >= 4) {
+      const analyzed = analyzeNlpSentiment(text);
+      setSentiment(analyzed);
+      runHuggingFacePrediction(text);
     } else {
-      setSentiment('Negative');
+      setHfConfidence(null);
+      setSentiment('Neutral');
     }
   };
 
@@ -96,18 +169,35 @@ export function ReviewModal({
     }
   };
 
+  const handleAttemptClose = () => {
+    if (isMandatory) {
+      Alert.alert(
+        'Mandatory Service Feedback',
+        'In accordance with Batas Kasambahay (RA 10361), both parties are required to submit service feedback to complete this contract.',
+        [
+          { text: 'Complete Review Now', style: 'default' },
+          { text: 'Exit for Now', style: 'destructive', onPress: onClose },
+        ]
+      );
+    } else {
+      onClose();
+    }
+  };
+
   return (
-    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={handleAttemptClose}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {/* Header */}
         <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
-          <Pressable onPress={onClose} style={styles.backBtn} hitSlop={12}>
+          <Pressable onPress={handleAttemptClose} style={styles.backBtn} hitSlop={12}>
             <Ionicons name="close" size={24} color="#1A1A1A" />
           </Pressable>
-          <Text style={styles.headerTitle}>Write a Review</Text>
+          <Text style={styles.headerTitle}>
+            {isMandatory ? 'Service Review (Required)' : 'Write a Review'}
+          </Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -116,6 +206,19 @@ export function ReviewModal({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* Mandatory Compliance Banner */}
+          {isMandatory ? (
+            <View style={styles.mandatoryNoticeBanner}>
+              <Ionicons name="shield-checkmark" size={20} color="#B45309" style={{ marginRight: 8, marginTop: 2 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.mandatoryNoticeTitle}>Mandatory Service Evaluation</Text>
+                <Text style={styles.mandatoryNoticeSub}>
+                  Statutory feedback required under RA 10361 to finalize this contract and update public resume metrics.
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
           {/* Card Hero */}
           <View style={styles.card}>
             <Text style={styles.revieweeText}>How was your experience with</Text>
@@ -139,44 +242,6 @@ export function ReviewModal({
               ))}
             </View>
             <Text style={styles.ratingScoreText}>{rating}.0 — {RATING_LABELS[rating]}</Text>
-
-            {/* Sentiment Pills */}
-            <View style={styles.sentimentRow}>
-              {(['Positive', 'Neutral', 'Negative'] as SentimentType[]).map((sent) => {
-                const isSelected = sentiment === sent;
-                return (
-                  <Pressable
-                    key={sent}
-                    onPress={() => setSentiment(sent)}
-                    style={[
-                      styles.sentimentPill,
-                      isSelected && styles.sentimentPillSelected,
-                    ]}
-                  >
-                    <Ionicons
-                      name={
-                        sent === 'Positive'
-                          ? 'happy-outline'
-                          : sent === 'Neutral'
-                          ? 'remove-circle-outline'
-                          : 'sad-outline'
-                      }
-                      size={14}
-                      color={isSelected ? '#FFFFFF' : '#6B7280'}
-                      style={{ marginRight: 4 }}
-                    />
-                    <Text
-                      style={[
-                        styles.sentimentPillText,
-                        isSelected && styles.sentimentPillTextSelected,
-                      ]}
-                    >
-                      {sent}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
           </View>
 
           {/* Feedback Form */}
@@ -190,10 +255,7 @@ export function ReviewModal({
               numberOfLines={5}
               textAlignVertical="top"
               value={feedback}
-              onChangeText={(text) => {
-                setFeedback(text);
-                if (errorMsg) setErrorMsg(null);
-              }}
+              onChangeText={handleFeedbackChange}
               maxLength={1000}
             />
             <View style={styles.charCountRow}>
@@ -401,5 +463,58 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  mandatoryNoticeBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  mandatoryNoticeTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#92400E',
+    marginBottom: 2,
+  },
+  mandatoryNoticeSub: {
+    fontSize: 12,
+    color: '#78350F',
+    lineHeight: 17,
+  },
+  nlpLiveIndicatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    marginBottom: 6,
+    gap: 4,
+  },
+  nlpLiveText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  nlpLiveBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  nlpBadgePositive: {
+    backgroundColor: '#DCFCE7',
+  },
+  nlpBadgeNeutral: {
+    backgroundColor: '#E5E7EB',
+  },
+  nlpBadgeNegative: {
+    backgroundColor: '#FEE2E2',
+  },
+  nlpLiveBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1F2937',
   },
 });

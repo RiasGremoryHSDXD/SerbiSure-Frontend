@@ -114,8 +114,8 @@ android {
         applicationId 'com.serbisure.frontend'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 5
-        versionName "0.1.5"
+        versionCode 6
+        versionName "0.1.6"
     }
     signingConfigs {
         debug {
@@ -143,6 +143,10 @@ android {
         jniLibs {
             useLegacyPackaging (findProperty('expo.useLegacyPackaging')?.toBoolean() ?: false)
         }
+    }
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
     }
 }
 

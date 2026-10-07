@@ -43,7 +43,9 @@ export interface JobDetailSheetProps {
   onApply: (job: any) => void;
   isApplied: boolean;
   isSaved?: boolean;
+  isClosed?: boolean;
   onToggleSave?: (job: any) => void;
+  onViewProfile?: () => void;
   ctaText?: string;
   ctaNotice?: string;
 }
@@ -55,7 +57,9 @@ export function JobDetailSheet({
   onApply,
   isApplied,
   isSaved = false,
+  isClosed = false,
   onToggleSave,
+  onViewProfile,
   ctaText,
   ctaNotice,
 }: JobDetailSheetProps) {
@@ -258,17 +262,27 @@ export function JobDetailSheet({
 
             {/* Header: Employer Avatar, Name, Badges & Save Action */}
             <View style={styles.sheetHeader}>
-              <View style={styles.avatarWrap}>
+              <Pressable
+                onPress={onViewProfile}
+                disabled={!onViewProfile}
+                style={styles.avatarWrap}
+                hitSlop={8}
+              >
                 <Image source={{ uri: avatarUrl }} style={styles.sheetAvatar} />
-              </View>
+              </Pressable>
 
               <View style={styles.sheetTitleInfo}>
-                <View style={styles.nameRow}>
+                <Pressable
+                  onPress={onViewProfile}
+                  disabled={!onViewProfile}
+                  style={styles.nameRow}
+                  hitSlop={8}
+                >
                   <Text style={styles.sheetEmployerName} numberOfLines={1}>
                     {employerName}
                   </Text>
                   <Ionicons name="checkmark-circle" size={19} color="#10B981" style={{ marginLeft: 5 }} />
-                </View>
+                </Pressable>
 
                 <View style={styles.locationRow}>
                   <Ionicons name="location-sharp" size={13} color="#F97316" />
@@ -362,14 +376,24 @@ export function JobDetailSheet({
 
             {/* Apply Button & Direct Message Notice */}
             <Pressable
+              disabled={isClosed}
               style={({ pressed }) => [
                 styles.applyBtn,
-                isApplied && styles.applyBtnDone,
-                pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+                isClosed
+                  ? { backgroundColor: '#E2E8F0', shadowOpacity: 0, elevation: 0 }
+                  : isApplied
+                  ? styles.applyBtnDone
+                  : null,
+                pressed && !isClosed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
               ]}
-              onPress={() => onApply(job)}
+              onPress={() => !isClosed && onApply(job)}
             >
-              {isApplied ? (
+              {isClosed ? (
+                <View style={styles.applyBtnInner}>
+                  <Ionicons name="lock-closed" size={18} color="#64748B" style={{ marginRight: 6 }} />
+                  <Text style={[styles.applyBtnText, { color: '#64748B' }]}>Listing Closed (Position Filled)</Text>
+                </View>
+              ) : isApplied ? (
                 <View style={styles.applyBtnInner}>
                   <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
                   <Text style={styles.applyBtnText}>Application Submitted</Text>
@@ -380,7 +404,9 @@ export function JobDetailSheet({
             </Pressable>
 
             <Text style={styles.applyNotice}>
-              {ctaNotice || 'Your application goes directly to the employer'}
+              {isClosed
+                ? 'This post has been filled and contract made with an applicant.'
+                : ctaNotice || 'Your application goes directly to the employer'}
             </Text>
           </View>
         </Animated.View>

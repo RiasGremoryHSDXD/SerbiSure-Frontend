@@ -33,6 +33,14 @@ export interface BookingItem {
   assigned_partner?: BookingParticipant | null;
   has_reviewed?: boolean;
   proposals_count?: number;
+  cancel_requested_by?: { id: string; name: string; account_type: string } | null;
+  cancel_requested_at?: string | null;
+  cancellation_reason?: string | null;
+  can_cancel?: boolean;
+  cancellation_deadline?: string | null;
+  is_cancel_requested?: boolean;
+  cancel_requested_by_me?: boolean;
+  pending_cancel_approval?: boolean;
 }
 
 /**
@@ -234,9 +242,13 @@ export async function completeBooking(token: string, bookingId: string): Promise
 }
 
 /**
- * Cancel a booking
+ * Cancel or respond to cancellation of a booking
  */
-export async function cancelBooking(token: string, bookingId: string): Promise<{ success: boolean; error?: string; booking?: BookingItem }> {
+export async function cancelBooking(
+  token: string,
+  bookingId: string,
+  payload?: { action?: 'request' | 'confirm' | 'decline'; reason?: string }
+): Promise<{ success: boolean; message?: string; error?: string; booking?: BookingItem }> {
   try {
     const res = await fetchWithTimeout(`${API_BASE_URL}/api/v1/booking/${bookingId}/cancel/`, {
       method: 'PATCH',
@@ -244,10 +256,11 @@ export async function cancelBooking(token: string, bookingId: string): Promise<{
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify(payload || { action: 'request' }),
     });
     const data = await res.json();
     if (!res.ok) return { success: false, error: data.error || data.detail || 'Could not cancel booking.' };
-    return { success: true, booking: data.booking };
+    return { success: true, message: data.message, booking: data.booking };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error.' };
   }

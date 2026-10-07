@@ -11,6 +11,7 @@ import { JobDetailSheet } from '../../components/JobDetailSheet';
 import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
 import { formatBookingAddress, formatBookingLocationShort } from '../../api/bookingApi';
 import { ChatDetailScreen } from '../ChatDetailScreen';
+import { UserProfileModal } from '../UserProfileModal';
 
 const logoSource = require('../../../assets/serbisure_new_clean.png');
 
@@ -58,9 +59,9 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
   const effectiveToken = token || user?.token;
   const [jobs, setJobs] = useState<JobOffer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedJob, setSelectedJob] = useState<JobOffer | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const { isSaved, isApplied, toggleSave, applyJob } = useJobsActivity();
+  const [selectedJob, setSelectedJob] = useState<JobOffer | null>(null);
+  const { isSaved, isApplied, isClosed, isJobClosed, toggleSave, applyJob, markJobClosed } = useJobsActivity();
   const [activeChat, setActiveChat] = useState<{
     visible: boolean;
     partnerId?: string | number;
@@ -75,6 +76,24 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
     role: '',
     avatar: '',
   });
+
+  const [selectedUserForModal, setSelectedUserForModal] = useState<{
+    id?: string | number;
+    name: string;
+    role: string;
+    avatar?: string;
+  } | null>(null);
+  const [isUserProfileModalVisible, setIsUserProfileModalVisible] = useState(false);
+
+  const handleOpenEmployerProfile = (job: JobOffer) => {
+    setSelectedUserForModal({
+      id: job.partnerId,
+      name: job.employerName,
+      role: 'Homeowner',
+      avatar: job.avatar,
+    });
+    setIsUserProfileModalVisible(true);
+  };
 
   const fetchJobs = async () => {
     try {
@@ -247,88 +266,96 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
         </View>
 
         {/* Job List */}
-        <View style={styles.jobList}>
-          {jobs.length === 0 && !isLoading ? (
-            <View style={styles.emptyStateContainer}>
-              <Ionicons name="newspaper-outline" size={36} color="#CBD5E1" style={{ marginBottom: 8 }} />
-              <Text style={styles.emptyStateTitle}>No Recent Posts</Text>
-              <Text style={styles.emptyStateSubtitle}>
-                There are no open job requests at the moment. Check back soon!
-              </Text>
-            </View>
-          ) : (
-            jobs.map((job) => {
-              const applied = isApplied(job.id);
-              const saved = isSaved(job.id);
+        {(() => {
+          const visibleJobs = jobs.filter(
+            (job) => !isClosed(job.id) && !isClosed(job.partnerId) && !isClosed(job.employerName)
+          );
 
-              return (
-                <Pressable key={job.id} style={styles.jobCard} onPress={() => setSelectedJob(job)}>
-                  <View style={styles.jobHeader}>
-                    <Pressable onPress={onViewProfile}>
-                      <Image source={{ uri: job.avatar }} style={styles.employerAvatar} />
-                    </Pressable>
-                    <View style={styles.jobEmployerInfo}>
-                    <Pressable style={styles.nameRow} onPress={onViewProfile}>
-                      <Text style={styles.employerName}>{job.employerName}</Text>
-                      <Ionicons name="checkmark-circle" size={16} color="#10B981" style={{ marginLeft: 4 }} />
-                    </Pressable>
-                    <Text style={styles.postTime}>{job.time}</Text>
-
-                    <View style={styles.tagsRow}>
-                      <View style={[styles.tagBadge, styles.tagRole]}>
-                        <Text style={styles.tagRoleText}>{job.roleTag}</Text>
-                      </View>
-                      <View style={[styles.tagBadge, styles.tagTerm]}>
-                        <Text style={styles.tagTermText}>{job.termTag}</Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Bookmark Icon in Top Right Corner */}
-                  <Pressable
-                    style={styles.bookmarkBtn}
-                    onPress={() => toggleSave({
-                      id: job.id,
-                      employerName: job.employerName,
-                      avatar: job.avatar,
-                      time: job.time,
-                      location: job.location,
-                      roleTag: job.roleTag,
-                      termTag: job.termTag,
-                      price: job.price,
-                      unit: job.unit,
-                      aboutText: job.aboutText,
-                    })}
-                    hitSlop={10}
-                  >
-                    <Ionicons
-                      name={saved ? "bookmark" : "bookmark-outline"}
-                      size={22}
-                      color={THEME.colors.ink}
-                    />
-                  </Pressable>
-                </View>
-
-                <View style={styles.divider} />
-
-                <View style={styles.jobFooter}>
-                  <Text style={styles.priceText}>
-                    {job.price} <Text style={styles.unitText}>{job.unit}</Text>
+          return (
+            <View style={styles.jobList}>
+              {visibleJobs.length === 0 && !isLoading ? (
+                <View style={styles.emptyStateContainer}>
+                  <Ionicons name="newspaper-outline" size={36} color="#CBD5E1" style={{ marginBottom: 8 }} />
+                  <Text style={styles.emptyStateTitle}>No Recent Posts</Text>
+                  <Text style={styles.emptyStateSubtitle}>
+                    There are no open job requests at the moment. Check back soon!
                   </Text>
-
-                  <Pressable
-                    style={[styles.seeDetailsBtn, applied && styles.seeDetailsBtnApplied]}
-                    onPress={() => setSelectedJob(job)}
-                  >
-                    <Text style={[styles.seeDetailsText, applied && styles.seeDetailsTextApplied]}>
-                      {applied ? 'Applied' : 'See Details'}
-                    </Text>
-                  </Pressable>
                 </View>
-              </Pressable>
-            );
-          }))}
-        </View>
+              ) : (
+                visibleJobs.map((job) => {
+                  const applied = isApplied(job.id);
+                  const saved = isSaved(job.id);
+
+                  return (
+                    <Pressable key={job.id} style={styles.jobCard} onPress={() => setSelectedJob(job)}>
+                      <View style={styles.jobHeader}>
+                        <Pressable onPress={() => handleOpenEmployerProfile(job)} hitSlop={6}>
+                          <Image source={{ uri: job.avatar }} style={styles.employerAvatar} />
+                        </Pressable>
+                        <View style={styles.jobEmployerInfo}>
+                        <Pressable style={styles.nameRow} onPress={() => handleOpenEmployerProfile(job)} hitSlop={6}>
+                          <Text style={styles.employerName}>{job.employerName}</Text>
+                          <Ionicons name="checkmark-circle" size={16} color="#10B981" style={{ marginLeft: 4 }} />
+                        </Pressable>
+                        <Text style={styles.postTime}>{job.time}</Text>
+
+                        <View style={styles.tagsRow}>
+                          <View style={[styles.tagBadge, styles.tagRole]}>
+                            <Text style={styles.tagRoleText}>{job.roleTag}</Text>
+                          </View>
+                          <View style={[styles.tagBadge, styles.tagTerm]}>
+                            <Text style={styles.tagTermText}>{job.termTag}</Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      {/* Bookmark Icon in Top Right Corner */}
+                      <Pressable
+                        style={styles.bookmarkBtn}
+                        onPress={() => toggleSave({
+                          id: job.id,
+                          employerName: job.employerName,
+                          avatar: job.avatar,
+                          time: job.time,
+                          location: job.location,
+                          roleTag: job.roleTag,
+                          termTag: job.termTag,
+                          price: job.price,
+                          unit: job.unit,
+                          aboutText: job.aboutText,
+                        })}
+                        hitSlop={10}
+                      >
+                        <Ionicons
+                          name={saved ? "bookmark" : "bookmark-outline"}
+                          size={22}
+                          color={THEME.colors.ink}
+                        />
+                      </Pressable>
+                    </View>
+
+                    <View style={styles.divider} />
+
+                    <View style={styles.jobFooter}>
+                      <Text style={styles.priceText}>
+                        {job.price} <Text style={styles.unitText}>{job.unit}</Text>
+                      </Text>
+
+                      <Pressable
+                        style={[styles.seeDetailsBtn, applied && styles.seeDetailsBtnApplied]}
+                        onPress={() => setSelectedJob(job)}
+                      >
+                        <Text style={[styles.seeDetailsText, applied && styles.seeDetailsTextApplied]}>
+                          {applied ? 'Applied' : 'See Details'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </Pressable>
+                );
+              }))}
+            </View>
+          );
+        })()}
 
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -341,7 +368,13 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
         onApply={() => selectedJob && handleApply(selectedJob)}
         isApplied={selectedJob ? isApplied(selectedJob.id) : false}
         isSaved={selectedJob ? isSaved(selectedJob.id) : false}
+        isClosed={selectedJob ? (isClosed(selectedJob.id) || isClosed(selectedJob.partnerId) || isClosed(selectedJob.employerName)) : false}
         onToggleSave={() => selectedJob && toggleSave(selectedJob)}
+        onViewProfile={() => {
+          if (selectedJob) {
+            handleOpenEmployerProfile(selectedJob);
+          }
+        }}
       />
 
       {/* Messenger-style Chat Detail Modal */}
@@ -357,6 +390,19 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
         initialReplyTo={activeChat.initialReplyTo}
         userRole="kasambahay"
       />
+
+      {/* Employer Public Profile Modal */}
+      {selectedUserForModal && (
+        <UserProfileModal
+          visible={isUserProfileModalVisible}
+          onClose={() => setIsUserProfileModalVisible(false)}
+          userId={selectedUserForModal.id ? String(selectedUserForModal.id) : undefined}
+          token={effectiveToken || ''}
+          prefilledName={selectedUserForModal.name}
+          prefilledRole={selectedUserForModal.role}
+          prefilledAvatar={selectedUserForModal.avatar}
+        />
+      )}
     </View>
   );
 }

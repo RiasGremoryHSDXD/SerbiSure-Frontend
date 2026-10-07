@@ -18,20 +18,50 @@ type ChatListener = () => void;
 
 export function cleanMessagePreview(text?: string | null): string {
   if (!text) return '';
-  const lower = text.toLowerCase();
+
+  let cleanText = text;
+  const replyMatch = text.match(/^> \[[^\]]+\]:\s*.*?\n\n([\s\S]*)$/);
+  if (replyMatch && replyMatch[1]) {
+    cleanText = replyMatch[1].trim();
+  }
+
+  const cleanLower = cleanText.toLowerCase();
+
   if (
-    text.startsWith('[BOOKING') ||
-    lower.includes('booking offer') ||
-    lower.includes('booking ready') ||
-    text.includes('📋 Booking')
+    cleanText.startsWith('[JOB_ACQUIRED]') ||
+    cleanText.startsWith('[LISTING_CLOSED]') ||
+    cleanText.startsWith('[LISTING CLOSED]') ||
+    cleanLower.includes('already been acquired') ||
+    cleanLower.includes('position has already been acquired')
+  ) {
+    return '🔒 Job Position Acquired';
+  }
+
+  if (
+    cleanText.startsWith('[CANCELLATION_REQUESTED]') ||
+    cleanLower.includes('cancellation requested')
+  ) {
+    return '⚠️ Cancellation Requested';
+  }
+
+  if (
+    cleanText.startsWith('[CANCELLATION_CONFIRMED]') ||
+    cleanLower.includes('booking cancelled') ||
+    cleanLower.includes('booking has been cancelled')
+  ) {
+    return '✕ Booking Cancelled';
+  }
+
+  if (
+    cleanText.startsWith('[BOOKING') ||
+    cleanLower.includes('booking offer') ||
+    cleanLower.includes('booking ready') ||
+    cleanText.includes('📋 Booking')
   ) {
     return '📋 Booking Offer';
   }
-  const match = text.match(/^> \[[^\]]+\]:\s*.*?\n\n([\s\S]*)$/);
-  if (match && match[1]) {
-    return match[1].trim();
-  }
-  return text;
+
+  return cleanText;
 }
 
 function formatTimestamp(isoString?: string | null): string {

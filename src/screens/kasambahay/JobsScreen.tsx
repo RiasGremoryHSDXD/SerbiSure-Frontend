@@ -133,6 +133,8 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
     appliedCount,
     isSaved,
     isApplied,
+    isClosed,
+    isJobClosed,
     toggleSave,
     applyJob,
   } = useJobsActivity();
@@ -502,10 +504,13 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
     extrapolate: 'clamp',
   });
 
-  // Card Stack
-  const card0 = jobs[0];
-  const card1 = jobs[1];
-  const card2 = jobs[2];
+  // Card Stack (filter out closed jobs so confirmed bookings never appear)
+  const visibleJobs = jobs.filter(
+    (job) => !isClosed(job.id) && !isClosed((job as any).partnerId) && !isClosed((job as any).employerName)
+  );
+  const card0 = visibleJobs[0];
+  const card1 = visibleJobs[1];
+  const card2 = visibleJobs[2];
 
   const handleResetDeck = () => {
     fetchFeed(true);
@@ -589,8 +594,8 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
               {subTab === 'explore'
                 ? (isLoading
                     ? 'Finding opportunities near you...'
-                    : jobs.length > 0
-                    ? `${jobs.length} opportunities available nearby`
+                    : visibleJobs.length > 0
+                    ? `${visibleJobs.length} opportunities available nearby`
                     : 'No more opportunities left nearby')
                 : subTab === 'saved'
                 ? `${savedJobs.length} saved ${savedJobs.length === 1 ? 'opportunity' : 'opportunities'}`
@@ -704,7 +709,7 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
                   <View style={[styles.skeletonActionBtn, { marginLeft: 32 }]} />
                 </Animated.View>
               </React.Fragment>
-            ) : jobs.length === 0 ? (
+            ) : visibleJobs.length === 0 ? (
               <View style={styles.emptyDeckCard}>
                 <Ionicons name="checkmark-circle-outline" size={56} color={THEME.colors.brand} style={{ marginBottom: 12 }} />
                 <Text style={styles.emptyTitle}>You've reviewed all opportunities!</Text>
@@ -844,7 +849,7 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
 
                     <Pressable
                       onPress={() => swipeCard('left')}
-                      disabled={jobs.length === 0}
+                      disabled={visibleJobs.length === 0}
                     >
                       <Animated.View
                         style={[
@@ -894,7 +899,7 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
 
                     <Pressable
                       onPress={() => swipeCard('right')}
-                      disabled={jobs.length === 0}
+                      disabled={visibleJobs.length === 0}
                     >
                       <Animated.View
                         style={[
@@ -948,12 +953,14 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
                 return (
                   <Pressable key={job.id} style={styles.activityJobCard} onPress={() => setSelectedJobForDetails(job)}>
                     <View style={styles.activityJobHeader}>
-                      <Image source={{ uri: job.avatar }} style={styles.activityAvatar} />
+                      <Pressable onPress={() => handleOpenProfile(job)} hitSlop={6}>
+                        <Image source={{ uri: job.avatar }} style={styles.activityAvatar} />
+                      </Pressable>
                       <View style={styles.activityEmployerInfo}>
-                        <View style={styles.nameRow}>
+                        <Pressable style={styles.nameRow} onPress={() => handleOpenProfile(job)} hitSlop={6}>
                           <Text style={styles.activityEmployerName}>{job.employerName}</Text>
                           <Ionicons name="checkmark-circle" size={15} color="#10B981" style={{ marginLeft: 4 }} />
-                        </View>
+                        </Pressable>
                         <Text style={styles.activityLocationText}>
                           <Ionicons name="location-sharp" size={11} color="#888" /> {job.location || 'Cagayan de Oro'}
                         </Text>
@@ -1021,42 +1028,58 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
             </View>
           ) : (
             <View style={styles.activityList}>
-              {appliedJobs.map((job) => (
-                <Pressable key={job.id} style={styles.activityJobCard} onPress={() => setSelectedJobForDetails(job)}>
-                  <View style={styles.activityJobHeader}>
-                    <Image source={{ uri: job.avatar }} style={styles.activityAvatar} />
-                    <View style={styles.activityEmployerInfo}>
-                      <View style={styles.nameRow}>
-                        <Text style={styles.activityEmployerName}>{job.employerName}</Text>
-                        <Ionicons name="checkmark-circle" size={15} color="#10B981" style={{ marginLeft: 4 }} />
-                      </View>
-                      <Text style={styles.activityLocationText}>
-                        <Ionicons name="location-sharp" size={11} color="#888" /> {job.location || 'Cagayan de Oro'}
-                      </Text>
-                      <View style={styles.appliedStatusBadge}>
-                        <Ionicons name="checkmark-circle" size={12} color="#00875A" style={{ marginRight: 4 }} />
-                        <Text style={styles.appliedStatusText}>Application Sent</Text>
+              {appliedJobs.map((job) => {
+                const isJobFilled =
+                  isClosed(job.id) ||
+                  isClosed((job as any).partnerId) ||
+                  isClosed(job.employerName);
+
+                return (
+                  <Pressable key={job.id} style={styles.activityJobCard} onPress={() => setSelectedJobForDetails(job)}>
+                    <View style={styles.activityJobHeader}>
+                      <Pressable onPress={() => handleOpenProfile(job)} hitSlop={6}>
+                        <Image source={{ uri: job.avatar }} style={styles.activityAvatar} />
+                      </Pressable>
+                      <View style={styles.activityEmployerInfo}>
+                        <Pressable style={styles.nameRow} onPress={() => handleOpenProfile(job)} hitSlop={6}>
+                          <Text style={styles.activityEmployerName}>{job.employerName}</Text>
+                          <Ionicons name="checkmark-circle" size={15} color="#10B981" style={{ marginLeft: 4 }} />
+                        </Pressable>
+                        <Text style={styles.activityLocationText}>
+                          <Ionicons name="location-sharp" size={11} color="#888" /> {job.location || 'Cagayan de Oro'}
+                        </Text>
+                        {isJobFilled ? (
+                          <View style={[styles.appliedStatusBadge, { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1' }]}>
+                            <Ionicons name="lock-closed" size={12} color="#64748B" style={{ marginRight: 4 }} />
+                            <Text style={[styles.appliedStatusText, { color: '#475569' }]}>Position Filled</Text>
+                          </View>
+                        ) : (
+                          <View style={styles.appliedStatusBadge}>
+                            <Ionicons name="checkmark-circle" size={12} color="#00875A" style={{ marginRight: 4 }} />
+                            <Text style={styles.appliedStatusText}>Application Sent</Text>
+                          </View>
+                        )}
                       </View>
                     </View>
-                  </View>
 
-                  <View style={styles.activityDivider} />
+                    <View style={styles.activityDivider} />
 
-                  <View style={styles.activityFooter}>
-                    <Text style={styles.priceText}>
-                      {job.price} <Text style={styles.unitText}>{job.unit}</Text>
-                    </Text>
-                    <Pressable
-                      style={[styles.seeDetailsBtn, styles.seeDetailsBtnApplied]}
-                      onPress={() => setSelectedJobForDetails(job)}
-                    >
-                      <Text style={[styles.seeDetailsBtnText, styles.seeDetailsBtnTextApplied]}>
-                        View Application
+                    <View style={styles.activityFooter}>
+                      <Text style={styles.priceText}>
+                        {job.price} <Text style={styles.unitText}>{job.unit}</Text>
                       </Text>
-                    </Pressable>
-                  </View>
-                </Pressable>
-              ))}
+                      <Pressable
+                        style={[styles.seeDetailsBtn, styles.seeDetailsBtnApplied]}
+                        onPress={() => setSelectedJobForDetails(job)}
+                      >
+                        <Text style={[styles.seeDetailsBtnText, styles.seeDetailsBtnTextApplied]}>
+                          View Application
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </Pressable>
+                );
+              })}
             </View>
           )}
         </View>
@@ -1094,7 +1117,19 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
         }}
         isApplied={selectedJobForDetails ? isApplied(selectedJobForDetails.id) : false}
         isSaved={selectedJobForDetails ? isSaved(selectedJobForDetails.id) : false}
+        isClosed={
+          selectedJobForDetails
+            ? isClosed(selectedJobForDetails.id) ||
+              isClosed((selectedJobForDetails as any).partnerId) ||
+              isClosed((selectedJobForDetails as any).employerName)
+            : false
+        }
         onToggleSave={(j) => handleToggleSave(j as any)}
+        onViewProfile={() => {
+          if (selectedJobForDetails) {
+            handleOpenProfile(selectedJobForDetails);
+          }
+        }}
       />
 
       {/* Messenger-style Chat Detail Modal */}

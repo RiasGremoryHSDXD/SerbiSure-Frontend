@@ -40,6 +40,8 @@ import {
   sendChatTyping,
 } from '../api/chatApi';
 import { chatStore } from '../store/chatStore';
+import { savedJobsStore } from '../store/savedJobsStore';
+import { API_BASE_URL, fetchWithTimeout } from '../config/api';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -75,9 +77,15 @@ export function parseBookingInfoFromText(
     cleanText.startsWith('[BOOKING') ||
     lower.includes('booking offer') ||
     lower.includes('booking ready') ||
+    lower.includes('booking declined') ||
     cleanText.includes('📋 Booking');
 
   if (!isBooking) return null;
+
+  const isDeclinedText =
+    cleanText.includes('BOOKING DECLINED') ||
+    lower.includes('declined the booking') ||
+    lower.includes('offer declined');
 
   const defaultPersonName = isSender ? (senderName || 'You') : (contactName || 'Client');
 
@@ -87,7 +95,7 @@ export function parseBookingInfoFromText(
       const jsonStr = cleanText.replace(/^\[BOOKING(?:_OFFER)?\]:\s*/, '');
       const data = JSON.parse(jsonStr);
       return {
-        title: data.title || (data.isConfirmed ? 'BOOKING CONFIRMED' : 'BOOKING READY'),
+        title: data.title || (data.isDeclined ? 'BOOKING DECLINED' : data.isConfirmed ? 'BOOKING CONFIRMED' : 'BOOKING READY'),
         bookedByName: data.bookedByName || defaultPersonName,
         startDate: data.startDate || '04/27/2026',
         endDate: data.endDate || '05/27/2026',
@@ -99,6 +107,7 @@ export function parseBookingInfoFromText(
         jobRole: data.jobRole || 'Household Service',
         details: data.details || `${data.salary || '6500'} · ${data.workHours || '08:00 AM - 05:00 PM'}`,
         isConfirmed: !!data.isConfirmed,
+        isDeclined: !!data.isDeclined || isDeclinedText,
       };
     } catch (e) {}
   }
@@ -128,8 +137,13 @@ export function parseBookingInfoFromText(
     }
   }
 
+  const isAcquiredText =
+    cleanText.includes('JOB_ACQUIRED') ||
+    cleanText.includes('job position has already been acquired') ||
+    cleanText.includes('LISTING_CLOSED');
+
   return {
-    title: 'BOOKING READY',
+    title: isAcquiredText ? 'POSITION ACQUIRED' : isDeclinedText ? 'BOOKING DECLINED' : 'BOOKING READY',
     bookedByName: defaultPersonName,
     startDate,
     endDate,
@@ -141,6 +155,8 @@ export function parseBookingInfoFromText(
     jobRole,
     details: `${rateLabel} · 08:00 AM - 05:00 PM`,
     isConfirmed: false,
+    isDeclined: isDeclinedText,
+    isAcquired: isAcquiredText,
   };
 }
 
@@ -173,6 +189,8 @@ export interface ChatMessage {
     jobRole?: string;
     details: string;
     isConfirmed?: boolean;
+    isDeclined?: boolean;
+    isAcquired?: boolean;
   };
   isTyping?: boolean;
   isUploading?: boolean;
@@ -795,7 +813,7 @@ export function ChatDetailScreen({
     }, 80);
   };
 
-  const handleKasambahayConfirm = (msgId: string) => {
+  const handleKasambahayDecline = (msgId: string) => {
     const timeString = formatTimeOnly();
 
     setMessages((prev) => {
@@ -805,8 +823,9 @@ export function ChatDetailScreen({
             ...msg,
             bookingInfo: {
               ...msg.bookingInfo,
-              title: 'BOOKING CONFIRMED',
-              isConfirmed: true,
+              title: 'BOOKING DECLINED',
+              isConfirmed: false,
+              isDeclined: true,
             },
           };
         }
@@ -818,7 +837,7 @@ export function ChatDetailScreen({
         {
           id: `temp-${Date.now()}`,
           sender: 'other',
-          text: `I have accepted and confirmed the booking request! Thank you po! 😊`,
+          text: `I appreciate the offer, but I have declined this booking request at this time. Thank you po!`,
           time: timeString,
           avatar: resolvedAvatar,
         },
@@ -826,7 +845,115 @@ export function ChatDetailScreen({
     });
 
     if (partnerId && effectiveToken) {
-      sendChatMessage(effectiveToken, partnerId, `I have accepted and confirmed the booking request! Thank you po! 😊`).catch(() => {});
+      sendChatMessage(
+        effectiveToken,
+        partnerId,
+        `I appreciate the offer, but I have declined this booking request at this time. Thank you po!`
+      ).catch(() => {});
+    }
+
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  };
+
+  const handleKasambahayConfirm = (msgId: string) => {
+    const timeString = formatTimeOnly();
+
+    const targetMsg = messages.find((m) => m.id === msgId);
+    if (targetMsg?.bookingInfo?.isAcquired || savedJobsStore.isClosed(partnerId)) {
+      Alert.alert('Job Position Acquired', 'This job position has already been acquired.');
+      return;
+    }
+
+    // Mark job listing closed in savedJobsStore
+    const jobKey = activeBookingDetails?.jobPost?.id || targetMsg?.bookingInfo?.jobRole || partnerId;
+    if (jobKey) {
+      savedJobsStore.markJobClosed(jobKey, partnerId, contactName);
+    }
+    if (partnerId) {
+      savedJobsStore.markJobClosed(partnerId, contactName);
+    }
+
+    setMessages((prev) => {
+      const updated = prev.map((msg) => {
+        if (msg.id === msgId && msg.bookingInfo) {
+          return {
+            ...msg,
+            bookingInfo: {
+              ...msg.bookingInfo,
+              title: 'BOOKING CONFIRMED',
+              isConfirmed: true,
+              isDeclined: false,
+            },
+          };
+        }
+        return msg;
+      });
+
+      return [
+        ...updated,
+        {
+          id: `temp-${Date.now()}`,
+          sender: 'other',
+          text: `I have accepted and confirmed the booking request! Contract has been formalized. Thank you po! 😊`,
+          time: timeString,
+          avatar: resolvedAvatar,
+        },
+      ];
+    });
+
+    if (partnerId && effectiveToken) {
+      sendChatMessage(
+        effectiveToken,
+        partnerId,
+        `I have accepted and confirmed the booking request! Contract has been formalized. Thank you po! 😊`
+      ).catch(() => {});
+
+      // Call backend to formalize contract, update booking status to Accepted,
+      // and notify all other Kasambahays who applied!
+      fetchWithTimeout(`${API_BASE_URL}/api/v1/booking/confirm-contract/`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${effectiveToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          partner_id: partnerId,
+          booking_id: activeBookingDetails?.jobPost?.id || (targetMsg?.bookingInfo as any)?.bookingId,
+        }),
+      })
+        .then(async (res) => {
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            Alert.alert(
+              'Cannot Accept',
+              data?.error || 'This job position has already been acquired.'
+            );
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === msgId && msg.bookingInfo
+                  ? {
+                      ...msg,
+                      bookingInfo: {
+                        ...msg.bookingInfo,
+                        title: 'POSITION ACQUIRED',
+                        isAcquired: true,
+                        isConfirmed: false,
+                      },
+                    }
+                  : msg
+              )
+            );
+            return;
+          }
+          if (data?.booking_id) {
+            savedJobsStore.markJobClosed(data.booking_id, partnerId, contactName);
+          }
+        })
+        .catch((err) => {
+          console.warn('[handleKasambahayConfirm] confirm-contract failed:', err);
+        });
     }
 
     setTimeout(() => {
@@ -963,30 +1090,114 @@ export function ChatDetailScreen({
               };
             });
 
-            // If partner or user accepted the booking, update prior booking cards to Confirmed & Active
+            // Deduplicate consecutive duplicate booking cards (prevents double contract cards!)
+            const deduplicatedMapped: ChatMessage[] = [];
+            for (const current of mapped) {
+              const prev = deduplicatedMapped[deduplicatedMapped.length - 1];
+
+              if (current.bookingInfo && prev?.bookingInfo) {
+                const isSameOffer =
+                  current.bookingInfo.startDate === prev.bookingInfo.startDate &&
+                  current.bookingInfo.salary === prev.bookingInfo.salary &&
+                  current.bookingInfo.bookingType === prev.bookingInfo.bookingType;
+
+                if (isSameOffer) {
+                  // Keep only one booking card
+                  if (current.bookingInfo.isConfirmed || current.bookingInfo.isAcquired) {
+                    deduplicatedMapped[deduplicatedMapped.length - 1] = current;
+                  }
+                  continue;
+                }
+              }
+              deduplicatedMapped.push(current);
+            }
+
+            // Check if this thread has an acquired / closed notice
+            const hasClosedNotice = visibleItems.some((m) => {
+              const text = m.message_payload || '';
+              return (
+                text.startsWith('[JOB_ACQUIRED]') ||
+                text.includes('job position has already been acquired') ||
+                text.startsWith('[LISTING_CLOSED]') ||
+                text.startsWith('[LISTING CLOSED]')
+              );
+            });
+
+            // Check if partner or user accepted the booking in this thread
             const hasConfirmationMessage = visibleItems.some((m) => {
               const text = m.message_payload || '';
               return text.includes('agreed and accepted') || text.includes('accepted and confirmed');
             });
-            if (hasConfirmationMessage) {
-              mapped.forEach((msg) => {
+
+            if (hasClosedNotice) {
+              // Position acquired by another applicant:
+              savedJobsStore.markJobClosed(partnerId, contactName);
+              deduplicatedMapped.forEach((msg) => {
                 if (msg.bookingInfo) {
-                  msg.bookingInfo.isConfirmed = true;
-                  msg.bookingInfo.title = 'BOOKING CONFIRMED';
+                  msg.bookingInfo.isAcquired = true;
+                  msg.bookingInfo.isConfirmed = false;
+                  msg.bookingInfo.title = 'POSITION ACQUIRED';
+                }
+              });
+            } else if (hasConfirmationMessage) {
+              savedJobsStore.markJobClosed(partnerId, contactName);
+              // Only mark the latest booking offer in this thread as confirmed:
+              let lastBookingMsg: ChatMessage | null = null;
+              for (let i = deduplicatedMapped.length - 1; i >= 0; i--) {
+                const candidate = deduplicatedMapped[i];
+                if (candidate?.bookingInfo) {
+                  lastBookingMsg = candidate;
+                  break;
+                }
+              }
+              if (lastBookingMsg && lastBookingMsg.bookingInfo) {
+                lastBookingMsg.bookingInfo.isConfirmed = true;
+                lastBookingMsg.bookingInfo.title = 'BOOKING CONFIRMED';
+              }
+
+              // Ensure contract is confirmed and all other applicants are notified in backend
+              if (effectiveToken && partnerId && !savedJobsStore.isClosed(partnerId)) {
+                fetchWithTimeout(`${API_BASE_URL}/api/v1/booking/confirm-contract/`, {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${effectiveToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    partner_id: partnerId,
+                    booking_id: activeBookingDetails?.jobPost?.id,
+                  }),
+                })
+                  .then((r) => r.json())
+                  .then((d) => {
+                    if (d?.booking_id) {
+                      savedJobsStore.markJobClosed(d.booking_id, partnerId, contactName);
+                    }
+                  })
+                  .catch(() => {});
+              }
+            } else if (savedJobsStore.isClosed(partnerId)) {
+              // If marked closed in store, mark booking cards as acquired
+              deduplicatedMapped.forEach((msg) => {
+                if (msg.bookingInfo) {
+                  msg.bookingInfo.isAcquired = true;
+                  msg.bookingInfo.isConfirmed = false;
+                  msg.bookingInfo.title = 'POSITION ACQUIRED';
                 }
               });
             }
 
             setMessages((prev) => {
               const hasChanged =
-                prev.length !== mapped.length ||
+                prev.length !== deduplicatedMapped.length ||
                 prev.some((msg, idx) => {
-                  const m = mapped[idx];
+                  const m = deduplicatedMapped[idx];
                   if (!m) return true;
                   if (msg.id !== m.id) return true;
                   if (msg.sender !== m.sender) return true;
                   if (!!msg.bookingInfo !== !!m.bookingInfo) return true;
                   if (msg.bookingInfo?.isConfirmed !== m.bookingInfo?.isConfirmed) return true;
+                  if (msg.bookingInfo?.isAcquired !== m.bookingInfo?.isAcquired) return true;
                   if (msg.reaction !== m.reaction) return true;
                   if (msg.imageUri !== m.imageUri) return true;
                   if (msg.text !== m.text) return true;
@@ -995,7 +1206,7 @@ export function ChatDetailScreen({
                   return false;
                 });
               if (hasChanged) {
-                return mapped;
+                return deduplicatedMapped;
               }
               return prev;
             });
@@ -1533,8 +1744,40 @@ export function ChatDetailScreen({
                 </View>
               ) : null;
 
+              // FB Marketplace Style Listing Closed / Acquired Message
+              if (
+                item.text &&
+                (item.text.startsWith('[JOB_ACQUIRED]') ||
+                  item.text.startsWith('[LISTING_CLOSED]') ||
+                  item.text.startsWith('[LISTING CLOSED]') ||
+                  item.text.toLowerCase().includes('job position has already been acquired'))
+              ) {
+                const cleanMsg = item.text.replace(/^\[(?:JOB_ACQUIRED|LISTING_?CLOSED)\]:?\s*/i, '');
+                return (
+                  <React.Fragment key={`closed-listing-${item.id}`}>
+                    {datePillElement}
+                    <View style={styles.listingClosedCard}>
+                      <View style={styles.listingClosedBadge}>
+                        <Ionicons name="lock-closed" size={18} color="#FFFFFF" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text style={styles.listingClosedTitle}>Job Position Acquired</Text>
+                          <View style={styles.closedTagMicro}>
+                            <Text style={styles.closedTagMicroText}>ACQUIRED</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.listingClosedSub}>{cleanMsg}</Text>
+                      </View>
+                    </View>
+                  </React.Fragment>
+                );
+              }
+
               if (item.sender === 'system' && item.bookingInfo) {
-                const isConfirmed = item.bookingInfo.isConfirmed || item.bookingInfo.title === 'BOOKING CONFIRMED';
+                const isAcquired = item.bookingInfo.isAcquired || item.bookingInfo.title === 'POSITION ACQUIRED';
+                const isConfirmed = !isAcquired && (item.bookingInfo.isConfirmed || item.bookingInfo.title === 'BOOKING CONFIRMED');
+                const isDeclined = item.bookingInfo.isDeclined || item.bookingInfo.title === 'BOOKING DECLINED';
                 const bookedPersonName =
                   item.bookingInfo.bookedByName ||
                   (isKasambahay
@@ -1557,6 +1800,8 @@ export function ChatDetailScreen({
                       style={({ pressed }) => [
                         styles.compactBookingCard,
                         isConfirmed && styles.compactBookingCardConfirmed,
+                        isDeclined && styles.compactBookingCardDeclined,
+                        isAcquired && styles.compactBookingCardAcquired,
                         pressed && styles.compactBookingCardPressed,
                       ]}
                       onPress={() => {
@@ -1576,20 +1821,23 @@ export function ChatDetailScreen({
                           days: item.bookingInfo?.days || ['M', 'T', 'W', 'Th', 'F'],
                           bookingType: item.bookingInfo?.bookingType || 'long_term',
                           jobPost: undefined,
-                        });
+                          isAcquired: isAcquired,
+                        } as any);
                         setBookingReadOnly(true);
                         setBookingModalVisible(true);
                       }}
                     >
-                      {/* Round Orange / Emerald Document Icon Badge */}
+                      {/* Round Document / Status Icon Badge */}
                       <View
                         style={[
                           styles.compactBookingIconBadge,
                           isConfirmed && styles.compactBookingIconBadgeConfirmed,
+                          isDeclined && styles.compactBookingIconBadgeDeclined,
+                          isAcquired && styles.compactBookingIconBadgeAcquired,
                         ]}
                       >
                         <Ionicons
-                          name={isConfirmed ? 'checkmark-sharp' : 'document-text'}
+                          name={isAcquired ? 'lock-closed' : isConfirmed ? 'checkmark-sharp' : isDeclined ? 'close-outline' : 'document-text'}
                           size={20}
                           color="#FFFFFF"
                         />
@@ -1601,15 +1849,29 @@ export function ChatDetailScreen({
                           <Text style={styles.compactBookingTitle} numberOfLines={1}>
                             {bookedPersonName}
                           </Text>
-                          {isConfirmed ? (
+                          {isAcquired ? (
+                            <View style={styles.acquiredMicroBadge}>
+                              <Text style={styles.acquiredMicroBadgeText}>Acquired</Text>
+                            </View>
+                          ) : isConfirmed ? (
                             <View style={styles.confirmedMicroBadge}>
                               <Text style={styles.confirmedMicroBadgeText}>Active</Text>
+                            </View>
+                          ) : isDeclined ? (
+                            <View style={styles.declinedMicroBadge}>
+                              <Text style={styles.declinedMicroBadgeText}>Declined</Text>
                             </View>
                           ) : null}
                         </View>
 
                         <Text style={styles.compactBookingSubText} numberOfLines={1}>
-                          {`Start date: ${formattedStartDate} • Tap to review`}
+                          {isAcquired
+                            ? `Start date: ${formattedStartDate} • Job position already acquired`
+                            : isDeclined
+                            ? `Start date: ${formattedStartDate} • Offer Declined`
+                            : isConfirmed
+                            ? `Start date: ${formattedStartDate} • Contract Active`
+                            : `Start date: ${formattedStartDate} • Tap to review`}
                         </Text>
                       </View>
 
@@ -1619,21 +1881,53 @@ export function ChatDetailScreen({
                       </View>
                     </Pressable>
 
-                    {/* Quick Kasambahay Action if not confirmed yet */}
-                    {!isConfirmed ? (
-                      <Pressable
-                        style={({ pressed }) => [
-                          styles.compactQuickAgreeBtn,
-                          pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
-                        ]}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleKasambahayConfirm(item.id);
-                        }}
-                      >
-                        <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                        <Text style={styles.compactQuickAgreeText}>Agree & Accept Booking</Text>
-                      </Pressable>
+                    {/* Action or Status Section */}
+                    {!isConfirmed && !isDeclined ? (
+                      isAcquired ? (
+                        <View style={styles.compactAcquiredBanner}>
+                          <Ionicons name="information-circle" size={14} color="#64748B" />
+                          <Text style={styles.compactAcquiredText}>
+                            This job position has already been acquired.
+                          </Text>
+                        </View>
+                      ) : isKasambahay ? (
+                        <View style={styles.compactQuickActionRow}>
+                          <Pressable
+                            style={({ pressed }) => [
+                              styles.compactQuickDeclineBtn,
+                              pressed && { opacity: 0.8 },
+                            ]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleKasambahayDecline(item.id);
+                            }}
+                          >
+                            <Ionicons name="close-circle-outline" size={16} color="#DC2626" style={{ marginRight: 4 }} />
+                            <Text style={styles.compactQuickDeclineText}>Decline</Text>
+                          </Pressable>
+
+                          <Pressable
+                            style={({ pressed }) => [
+                              styles.compactQuickAgreeBtn,
+                              pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+                            ]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleKasambahayConfirm(item.id);
+                            }}
+                          >
+                            <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                            <Text style={styles.compactQuickAgreeText}>Agree & Accept</Text>
+                          </Pressable>
+                        </View>
+                      ) : (
+                        <View style={styles.compactWaitingHomeownerBadge}>
+                          <Ionicons name="time-outline" size={14} color="#B45309" />
+                          <Text style={styles.compactWaitingHomeownerText}>
+                            Offer Sent • Waiting for Kasambahay response
+                          </Text>
+                        </View>
+                      )
                     ) : null}
                   </View>
                 </React.Fragment>
@@ -2014,7 +2308,9 @@ export function ChatDetailScreen({
         contactRole={contactRole}
         contactAvatar={contactAvatar}
         readOnly={bookingReadOnly || isKasambahay}
-        isConfirmed={activeBookingMsgId ? messages.find((m) => m.id === activeBookingMsgId)?.bookingInfo?.isConfirmed : false}
+        isConfirmed={activeBookingMsgId ? ((messages.find((m) => m.id === activeBookingMsgId)?.bookingInfo?.isConfirmed && !messages.find((m) => m.id === activeBookingMsgId)?.bookingInfo?.isAcquired) || false) : false}
+        isDeclined={activeBookingMsgId ? messages.find((m) => m.id === activeBookingMsgId)?.bookingInfo?.isDeclined : false}
+        isAcquired={activeBookingMsgId ? Boolean(messages.find((m) => m.id === activeBookingMsgId)?.bookingInfo?.isAcquired || (activeBookingDetails as any)?.isAcquired) : Boolean((activeBookingDetails as any)?.isAcquired)}
         userRole={isHomeowner ? 'homeowner' : 'kasambahay'}
         initialDetails={activeBookingDetails}
         token={effectiveToken}
@@ -2049,6 +2345,7 @@ export function ChatDetailScreen({
                 bookingType: details.bookingType,
                 details: `${rateLabel} · ${details.workHours}`,
                 isConfirmed: false,
+                isDeclined: false,
               },
             },
           ]);
@@ -2062,6 +2359,11 @@ export function ChatDetailScreen({
         onKasambahayConfirm={() => {
           if (activeBookingMsgId) {
             handleKasambahayConfirm(activeBookingMsgId);
+          }
+        }}
+        onKasambahayDecline={() => {
+          if (activeBookingMsgId) {
+            handleKasambahayDecline(activeBookingMsgId);
           }
         }}
       />
@@ -2589,6 +2891,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7FEFA',
     borderColor: '#D1FAE5',
   },
+  compactBookingCardDeclined: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+  },
+  compactBookingCardAcquired: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    opacity: 0.9,
+  },
   compactBookingCardPressed: {
     opacity: 0.9,
     transform: [{ scale: 0.985 }],
@@ -2603,6 +2914,12 @@ const styles = StyleSheet.create({
   },
   compactBookingIconBadgeConfirmed: {
     backgroundColor: '#10B981',
+  },
+  compactBookingIconBadgeDeclined: {
+    backgroundColor: '#94A3B8',
+  },
+  compactBookingIconBadgeAcquired: {
+    backgroundColor: '#64748B',
   },
   compactBookingInfoCol: {
     flex: 1,
@@ -2632,6 +2949,30 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#15803D',
   },
+  declinedMicroBadge: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  declinedMicroBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#DC2626',
+  },
+  acquiredMicroBadge: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  acquiredMicroBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#475569',
+  },
   compactBookingSubText: {
     fontSize: 12.5,
     color: '#64748B',
@@ -2641,15 +2982,38 @@ const styles = StyleSheet.create({
   compactBookingArrowWrap: {
     paddingLeft: 4,
   },
+  compactQuickActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  compactQuickDeclineBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 22,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  compactQuickDeclineText: {
+    color: '#DC2626',
+    fontWeight: '700',
+    fontSize: 13,
+  },
   compactQuickAgreeBtn: {
+    flex: 1.4,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#00875A',
     borderRadius: 22,
     paddingVertical: 10,
-    paddingHorizontal: 16,
-    marginTop: 8,
+    paddingHorizontal: 14,
     shadowColor: '#00875A',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
@@ -2660,6 +3024,86 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 13.5,
+  },
+  compactWaitingHomeownerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 8,
+  },
+  compactWaitingHomeownerText: {
+    color: '#B45309',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  compactAcquiredBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 8,
+  },
+  compactAcquiredText: {
+    color: '#475569',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  listingClosedCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 12,
+    marginVertical: 6,
+    alignSelf: 'center',
+    width: '96%',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  listingClosedBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#64748B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  listingClosedTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  listingClosedSub: {
+    fontSize: 11.5,
+    color: '#64748B',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  closedTagMicro: {
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+  },
+  closedTagMicroText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#475569',
+    letterSpacing: 0.5,
   },
   bookingCard: {
     backgroundColor: '#FFFBF2',

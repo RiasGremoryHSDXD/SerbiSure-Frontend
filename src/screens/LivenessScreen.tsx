@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Canvas, Circle, Path, Skia } from '@shopify/react-native-skia';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -247,15 +247,19 @@ export function LivenessScreen({ role = 'homeowner', token, onVerified, onBack, 
   }, []);
 
   const handleCancel = useCallback(() => {
-    setState(initialLivenessState);
-    setStarted(false);
-    setFaceCentered(false);
-    setShowTrackerNotice(false);
-    setShowCenterCheck(false);
-    setCapturedSelfiePath(null);
-    captureStartedRef.current = false;
-    onCancel?.();
-  }, [onCancel]);
+    Alert.alert(
+      'Biometric Verification Required',
+      'Camera face verification is mandatory to establish your verified profile and ensure community safety under RA 10361. This step cannot be skipped.',
+      [
+        { text: 'Continue Scanning', style: 'default' },
+        {
+          text: 'Back to Account Step',
+          style: 'destructive',
+          onPress: () => onBack?.(),
+        },
+      ]
+    );
+  }, [onBack]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 14) }]}>

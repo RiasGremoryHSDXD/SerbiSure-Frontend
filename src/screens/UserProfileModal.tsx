@@ -39,6 +39,29 @@ function formatMemberSince(isoDate?: string): string {
   }
 }
 
+function getSentimentBadgeStyle(sentiment?: string) {
+  const s = String(sentiment || '').trim().toLowerCase();
+  if (s.includes('neg')) {
+    return {
+      bg: '#FFF1F2',
+      border: '#FECDD3',
+      text: '#BE123C',
+    };
+  }
+  if (s.includes('neu')) {
+    return {
+      bg: '#F1F5F9',
+      border: '#E2E8F0',
+      text: '#475569',
+    };
+  }
+  return {
+    bg: '#ECFDF5',
+    border: '#A7F3D0',
+    text: '#065F46',
+  };
+}
+
 export function UserProfileModal({
   visible,
   onClose,
@@ -294,24 +317,37 @@ export function UserProfileModal({
             {loading ? (
               <ActivityIndicator size="small" color="#FFB43B" style={{ marginVertical: 16 }} />
             ) : reviews.length > 0 ? (
-              reviews.map((item) => (
-                <View key={item.review_id} style={styles.reviewCard}>
-                  <View style={styles.reviewCardHeader}>
-                    <View style={styles.starsGroup}>
-                      {[1, 2, 3, 4, 5].map((i) => (
-                        <Ionicons
-                          key={i}
-                          name={i <= item.rating ? 'star' : 'star-outline'}
-                          size={13}
-                          color="#FFB43B"
-                          style={{ marginRight: 2 }}
-                        />
-                      ))}
+              reviews.map((item) => {
+                const badgeStyle = getSentimentBadgeStyle(item.nlp_sentiment);
+                return (
+                  <View key={item.review_id} style={styles.reviewCard}>
+                    <View style={styles.reviewCardHeader}>
+                      <View style={styles.starsGroup}>
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <Ionicons
+                            key={i}
+                            name={i <= item.rating ? 'star' : 'star-outline'}
+                            size={13}
+                            color="#FFB43B"
+                            style={{ marginRight: 2 }}
+                          />
+                        ))}
+                      </View>
+                      <View
+                        style={[
+                          styles.sentimentChip,
+                          {
+                            backgroundColor: badgeStyle.bg,
+                            borderColor: badgeStyle.border,
+                            borderWidth: 1,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.sentimentChipText, { color: badgeStyle.text }]}>
+                          {item.nlp_sentiment || 'Positive'}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={styles.sentimentChip}>
-                      <Text style={styles.sentimentChipText}>{item.nlp_sentiment || 'Positive'}</Text>
-                    </View>
-                  </View>
 
                   <Text style={styles.reviewFeedback}>"{item.unstructured_feedback}"</Text>
 
@@ -328,7 +364,8 @@ export function UserProfileModal({
                     ) : null}
                   </View>
                 </View>
-              ))
+              );
+            })
             ) : (
               <View style={styles.emptyReviewsCard}>
                 <Ionicons name="chatbubbles-outline" size={32} color="#D1D5DB" />
