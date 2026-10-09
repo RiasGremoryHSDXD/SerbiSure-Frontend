@@ -299,7 +299,6 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
                         <View style={styles.jobEmployerInfo}>
                         <Pressable style={styles.nameRow} onPress={() => handleOpenEmployerProfile(job)} hitSlop={6}>
                           <Text style={styles.employerName}>{job.employerName}</Text>
-                          <Ionicons name="checkmark-circle" size={16} color="#10B981" style={{ marginLeft: 4 }} />
                         </Pressable>
                         <Text style={styles.postTime}>{job.time}</Text>
 
@@ -379,6 +378,7 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
             handleOpenEmployerProfile(selectedJob);
           }
         }}
+        token={effectiveToken}
       />
 
       {/* Messenger-style Chat Detail Modal */}

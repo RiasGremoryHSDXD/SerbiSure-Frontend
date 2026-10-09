@@ -10,9 +10,12 @@ import {
   Animated,
   PanResponder,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useUser } from '../context/UserContext';
+import { fetchReviewSummary, ReviewSummaryData } from '../api/reviewApi';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SNAP_EXPANDED = 0;
@@ -21,6 +24,7 @@ const SNAP_DISMISSED = SCREEN_HEIGHT;
 
 export interface JobDetailData {
   id: number | string;
+  partnerId?: number | string;
   employerName?: string;
   title?: string;
   avatar?: string;
@@ -48,6 +52,7 @@ export interface JobDetailSheetProps {
   onViewProfile?: () => void;
   ctaText?: string;
   ctaNotice?: string;
+  token?: string | null;
 }
 
 export function JobDetailSheet({
@@ -62,8 +67,60 @@ export function JobDetailSheet({
   onViewProfile,
   ctaText,
   ctaNotice,
+  token,
 }: JobDetailSheetProps) {
   const insets = useSafeAreaInsets();
+  const { user } = useUser();
+  const effectiveToken = token || user?.token;
+
+  const [summary, setSummary] = useState<ReviewSummaryData | null>(null);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState(false);
+
+  useEffect(() => {
+    if (!visible || !job) {
+      setSummary(null);
+      setIsSummaryLoading(false);
+      setSummaryError(false);
+      return;
+    }
+
+    const rawTargetId = (job as any).partnerId || (job as any).partner_id || (job as any).poster_id || job.id;
+    const targetUserId = rawTargetId ? String(rawTargetId).trim() : '';
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetUserId);
+
+    if (!isUuid || !effectiveToken) {
+      setSummary(null);
+      setIsSummaryLoading(false);
+      setSummaryError(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsSummaryLoading(true);
+    setSummaryError(false);
+
+    fetchReviewSummary(effectiveToken, targetUserId)
+      .then((data) => {
+        if (isMounted) {
+          setSummary(data);
+          setIsSummaryLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          console.warn('[JobDetailSheet] fetchReviewSummary failed:', err);
+          setSummaryError(true);
+          setIsSummaryLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [visible, job?.id, (job as any)?.partnerId, effectiveToken]);
+
   const panY = useRef(new Animated.Value(SNAP_EXPANDED)).current;
   const currentSnapRef = useRef<'collapsed' | 'expanded'>('expanded');
   const [currentSnap, setCurrentSnap] = useState<'collapsed' | 'expanded'>('expanded');
@@ -340,39 +397,88 @@ export function JobDetailSheet({
               <Text style={styles.aboutBody}>{about}</Text>
             </View>
 
-            {/* Worker Feedback Summary (Visual Squircle Cards + Progress Bar) */}
-            <View style={styles.feedbackSection}>
-              <View style={styles.feedbackHeaderRow}>
-                <Text style={styles.feedbackSectionTitle}>Worker Feedback Summary</Text>
-                <View style={styles.feedbackPillBadge}>
-                  <Ionicons name="star" size={12} color="#F59E0B" />
-                  <Text style={styles.feedbackPillBadgeText}>4.8 Rating</Text>
-                </View>
-              </View>
+            {/* Dynamic Worker/Employer Feedback Summary from Database */}
+            {(() => {
+              const totalReviews = summary?.total_reviews || 0;
+              const posCount = summary?.sentiment_breakdown?.Positive || 0;
+              const neuCount = summary?.sentiment_breakdown?.Neutral || 0;
+              const negCount = summary?.sentiment_breakdown?.Negative || 0;
 
-              {/* Proportional Segmented Progress Bar */}
-              <View style={styles.progressBarWrap}>
-                <View style={[styles.progressSegment, { flex: 72, backgroundColor: '#10B981' }]} />
-                <View style={[styles.progressSegment, { flex: 18, backgroundColor: '#94A3B8' }]} />
-                <View style={[styles.progressSegment, { flex: 10, backgroundColor: '#F87171' }]} />
-              </View>
+              const posPct = totalReviews > 0 ? Math.round((posCount / totalReviews) * 100) : 0;
+              const neuPct = totalReviews > 0 ? Math.round((neuCount / totalReviews) * 100) : 0;
+              const negPct = totalReviews > 0 ? Math.max(0, 100 - posPct - neuPct) : 0;
 
-              {/* 3 Metric Cards */}
-              <View style={styles.feedbackRow}>
-                <View style={[styles.feedbackCard, styles.feedbackPositive]}>
-                  <Text style={[styles.feedbackValue, { color: '#059669' }]}>72%</Text>
-                  <Text style={[styles.feedbackLabel, { color: '#047857' }]}>Positive</Text>
+              const avgRating = summary?.average_rating ? Number(summary.average_rating) : 0;
+              const ratingBadgeText = avgRating > 0 ? `${avgRating.toFixed(1)} Rating` : 'Unrated';
+
+              return (
+                <View style={styles.feedbackSection}>
+                  <View style={styles.feedbackHeaderRow}>
+                    <Text style={styles.feedbackSectionTitle}>Feedback Summary</Text>
+                    <View style={styles.feedbackPillBadge}>
+                      <Ionicons name="star" size={12} color="#F59E0B" />
+                      <Text style={styles.feedbackPillBadgeText}>{ratingBadgeText}</Text>
+                    </View>
+                  </View>
+
+                  {isSummaryLoading ? (
+                    <View style={styles.feedbackLoadingBox}>
+                      <ActivityIndicator size="small" color="#FFB43B" />
+                      <Text style={styles.feedbackLoadingText}>Loading feedback metrics...</Text>
+                    </View>
+                  ) : summaryError ? (
+                    <View style={styles.feedbackEmptyCard}>
+                      <Ionicons name="alert-circle-outline" size={22} color="#94A3B8" style={{ marginBottom: 4 }} />
+                      <Text style={styles.feedbackEmptyTitle}>Feedback data unavailable</Text>
+                      <Text style={styles.feedbackEmptySubtitle}>Could not load review summary at this time.</Text>
+                    </View>
+                  ) : totalReviews === 0 ? (
+                    <View style={styles.feedbackEmptyCard}>
+                      <Ionicons name="chatbubbles-outline" size={24} color="#CBD5E1" style={{ marginBottom: 6 }} />
+                      <Text style={styles.feedbackEmptyTitle}>No reviews yet</Text>
+                      <Text style={styles.feedbackEmptySubtitle}>
+                        This member has no completed service reviews yet. Feedback will appear here after bookings.
+                      </Text>
+                    </View>
+                  ) : (
+                    <React.Fragment>
+                      {/* Proportional Segmented Progress Bar */}
+                      <View style={styles.progressBarWrap}>
+                        {posPct > 0 && (
+                          <View style={[styles.progressSegment, { flex: Math.max(posPct, 1), backgroundColor: '#10B981' }]} />
+                        )}
+                        {neuPct > 0 && (
+                          <View style={[styles.progressSegment, { flex: Math.max(neuPct, 1), backgroundColor: '#94A3B8' }]} />
+                        )}
+                        {negPct > 0 && (
+                          <View style={[styles.progressSegment, { flex: Math.max(negPct, 1), backgroundColor: '#F87171' }]} />
+                        )}
+                      </View>
+
+                      {/* 3 Metric Cards */}
+                      <View style={styles.feedbackRow}>
+                        <View style={[styles.feedbackCard, styles.feedbackPositive]}>
+                          <Text style={[styles.feedbackValue, { color: '#059669' }]}>{posPct}%</Text>
+                          <Text style={[styles.feedbackLabel, { color: '#047857' }]}>Positive ({posCount})</Text>
+                        </View>
+                        <View style={[styles.feedbackCard, styles.feedbackNeutral]}>
+                          <Text style={[styles.feedbackValue, { color: '#475569' }]}>{neuPct}%</Text>
+                          <Text style={[styles.feedbackLabel, { color: '#64748B' }]}>Neutral ({neuCount})</Text>
+                        </View>
+                        <View style={[styles.feedbackCard, styles.feedbackNegative]}>
+                          <Text style={[styles.feedbackValue, { color: '#DC2626' }]}>{negPct}%</Text>
+                          <Text style={[styles.feedbackLabel, { color: '#B91C1C' }]}>Negative ({negCount})</Text>
+                        </View>
+                      </View>
+
+                      <Text style={styles.feedbackSubCountText}>
+                        Based on {totalReviews} {totalReviews === 1 ? 'review' : 'reviews'} from completed bookings
+                      </Text>
+                    </React.Fragment>
+                  )}
                 </View>
-                <View style={[styles.feedbackCard, styles.feedbackNeutral]}>
-                  <Text style={[styles.feedbackValue, { color: '#475569' }]}>18%</Text>
-                  <Text style={[styles.feedbackLabel, { color: '#64748B' }]}>Neutral</Text>
-                </View>
-                <View style={[styles.feedbackCard, styles.feedbackNegative]}>
-                  <Text style={[styles.feedbackValue, { color: '#DC2626' }]}>10%</Text>
-                  <Text style={[styles.feedbackLabel, { color: '#B91C1C' }]}>Negative</Text>
-                </View>
-              </View>
-            </View>
+              );
+            })()}
 
             {/* Apply Button & Direct Message Notice */}
             <Pressable
@@ -664,6 +770,48 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     fontWeight: '700',
     marginTop: 2,
+  },
+  feedbackSubCountText: {
+    fontSize: 11,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 8,
+    fontWeight: '500',
+  },
+  feedbackLoadingBox: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
+  },
+  feedbackLoadingText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  feedbackEmptyCard: {
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  feedbackEmptyTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#475569',
+    marginBottom: 4,
+  },
+  feedbackEmptySubtitle: {
+    fontSize: 11.5,
+    color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 16,
   },
   applyBtn: {
     backgroundColor: '#0F172A',

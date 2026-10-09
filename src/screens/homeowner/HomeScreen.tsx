@@ -191,6 +191,7 @@ export function HomeScreen({
   const detailJobData = selectedPostForDetail
     ? {
       id: selectedPostForDetail.id,
+      partnerId: selectedPostForDetail.partnerId,
       employerName: selectedPostForDetail.name,
       avatar: selectedPostForDetail.avatar,
       time: selectedPostForDetail.time,
@@ -539,7 +540,6 @@ export function HomeScreen({
                     <View style={styles.workerInfo}>
                       <View style={styles.workerNameRow}>
                         <Text style={styles.workerName}>{post.name}</Text>
-                        <Ionicons name="checkmark-circle" size={16} color="#4CAF50" style={{ marginLeft: 4 }} />
                       </View>
                       <View style={styles.roleRow}>
                         <View style={styles.roleBadge}>
@@ -658,6 +658,7 @@ export function HomeScreen({
         }}
         ctaText="Message Kasambahay"
         ctaNotice="Start a direct chat with this kasambahay"
+        token={effectiveToken}
       />
     </View>
   );

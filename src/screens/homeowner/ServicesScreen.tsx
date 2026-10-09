@@ -991,6 +991,7 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
           visible={!!selectedSavedWorker}
           job={selectedSavedWorker ? {
             id: selectedSavedWorker.id,
+            partnerId: (selectedSavedWorker as any).partnerId || selectedSavedWorker.id,
             employerName: selectedSavedWorker.employerName,
             title: selectedSavedWorker.title || selectedSavedWorker.roleTag,
             avatar: selectedSavedWorker.avatar,
@@ -1020,6 +1021,7 @@ export function ServicesScreen({ avatarUri, onViewProfile, token }: { avatarUri?
           }}
           ctaText="Message Kasambahay"
           ctaNotice="Start a direct chat with this kasambahay"
+          token={effectiveToken}
         />
       </ScrollView>
     </View>

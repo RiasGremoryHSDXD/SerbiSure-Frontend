@@ -1143,6 +1143,7 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
             handleOpenProfile(selectedJobForDetails);
           }
         }}
+        token={effectiveToken}
       />
 
       {/* Messenger-style Chat Detail Modal */}
