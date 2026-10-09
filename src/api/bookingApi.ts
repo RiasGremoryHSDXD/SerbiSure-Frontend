@@ -393,3 +393,57 @@ export async function fetchMinimumWage(
   }
 }
 
+/**
+ * POST /api/v1/booking/save/
+ * Toggles saving or bookmarking a post on the backend database.
+ */
+export async function toggleSavePostApi(
+  bookingId: string | number,
+  token?: string | null
+): Promise<{ is_saved: boolean; booking_id: string; message: string } | null> {
+  if (!token) return null;
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/v1/booking/save/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ booking_id: String(bookingId) }),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      console.warn('[bookingApi] toggleSavePostApi server error:', res.status, errData);
+      return null;
+    }
+    return await res.json();
+  } catch (err) {
+    console.warn('[bookingApi] toggleSavePostApi network error:', err);
+    return null;
+  }
+}
+
+/**
+ * GET /api/v1/booking/saved/
+ * Fetches all saved posts for the current authenticated user from the database.
+ */
+export async function fetchSavedPostsApi(token?: string | null): Promise<any[]> {
+  if (!token) return [];
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/v1/booking/saved/`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      console.warn('[bookingApi] fetchSavedPostsApi returned status:', res.status);
+      return [];
+    }
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.warn('[bookingApi] fetchSavedPostsApi error:', err);
+    return [];
+  }
+}
+

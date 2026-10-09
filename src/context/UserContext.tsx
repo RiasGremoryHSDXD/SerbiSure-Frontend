@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { savedJobsStore } from '../store/savedJobsStore';
 
 type UserData = {
   id?: string;
@@ -98,8 +99,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
       const decoded = parseJWT(token)
 
       if (decoded) {
+        const userId = decoded.user_id || decoded.id || decoded.sub || '';
         setUser({
-          id: decoded.user_id || decoded.id || decoded.sub || '',
+          id: userId,
           token: token,
           firstName: decoded.first_name || '',
           middleName: decoded.middle_name || '',
@@ -124,13 +126,18 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
           cancellationStrikes: decoded.cancellation_strikes ?? 0,
           isRestricted: decoded.is_restricted ?? false,
         });
+
+        // Initialize saved jobs store for this specific user
+        savedJobsStore.initForUser(userId, token);
       }
       else {
         setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', email: '', contactNumber: '', showContactNumber: false, userTags: [], profileLink: null, accountType: '', street: '', city: '', province: '', zipcode: '', country: '', nationality: 'Filipino' });
+        savedJobsStore.clearStore();
       }
     }
     else {
       setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', email: '', contactNumber: '', showContactNumber: false, userTags: [], accountType: '', street: '', city: '', province: '', zipcode: '', country: '', nationality: 'Filipino' });
+      savedJobsStore.clearStore();
     }
   }, [token])
 

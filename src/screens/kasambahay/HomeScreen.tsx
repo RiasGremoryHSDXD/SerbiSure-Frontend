@@ -61,7 +61,7 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedJob, setSelectedJob] = useState<JobOffer | null>(null);
-  const { isSaved, isApplied, isClosed, isJobClosed, toggleSave, applyJob, markJobClosed } = useJobsActivity();
+  const { isSaved, isApplied, isClosed, isJobClosed, toggleSave, applyJob, markJobClosed, refreshSavedFromBackend } = useJobsActivity();
   const [activeChat, setActiveChat] = useState<{
     visible: boolean;
     partnerId?: string | number;
@@ -168,12 +168,16 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
   useEffect(() => {
     if (effectiveToken) {
       fetchJobs();
+      refreshSavedFromBackend(effectiveToken);
     }
   }, [effectiveToken]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await fetchJobs();
+    await Promise.all([
+      fetchJobs(),
+      effectiveToken ? refreshSavedFromBackend(effectiveToken) : Promise.resolve(),
+    ]);
   };
 
   const handleApply = (job: JobOffer) => {
@@ -323,7 +327,7 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
                           price: job.price,
                           unit: job.unit,
                           aboutText: job.aboutText,
-                        })}
+                        }, effectiveToken)}
                         hitSlop={10}
                       >
                         <Ionicons
@@ -369,7 +373,7 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
         isApplied={selectedJob ? isApplied(selectedJob.id) : false}
         isSaved={selectedJob ? isSaved(selectedJob.id) : false}
         isClosed={selectedJob ? (isClosed(selectedJob.id) || isClosed(selectedJob.partnerId) || isClosed(selectedJob.employerName)) : false}
-        onToggleSave={() => selectedJob && toggleSave(selectedJob)}
+        onToggleSave={() => selectedJob && toggleSave(selectedJob, effectiveToken)}
         onViewProfile={() => {
           if (selectedJob) {
             handleOpenEmployerProfile(selectedJob);

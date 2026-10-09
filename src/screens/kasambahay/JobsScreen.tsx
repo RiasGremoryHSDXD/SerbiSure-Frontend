@@ -137,6 +137,7 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
     isJobClosed,
     toggleSave,
     applyJob,
+    refreshSavedFromBackend,
   } = useJobsActivity();
 
   const handleToggleSave = (job: JobOpening | SavedJobItem) => {
@@ -153,7 +154,7 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
       aboutText: (job as any).aboutText || (job as any).description || 'Looking for experienced and trustworthy household assistance.',
       tags: (job as any).tags || [],
       image: (job as any).image || job.avatar,
-    });
+    }, effectiveToken);
   };
 
   const handleApplyJob = (job: JobOpening | SavedJobItem) => {
@@ -364,14 +365,26 @@ export function JobsScreen({ onViewProfile, token }: { onViewProfile?: () => voi
   const handlePullToRefresh = async () => {
     setIsRefreshing(true);
     position.setValue({ x: 0, y: 0 });
-    await fetchFeed(true, filters);
+    await Promise.all([
+      fetchFeed(true, filters),
+      effectiveToken ? refreshSavedFromBackend(effectiveToken) : Promise.resolve(),
+    ]);
     setIsRefreshing(false);
   };
 
   // Only fetches on first load (or when token changes)
   useEffect(() => {
     fetchFeed();
+    if (effectiveToken) {
+      refreshSavedFromBackend(effectiveToken);
+    }
   }, [effectiveToken]);
+
+  useEffect(() => {
+    if (subTab === 'saved' && effectiveToken) {
+      refreshSavedFromBackend(effectiveToken);
+    }
+  }, [subTab, effectiveToken]);
 
   // Floating Count (+1 / -1) Animation Values
   const plusAnim = useRef(new Animated.Value(0)).current;

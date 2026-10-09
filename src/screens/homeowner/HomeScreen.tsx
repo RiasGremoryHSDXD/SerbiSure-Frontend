@@ -21,6 +21,7 @@ import { formatBookingLocationShort } from '../../api/bookingApi';
 import { UserProfileModal } from '../UserProfileModal';
 import { ChatDetailScreen } from '../ChatDetailScreen';
 import { JobDetailSheet } from '../../components/JobDetailSheet';
+import { useJobsActivity } from '../../store/savedJobsStore';
 
 const logoSource = require('../../../assets/serbisure_new_clean.png');
 
@@ -160,6 +161,8 @@ export function HomeScreen({
   const { user, getFirstNameOnly } = useUser();
   const effectiveToken = token || user?.token;
 
+  const { isSaved, isClosed, toggleSave, refreshSavedFromBackend } = useJobsActivity();
+
   const [posts, setPosts] = useState<KasambahayPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -187,18 +190,18 @@ export function HomeScreen({
 
   const detailJobData = selectedPostForDetail
     ? {
-        id: selectedPostForDetail.id,
-        employerName: selectedPostForDetail.name,
-        avatar: selectedPostForDetail.avatar,
-        time: selectedPostForDetail.time,
-        location: selectedPostForDetail.location,
-        roleTag: selectedPostForDetail.role,
-        termTag: selectedPostForDetail.termTag,
-        price: selectedPostForDetail.rate,
-        unit: selectedPostForDetail.rateUnit,
-        aboutText: selectedPostForDetail.description,
-        tags: selectedPostForDetail.tags,
-      }
+      id: selectedPostForDetail.id,
+      employerName: selectedPostForDetail.name,
+      avatar: selectedPostForDetail.avatar,
+      time: selectedPostForDetail.time,
+      location: selectedPostForDetail.location,
+      roleTag: selectedPostForDetail.role,
+      termTag: selectedPostForDetail.termTag,
+      price: selectedPostForDetail.rate,
+      unit: selectedPostForDetail.rateUnit,
+      aboutText: selectedPostForDetail.description,
+      tags: selectedPostForDetail.tags,
+    }
     : null;
 
   const fetchKasambahayPosts = async () => {
@@ -214,8 +217,8 @@ export function HomeScreen({
             const rawCategories = Array.isArray(item.service_category)
               ? item.service_category
               : item.service_category
-              ? [item.service_category]
-              : ['General Service'];
+                ? [item.service_category]
+                : ['General Service'];
 
             const categoryMap: Record<string, string> = {
               Cleaning: 'Cleaner',
@@ -270,11 +273,17 @@ export function HomeScreen({
 
   useEffect(() => {
     fetchKasambahayPosts();
+    if (effectiveToken) {
+      refreshSavedFromBackend(effectiveToken);
+    }
   }, [effectiveToken]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await fetchKasambahayPosts();
+    await Promise.all([
+      fetchKasambahayPosts(),
+      effectiveToken ? refreshSavedFromBackend(effectiveToken) : Promise.resolve(),
+    ]);
   };
 
   const handleCategoryPress = (catKey: string) => {
@@ -301,8 +310,29 @@ export function HomeScreen({
     });
   };
 
+  const handleToggleSavePost = (post: KasambahayPost) => {
+    toggleSave({
+      id: post.id,
+      employerName: post.name,
+      title: post.role,
+      avatar: post.avatar,
+      location: post.location,
+      roleTag: post.role,
+      termTag: post.termTag,
+      price: post.rate,
+      unit: post.rateUnit,
+      aboutText: post.description,
+      tags: post.tags,
+      image: post.avatar,
+    }, effectiveToken);
+  };
+
   // Filter posts based on active category & search query
   const filteredPosts = posts.filter((post) => {
+    if (isClosed(post.id) || (post.partnerId && isClosed(post.partnerId))) {
+      return false;
+    }
+
     if (selectedCategory) {
       const catConfig = CATEGORIES.find((c) => c.key === selectedCategory);
       if (catConfig) {
@@ -498,22 +528,41 @@ export function HomeScreen({
           ) : (
             filteredPosts.map((post) => (
               <View key={post.id} style={styles.workerCard}>
-                {/* Header: Avatar, Name, Role Tag, Time */}
-                <Pressable style={styles.workerHeader} onPress={() => handleOpenKasambahayProfile(post)}>
-                  <Image source={{ uri: post.avatar }} style={styles.workerAvatar} />
-                  <View style={styles.workerInfo}>
-                    <View style={styles.workerNameRow}>
-                      <Text style={styles.workerName}>{post.name}</Text>
-                      <Ionicons name="checkmark-circle" size={16} color="#4CAF50" style={{ marginLeft: 4 }} />
-                    </View>
-                    <View style={styles.roleRow}>
-                      <View style={styles.roleBadge}>
-                        <Text style={styles.roleBadgeText}>{post.role}</Text>
+                {/* Header: Avatar, Name, Role Tag, Time & Bookmark */}
+                <View style={styles.workerHeader}>
+                  <Pressable
+                    style={styles.workerHeaderLeft}
+                    onPress={() => handleOpenKasambahayProfile(post)}
+                    hitSlop={6}
+                  >
+                    <Image source={{ uri: post.avatar }} style={styles.workerAvatar} />
+                    <View style={styles.workerInfo}>
+                      <View style={styles.workerNameRow}>
+                        <Text style={styles.workerName}>{post.name}</Text>
+                        <Ionicons name="checkmark-circle" size={16} color="#4CAF50" style={{ marginLeft: 4 }} />
                       </View>
-                      <Text style={styles.workerTime}>{post.time}</Text>
+                      <View style={styles.roleRow}>
+                        <View style={styles.roleBadge}>
+                          <Text style={styles.roleBadgeText}>{post.role}</Text>
+                        </View>
+                        <Text style={styles.workerTime}>{post.time}</Text>
+                      </View>
                     </View>
-                  </View>
-                </Pressable>
+                  </Pressable>
+
+                  {/* Bookmark Button in Top Right Corner */}
+                  <Pressable
+                    style={styles.bookmarkBtn}
+                    onPress={() => handleToggleSavePost(post)}
+                    hitSlop={10}
+                  >
+                    <Ionicons
+                      name={isSaved(post.id) ? "bookmark" : "bookmark-outline"}
+                      size={22}
+                      color={THEME.colors.ink}
+                    />
+                  </Pressable>
+                </View>
 
                 {/* Details Pills: Location, Term, Rate */}
                 <View style={styles.metaRow}>
@@ -601,6 +650,12 @@ export function HomeScreen({
           }
         }}
         isApplied={false}
+        isSaved={selectedPostForDetail ? isSaved(selectedPostForDetail.id) : false}
+        onToggleSave={() => {
+          if (selectedPostForDetail) {
+            handleToggleSavePost(selectedPostForDetail);
+          }
+        }}
         ctaText="Message Kasambahay"
         ctaNotice="Start a direct chat with this kasambahay"
       />
@@ -835,7 +890,20 @@ const styles = StyleSheet.create({
   workerHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    justifyContent: 'space-between',
     marginBottom: 12,
+  },
+  workerHeaderLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  bookmarkBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
   },
   workerAvatar: {
     width: 48,

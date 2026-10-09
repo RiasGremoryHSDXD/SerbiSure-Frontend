@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toggleSavePostApi, fetchSavedPostsApi, formatBookingLocationShort } from '../api/bookingApi';
 
 export interface SavedJobItem {
   id: string | number;
@@ -23,10 +24,10 @@ class SavedJobsStore {
   private appliedMap: Map<string | number, SavedJobItem> = new Map();
   private closedJobs: Set<string | number> = new Set();
   private listeners: Set<StoreListener> = new Set();
+  private currentUserId: string | null = null;
+  private isSyncing: boolean = false;
 
-  constructor() {
-    // Initial demo item for realistic display if empty
-  }
+  constructor() {}
 
   subscribe(listener: StoreListener) {
     this.listeners.add(listener);
@@ -39,13 +40,107 @@ class SavedJobsStore {
     this.listeners.forEach((listener) => listener());
   }
 
-  toggleSave(job: SavedJobItem) {
-    if (this.savedMap.has(job.id)) {
+  /**
+   * Initializes or refreshes saved jobs from the backend database for a specific authenticated user.
+   * Clears any previous user's data to guarantee total cross-account isolation.
+   */
+  async initForUser(userId: string | number, token: string | null) {
+    const newUserId = String(userId);
+    if (this.currentUserId !== newUserId) {
+      this.clearStore();
+      this.currentUserId = newUserId;
+    }
+
+    if (!token) return;
+    await this.refreshFromBackend(token);
+  }
+
+  /**
+   * Fetches the latest saved posts from GET /api/v1/booking/saved/ and syncs with local store.
+   */
+  async refreshFromBackend(token: string | null) {
+    if (!token || this.isSyncing) return;
+    this.isSyncing = true;
+    try {
+      const data = await fetchSavedPostsApi(token);
+      if (Array.isArray(data)) {
+        // Clear saved map for this fresh sync from DB
+        this.savedMap.clear();
+        for (const item of data) {
+          if (!item) continue;
+          const categories = Array.isArray(item.service_category)
+            ? item.service_category
+            : (item.service_category ? [item.service_category] : ['General']);
+          const avatarUrl =
+            item.profile_link ||
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'User')}&background=FFB43B&color=fff`;
+          const isLongTerm = item.booking_type === 'long_term';
+          const termTag = isLongTerm ? 'Stay-in' : 'Part-time';
+          const unit = isLongTerm ? '/ month' : '/ day';
+          const loc = formatBookingLocationShort(item, 'Cagayan de Oro');
+
+          const jobItem: SavedJobItem = {
+            id: item.booking_id,
+            employerName: item.name || 'User',
+            title: categories[0] || 'Household Service',
+            avatar: avatarUrl,
+            location: loc,
+            roleTag: categories.join(', '),
+            termTag: termTag,
+            price: `₱${item.daily_rate || '0'}`,
+            unit: unit,
+            aboutText: item.special_instruction || undefined,
+            tags: categories,
+            image: avatarUrl,
+          };
+          this.savedMap.set(jobItem.id, jobItem);
+        }
+        this.notify();
+      }
+    } catch (err) {
+      console.warn('[savedJobsStore] refreshFromBackend error:', err);
+    } finally {
+      this.isSyncing = false;
+    }
+  }
+
+  /**
+   * Clears all saved jobs, applied jobs, and closed jobs from memory (used on logout).
+   */
+  clearStore() {
+    this.savedMap.clear();
+    this.appliedMap.clear();
+    this.closedJobs.clear();
+    this.currentUserId = null;
+    this.isSyncing = false;
+    this.notify();
+  }
+
+  /**
+   * Optimistically toggles save state locally, and syncs with backend database.
+   * If backend request fails, rolls back the optimistic update.
+   */
+  async toggleSave(job: SavedJobItem, token?: string | null) {
+    const wasSaved = this.savedMap.has(job.id);
+    if (wasSaved) {
       this.savedMap.delete(job.id);
     } else {
       this.savedMap.set(job.id, { ...job });
     }
     this.notify();
+
+    if (token) {
+      const res = await toggleSavePostApi(job.id, token);
+      if (!res) {
+        // Rollback optimistic update on failure
+        if (wasSaved) {
+          this.savedMap.set(job.id, { ...job });
+        } else {
+          this.savedMap.delete(job.id);
+        }
+        this.notify();
+      }
+    }
   }
 
   isSaved(id: string | number): boolean {
@@ -136,7 +231,9 @@ export function useJobsActivity() {
     isJobClosed: (job?: any) => savedJobsStore.isJobClosed(job),
     markJobClosed: (id?: string | number | null, ...extraKeys: (string | number | undefined | null)[]) =>
       savedJobsStore.markJobClosed(id, ...extraKeys),
-    toggleSave: (job: SavedJobItem) => savedJobsStore.toggleSave(job),
+    toggleSave: (job: SavedJobItem, token?: string | null) => savedJobsStore.toggleSave(job, token),
     applyJob: (job: SavedJobItem) => savedJobsStore.applyJob(job),
+    clearStore: () => savedJobsStore.clearStore(),
+    refreshSavedFromBackend: (token: string | null) => savedJobsStore.refreshFromBackend(token),
   };
 }
