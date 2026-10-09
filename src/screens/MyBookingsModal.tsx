@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -33,7 +33,14 @@ export interface MyBookingsModalProps {
   accountType?: string; // 'Homeowner' | 'Kasambahay'
 }
 
-type TabType = 'active' | 'completed' | 'cancelled';
+type TabType = 'active' | 'pending' | 'completed' | 'cancelled';
+
+const TABS: { key: TabType; label: string }[] = [
+  { key: 'active', label: 'Active' },
+  { key: 'pending', label: 'Pending' },
+  { key: 'completed', label: 'Completed' },
+  { key: 'cancelled', label: 'Cancelled' },
+];
 
 export function MyBookingsModal({
   visible,
@@ -47,6 +54,11 @@ export function MyBookingsModal({
   const [bookings, setBookings] = useState<BookingItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [actionInProgress, setActionInProgress] = useState<boolean>(false);
+
+  const activeTabRef = useRef<TabType>(activeTab);
+  activeTabRef.current = activeTab;
 
   // Review Modal State
   const [reviewBooking, setReviewBooking] = useState<{
@@ -73,22 +85,75 @@ export function MyBookingsModal({
   const loadData = async (isPullToRefresh = false) => {
     if (!token) return;
     if (!isPullToRefresh) setLoading(true);
+    setErrorMessage(null);
+
+    const currentTab = activeTab;
 
     try {
       let data: BookingItem[] = [];
-      if (accountType === 'Homeowner') {
-        // Homeowner sees postings they created
-        data = await fetchMyBookings(token, activeTab);
+
+      if (currentTab === 'pending') {
+        // Pending postings are open listings waiting for worker/homeowner acceptance or bids.
+        if (accountType === 'Kasambahay') {
+          // Kasambahay may have posted a service or have an assigned pending listing
+          const [postedPending, assignedPending] = await Promise.all([
+            fetchMyBookings(token, 'pending'),
+            fetchMyAssignedBookings(token, 'pending'),
+          ]);
+          const map = new Map<string, BookingItem>();
+          [...postedPending, ...assignedPending].forEach((item) => {
+            if (item && item.booking_id) map.set(item.booking_id, item);
+          });
+          data = Array.from(map.values());
+        } else {
+          // Homeowner posted job openings waiting for workers
+          data = await fetchMyBookings(token, 'pending');
+        }
+      } else if (currentTab === 'active') {
+        if (accountType === 'Kasambahay') {
+          // Kasambahay active jobs: assigned contracts + any active bookings they posted
+          const [assignedActive, postedActive] = await Promise.all([
+            fetchMyAssignedBookings(token, 'active'),
+            fetchMyBookings(token, 'active'),
+          ]);
+          const map = new Map<string, BookingItem>();
+          [...assignedActive, ...postedActive].forEach((item) => {
+            if (item && item.booking_id) map.set(item.booking_id, item);
+          });
+          data = Array.from(map.values());
+        } else {
+          // Homeowner active contracts
+          data = await fetchMyBookings(token, 'active');
+        }
+      } else if (accountType === 'Homeowner') {
+        data = await fetchMyBookings(token, currentTab);
       } else {
-        // Kasambahay sees assigned jobs
-        data = await fetchMyAssignedBookings(token, activeTab);
+        // Kasambahay completed / cancelled
+        const [assigned, posted] = await Promise.all([
+          fetchMyAssignedBookings(token, currentTab),
+          fetchMyBookings(token, currentTab),
+        ]);
+        const map = new Map<string, BookingItem>();
+        [...assigned, ...posted].forEach((item) => {
+          if (item && item.booking_id) map.set(item.booking_id, item);
+        });
+        data = Array.from(map.values());
       }
+
+      // Concurrency guard: ignore if tab changed while in-flight
+      if (activeTabRef.current !== currentTab) return;
+
       setBookings(data);
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[MyBookingsModal] loadData failed:', err);
+      if (activeTabRef.current === currentTab) {
+        setErrorMessage(err?.message || 'Failed to load bookings. Please pull down to retry.');
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (activeTabRef.current === currentTab) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -99,18 +164,23 @@ export function MyBookingsModal({
   }, [visible, activeTab, accountType, token]);
 
   const handleStart = async (bookingId: string) => {
-    if (!token) return;
+    if (!token || actionInProgress) return;
     Alert.alert('Start Job', 'Mark this booking as In Progress?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Confirm Start',
         onPress: async () => {
-          const res = await startBooking(token, bookingId);
-          if (res.success) {
-            Alert.alert('Job Started', 'Status updated to In Progress.');
-            loadData();
-          } else {
-            Alert.alert('Error', res.error || 'Failed to start job.');
+          setActionInProgress(true);
+          try {
+            const res = await startBooking(token, bookingId);
+            if (res.success) {
+              Alert.alert('Job Started', 'Status updated to In Progress.');
+              loadData();
+            } else {
+              Alert.alert('Error', res.error || 'Failed to start job.');
+            }
+          } finally {
+            setActionInProgress(false);
           }
         },
       },
@@ -118,31 +188,36 @@ export function MyBookingsModal({
   };
 
   const handleComplete = async (bookingId: string) => {
-    if (!token) return;
+    if (!token || actionInProgress) return;
     Alert.alert('Complete Job', 'Confirm that this job has been completed?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Mark Complete',
         onPress: async () => {
-          const res = await completeBooking(token, bookingId);
-          if (res.success) {
-            loadData();
-            const matchingBooking = bookings.find((b) => b.booking_id === bookingId);
-            const target = accountType === 'Homeowner' ? matchingBooking?.assigned_partner : matchingBooking?.poster;
-            const targetName = target ? target.name : 'Partner';
+          setActionInProgress(true);
+          try {
+            const res = await completeBooking(token, bookingId);
+            if (res.success) {
+              loadData();
+              const matchingBooking = bookings.find((b) => b.booking_id === bookingId);
+              const target = accountType === 'Homeowner' ? matchingBooking?.assigned_partner : matchingBooking?.poster;
+              const targetName = target ? target.name : 'Partner';
 
-            Alert.alert(
-              'Job Completed',
-              'Booking marked as Completed! Mandatory quality feedback is now required under SerbiSure QA.'
-            );
+              Alert.alert(
+                'Job Completed',
+                'Booking marked as Completed! Mandatory quality feedback is now required under SerbiSure QA.'
+              );
 
-            setReviewBooking({
-              id: bookingId,
-              revieweeName: targetName,
-              isMandatory: true,
-            });
-          } else {
-            Alert.alert('Error', res.error || 'Failed to complete job.');
+              setReviewBooking({
+                id: bookingId,
+                revieweeName: targetName,
+                isMandatory: true,
+              });
+            } else {
+              Alert.alert('Error', res.error || 'Failed to complete job.');
+            }
+          } finally {
+            setActionInProgress(false);
           }
         },
       },
@@ -150,7 +225,7 @@ export function MyBookingsModal({
   };
 
   const handleConfirmCancellation = async (bookingId: string) => {
-    if (!token) return;
+    if (!token || actionInProgress) return;
     Alert.alert(
       'Confirm Cancellation',
       'Are you sure you want to approve this cancellation? Both parties will have confirmed, and the booking will be cancelled.',
@@ -160,12 +235,17 @@ export function MyBookingsModal({
           text: 'Confirm Cancellation',
           style: 'destructive',
           onPress: async () => {
-            const res = await cancelBooking(token, bookingId, { action: 'confirm' });
-            if (res.success) {
-              Alert.alert('Booking Cancelled', 'Both parties agreed. The booking has been cancelled.');
-              loadData();
-            } else {
-              Alert.alert('Error', res.error || 'Failed to confirm cancellation.');
+            setActionInProgress(true);
+            try {
+              const res = await cancelBooking(token, bookingId, { action: 'confirm' });
+              if (res.success) {
+                Alert.alert('Booking Cancelled', 'Both parties agreed. The booking has been cancelled.');
+                loadData();
+              } else {
+                Alert.alert('Error', res.error || 'Failed to confirm cancellation.');
+              }
+            } finally {
+              setActionInProgress(false);
             }
           },
         },
@@ -174,7 +254,7 @@ export function MyBookingsModal({
   };
 
   const handleDeclineCancellation = async (bookingId: string, isWithdrawal = false) => {
-    if (!token) return;
+    if (!token || actionInProgress) return;
     Alert.alert(
       isWithdrawal ? 'Withdraw Request' : 'Decline Cancellation',
       isWithdrawal
@@ -185,15 +265,20 @@ export function MyBookingsModal({
         {
           text: isWithdrawal ? 'Withdraw Request' : 'Decline Request',
           onPress: async () => {
-            const res = await cancelBooking(token, bookingId, { action: 'decline' });
-            if (res.success) {
-              Alert.alert(
-                isWithdrawal ? 'Request Withdrawn' : 'Request Declined',
-                isWithdrawal ? 'Your cancellation request was withdrawn.' : 'Cancellation request was declined. The booking remains active.'
-              );
-              loadData();
-            } else {
-              Alert.alert('Error', res.error || 'Failed to update cancellation.');
+            setActionInProgress(true);
+            try {
+              const res = await cancelBooking(token, bookingId, { action: 'decline' });
+              if (res.success) {
+                Alert.alert(
+                  isWithdrawal ? 'Request Withdrawn' : 'Request Declined',
+                  isWithdrawal ? 'Your cancellation request was withdrawn.' : 'Cancellation request was declined. The booking remains active.'
+                );
+                loadData();
+              } else {
+                Alert.alert('Error', res.error || 'Failed to update cancellation.');
+              }
+            } finally {
+              setActionInProgress(false);
             }
           },
         },
@@ -202,7 +287,7 @@ export function MyBookingsModal({
   };
 
   const handleCancel = async (bookingId: string) => {
-    if (!token) return;
+    if (!token || actionInProgress) return;
     const booking = bookings.find((b) => b.booking_id === bookingId);
     if (!booking) return;
 
@@ -213,12 +298,17 @@ export function MyBookingsModal({
           text: 'Yes, Cancel',
           style: 'destructive',
           onPress: async () => {
-            const res = await cancelBooking(token, bookingId);
-            if (res.success) {
-              Alert.alert('Cancelled', 'Booking has been cancelled.');
-              loadData();
-            } else {
-              Alert.alert('Error', res.error || 'Failed to cancel booking.');
+            setActionInProgress(true);
+            try {
+              const res = await cancelBooking(token, bookingId);
+              if (res.success) {
+                Alert.alert('Cancelled', 'Booking has been cancelled.');
+                loadData();
+              } else {
+                Alert.alert('Error', res.error || 'Failed to cancel booking.');
+              }
+            } finally {
+              setActionInProgress(false);
             }
           },
         },
@@ -248,12 +338,17 @@ export function MyBookingsModal({
           text: 'Request Cancellation',
           style: 'destructive',
           onPress: async () => {
-            const res = await cancelBooking(token, bookingId, { action: 'request' });
-            if (res.success) {
-              Alert.alert('Cancellation Requested', res.message || 'Waiting for the other party to confirm.');
-              loadData();
-            } else {
-              Alert.alert('Cannot Cancel', res.error || 'Failed to request cancellation.');
+            setActionInProgress(true);
+            try {
+              const res = await cancelBooking(token, bookingId, { action: 'request' });
+              if (res.success) {
+                Alert.alert('Cancellation Requested', res.message || 'Waiting for the other party to confirm.');
+                loadData();
+              } else {
+                Alert.alert('Cannot Cancel', res.error || 'Failed to request cancellation.');
+              }
+            } finally {
+              setActionInProgress(false);
             }
           },
         },
@@ -324,16 +419,16 @@ export function MyBookingsModal({
 
         {/* Tab Switcher */}
         <View style={styles.tabsRow}>
-          {(['active', 'completed', 'cancelled'] as TabType[]).map((tab) => {
-            const isCurrent = activeTab === tab;
+          {TABS.map((tab) => {
+            const isCurrent = activeTab === tab.key;
             return (
               <Pressable
-                key={tab}
+                key={tab.key}
                 style={[styles.tabItem, isCurrent && styles.tabItemActive]}
-                onPress={() => setActiveTab(tab)}
+                onPress={() => setActiveTab(tab.key)}
               >
                 <Text style={[styles.tabText, isCurrent && styles.tabTextActive]}>
-                  {tab === 'active' ? 'Active' : tab === 'completed' ? 'Completed' : 'Cancelled'}
+                  {tab.label}
                 </Text>
               </Pressable>
             );
@@ -358,6 +453,19 @@ export function MyBookingsModal({
         >
           {loading ? (
             <ActivityIndicator color="#FFB43B" size="large" style={{ marginTop: 40 }} />
+          ) : errorMessage ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="cloud-offline-outline" size={44} color="#EF4444" />
+              <Text style={styles.emptyTitle}>Unable to Load Bookings</Text>
+              <Text style={styles.emptySubtitle}>{errorMessage}</Text>
+              <Pressable
+                style={styles.retryBtn}
+                onPress={() => loadData()}
+              >
+                <Ionicons name="refresh" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.retryBtnText}>Retry</Text>
+              </Pressable>
+            </View>
           ) : bookings.length > 0 ? (
             bookings.map((booking) => {
               const counterparty =
@@ -475,12 +583,14 @@ export function MyBookingsModal({
                       <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
                         <Pressable
                           style={[styles.cancelBannerBtn, { backgroundColor: '#EF4444' }]}
+                          disabled={actionInProgress}
                           onPress={() => handleConfirmCancellation(booking.booking_id)}
                         >
                           <Text style={styles.cancelBannerBtnText}>Confirm Cancel</Text>
                         </Pressable>
                         <Pressable
                           style={[styles.cancelBannerBtn, { backgroundColor: '#4B5563' }]}
+                          disabled={actionInProgress}
                           onPress={() => handleDeclineCancellation(booking.booking_id)}
                         >
                           <Text style={styles.cancelBannerBtnText}>Decline & Keep</Text>
@@ -501,6 +611,7 @@ export function MyBookingsModal({
                       </View>
                       <Pressable
                         style={styles.cancelWithdrawBtn}
+                        disabled={actionInProgress}
                         onPress={() => handleDeclineCancellation(booking.booking_id, true)}
                       >
                         <Text style={styles.cancelWithdrawBtnText}>Withdraw</Text>
@@ -531,6 +642,7 @@ export function MyBookingsModal({
                     {booking.booking_status === 'Accepted' && (
                       <Pressable
                         style={styles.actionBtnPrimary}
+                        disabled={actionInProgress}
                         onPress={() => handleStart(booking.booking_id)}
                       >
                         <Text style={styles.actionBtnPrimaryText}>Start Job</Text>
@@ -540,6 +652,7 @@ export function MyBookingsModal({
                     {booking.booking_status === 'InProgress' && (
                       <Pressable
                         style={[styles.actionBtnPrimary, { backgroundColor: '#10B981' }]}
+                        disabled={actionInProgress}
                         onPress={() => handleComplete(booking.booking_id)}
                       >
                         <Text style={styles.actionBtnPrimaryText}>Complete</Text>
@@ -552,7 +665,7 @@ export function MyBookingsModal({
                           styles.actionBtnPrimary,
                           booking.has_reviewed && { backgroundColor: '#E5E7EB' },
                         ]}
-                        disabled={booking.has_reviewed}
+                        disabled={booking.has_reviewed || actionInProgress}
                         onPress={() => {
                           const targetName = counterparty ? counterparty.name : 'Partner';
                           setReviewBooking({
@@ -582,6 +695,7 @@ export function MyBookingsModal({
                       booking.can_cancel === false ? (
                         <Pressable
                           style={[styles.actionBtnDanger, { backgroundColor: '#F3F4F6', borderColor: '#E5E7EB' }]}
+                          disabled={actionInProgress}
                           onPress={() => handleCancel(booking.booking_id)}
                         >
                           <Ionicons name="lock-closed" size={12} color="#9CA3AF" style={{ marginRight: 3 }} />
@@ -590,6 +704,7 @@ export function MyBookingsModal({
                       ) : (
                         <Pressable
                           style={styles.actionBtnDanger}
+                          disabled={actionInProgress}
                           onPress={() => handleCancel(booking.booking_id)}
                         >
                           <Text style={styles.actionBtnDangerText}>Cancel</Text>
@@ -602,12 +717,36 @@ export function MyBookingsModal({
             })
           ) : (
             <View style={styles.emptyCard}>
-              <Ionicons name="calendar-clear-outline" size={42} color="#D1D5DB" />
-              <Text style={styles.emptyTitle}>No {activeTab} bookings</Text>
+              <Ionicons
+                name={
+                  activeTab === 'active'
+                    ? 'briefcase-outline'
+                    : activeTab === 'pending'
+                    ? 'hourglass-outline'
+                    : activeTab === 'completed'
+                    ? 'checkmark-done-circle-outline'
+                    : 'close-circle-outline'
+                }
+                size={44}
+                color="#9CA3AF"
+              />
+              <Text style={styles.emptyTitle}>
+                {activeTab === 'active'
+                  ? 'No Active Contracts'
+                  : activeTab === 'pending'
+                  ? 'No Pending Postings'
+                  : activeTab === 'completed'
+                  ? 'No Completed Bookings'
+                  : 'No Cancelled Bookings'}
+              </Text>
               <Text style={styles.emptySubtitle}>
                 {activeTab === 'active'
-                  ? 'Your active bookings and contracts will appear here.'
-                  : `You have no ${activeTab} bookings at this time.`}
+                  ? 'Confirmed bookings and ongoing domestic work contracts will appear here.'
+                  : activeTab === 'pending'
+                  ? 'Open postings waiting for worker assignment, acceptance, or counter-offers will appear here.'
+                  : activeTab === 'completed'
+                  ? 'Domestic work contracts that have reached completion will appear here.'
+                  : 'Bookings that were cancelled or withdrawn will appear here.'}
               </Text>
             </View>
           )}
@@ -684,9 +823,9 @@ const styles = StyleSheet.create({
   tabsRow: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    gap: 8,
+    gap: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E7EB',
   },
@@ -701,7 +840,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFB43B',
   },
   tabText: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '600',
     color: '#4B5563',
   },
@@ -977,6 +1116,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     maxWidth: 240,
+  },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFB43B',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 8,
+    marginTop: 14,
+  },
+  retryBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 13,
   },
   mandatoryFeedbackBanner: {
     marginHorizontal: 16,
