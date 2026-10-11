@@ -34,6 +34,8 @@ export interface Translations {
   // Home Screen
   greeting: string;
   searchPlaceholder: string;
+  searchWorkers: string;
+  searchJobs: string;
   popularServices: string;
   featuredWorkers: string;
   topEmployers: string;
@@ -73,6 +75,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
 
     greeting: 'Hello',
     searchPlaceholder: 'Search services...',
+    searchWorkers: 'Search workers or services...',
+    searchJobs: 'Search jobs or locations...',
     popularServices: 'Popular Services',
     featuredWorkers: 'Featured Kasambahay',
     topEmployers: 'Top Homeowners',
@@ -109,6 +113,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
 
     greeting: 'Kamusta',
     searchPlaceholder: 'Maghanap ng serbisyo...',
+    searchWorkers: 'Maghanap ng kasambahay o serbisyo...',
+    searchJobs: 'Maghanap ng trabaho o lokasyon...',
     popularServices: 'Mga Sikat na Serbisyo',
     featuredWorkers: 'Mga Tampok na Kasambahay',
     topEmployers: 'Mga Nangungunang Employer',
@@ -145,6 +151,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
 
     greeting: 'Maayong Adlaw',
     searchPlaceholder: 'Pangita og serbisyo...',
+    searchWorkers: 'Pangita og kasambahay o serbisyo...',
+    searchJobs: 'Pangita og trabaho o lokasyon...',
     popularServices: 'Inilang mga Serbisyo',
     featuredWorkers: 'Mga Tampok nga Kasambahay',
     topEmployers: 'Mga Pangunang Homeowner',
@@ -181,6 +189,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
 
     greeting: 'Maayong Adlaw',
     searchPlaceholder: 'Pangita og serbisyo...',
+    searchWorkers: 'Pangita og kasambahay o serbisyo...',
+    searchJobs: 'Pangita og trabaho o lokasyon...',
     popularServices: 'Inilang mga Serbisyo',
     featuredWorkers: 'Mga Tampok nga Kasambahay',
     topEmployers: 'Mga Pangunang Homeowner',

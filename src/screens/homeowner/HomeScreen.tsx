@@ -5,13 +5,11 @@ import {
   View,
   Image,
   ScrollView,
-  TextInput,
   Pressable,
   RefreshControl,
-  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../../context/LanguageContext';
 import { useUser } from '../../context/UserContext';
 import THEME from '../../config/theme';
@@ -22,6 +20,8 @@ import { UserProfileModal } from '../UserProfileModal';
 import { ChatDetailScreen } from '../ChatDetailScreen';
 import { JobDetailSheet } from '../../components/JobDetailSheet';
 import { useJobsActivity } from '../../store/savedJobsStore';
+import { HomeFeedFilters, HomeFeedHeader, HomeFeedEmptyState, HomeFeedLoadingState } from '../../components/HomeFeedControls';
+import { HomeFeedCategory, matchesHomeFeedFilters } from '../../utils/homeFeedFilters';
 
 const logoSource = require('../../../assets/serbisure_new_clean.png');
 
@@ -55,105 +55,16 @@ function formatTimeAgo(dateString?: string) {
   return `Posted ${diffDays}d ago`;
 }
 
-const CATEGORIES = [
-  {
-    key: 'Child Care',
-    label: 'Child Care',
-    icon: 'face-woman-outline' as const,
-    matchKeys: ['child_care', 'child care', 'babysitter', 'baby sitter', 'nanny'],
-  },
-  {
-    key: 'Cook',
-    label: 'Cook',
-    icon: 'silverware-fork-knife' as const,
-    matchKeys: ['cooking', 'cook', 'chef', 'kitchen'],
-  },
-  {
-    key: 'Cleaner',
-    label: 'Cleaner',
-    icon: 'broom' as const,
-    matchKeys: ['cleaning', 'cleaner', 'clean', 'housekeeping', 'maid'],
-  },
-  {
-    key: 'Laundry',
-    label: 'Laundry',
-    icon: 'washing-machine' as const,
-    matchKeys: ['laundry', 'wash', 'labada', 'ironing'],
-  },
-];
-
-// Fallback sample posts if backend feed is empty or offline
-const FALLBACK_POSTS: KasambahayPost[] = [
-  {
-    id: 'sample-1',
-    partnerId: 'sample-p1',
-    name: 'Liza Soriano',
-    avatar: 'https://i.pravatar.cc/150?u=liza',
-    role: 'Child Care',
-    categories: ['Child Care'],
-    termTag: 'Stay-in',
-    rate: '₱500',
-    rateUnit: '/ day',
-    location: 'Nazareth, Cagayan de Oro',
-    time: 'Posted 2h ago',
-    description: 'Experienced child caregiver with 5 years experience handling toddlers and infants. CPR & First-Aid certified.',
-    tags: ['Child Care', 'Stay-in', 'Verified'],
-  },
-  {
-    id: 'sample-2',
-    partnerId: 'sample-p2',
-    name: 'Bald Seki',
-    avatar: 'https://i.pravatar.cc/150?u=bald',
-    role: 'Cook',
-    categories: ['Cook'],
-    termTag: 'Part-time',
-    rate: '₱600',
-    rateUnit: '/ day',
-    location: 'Macasandig, Cagayan de Oro',
-    time: 'Posted 5h ago',
-    description: 'Specializes in Filipino and Asian cuisine, meal prep, grocery planning, and kitchen sanitization.',
-    tags: ['Cook', 'Part-time', 'Verified'],
-  },
-  {
-    id: 'sample-3',
-    partnerId: 'sample-p3',
-    name: 'Elena Santos',
-    avatar: 'https://i.pravatar.cc/150?u=elena',
-    role: 'Cleaner',
-    categories: ['Cleaner'],
-    termTag: 'Part-time',
-    rate: '₱450',
-    rateUnit: '/ day',
-    location: 'Carmen, Cagayan de Oro',
-    time: 'Posted 1d ago',
-    description: 'Detail-oriented cleaner available for deep cleaning, sanitation, dusting, and room organization.',
-    tags: ['Cleaner', 'Part-time', 'Verified'],
-  },
-  {
-    id: 'sample-4',
-    partnerId: 'sample-p4',
-    name: 'Rowena Cruz',
-    avatar: 'https://i.pravatar.cc/150?u=rowena',
-    role: 'Laundry',
-    categories: ['Laundry'],
-    termTag: 'Part-time',
-    rate: '₱400',
-    rateUnit: '/ day',
-    location: 'Lapasan, Cagayan de Oro',
-    time: 'Posted 1d ago',
-    description: 'Fast, gentle garment washing, delicate hand-wash, and crisp fabric ironing service.',
-    tags: ['Laundry', 'Part-time', 'Verified'],
-  },
-];
-
 export function HomeScreen({
   avatarUri,
   onAvatarPress,
+  onViewAll,
   token,
 }: {
   avatarUri?: string | null;
   onAvatarPress?: () => void;
   onViewProfile?: () => void;
+  onViewAll?: () => void;
   token?: string | null;
 }) {
   const insets = useSafeAreaInsets();
@@ -167,7 +78,7 @@ export function HomeScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<HomeFeedCategory | null>(null);
 
   // Modals state
   const [selectedKasambahay, setSelectedKasambahay] = useState<KasambahayPost | null>(null);
@@ -261,11 +172,10 @@ export function HomeScreen({
           return;
         }
       }
-      // If API returned empty array, use fallback sample posts
-      setPosts(FALLBACK_POSTS);
+      setPosts([]);
     } catch (error) {
-      console.warn('[HomeownerHomeScreen] Could not load live feed, using fallback', error);
-      setPosts(FALLBACK_POSTS);
+      console.warn('[HomeownerHomeScreen] Could not load live feed', error);
+      setPosts([]);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -285,14 +195,6 @@ export function HomeScreen({
       fetchKasambahayPosts(),
       effectiveToken ? refreshSavedFromBackend(effectiveToken) : Promise.resolve(),
     ]);
-  };
-
-  const handleCategoryPress = (catKey: string) => {
-    if (selectedCategory === catKey) {
-      setSelectedCategory(null);
-    } else {
-      setSelectedCategory(catKey);
-    }
   };
 
   const handleOpenKasambahayProfile = (post: KasambahayPost) => {
@@ -328,44 +230,17 @@ export function HomeScreen({
     }, effectiveToken);
   };
 
-  // Filter posts based on active category & search query
   const filteredPosts = posts.filter((post) => {
-    if (isClosed(post.id) || (post.partnerId && isClosed(post.partnerId))) {
-      return false;
-    }
-
-    if (selectedCategory) {
-      const catConfig = CATEGORIES.find((c) => c.key === selectedCategory);
-      if (catConfig) {
-        const postTagsLower = [
-          ...post.categories.map((c) => c.toLowerCase()),
-          post.role.toLowerCase(),
-          ...post.tags.map((t) => t.toLowerCase()),
-        ];
-        const matchesCategory =
-          catConfig.matchKeys.some((k) => postTagsLower.some((t) => t.includes(k))) ||
-          postTagsLower.some((t) => t.includes('all-around'));
-        if (!matchesCategory) return false;
-      }
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      const matchesName = post.name.toLowerCase().includes(q);
-      const matchesRole = post.role.toLowerCase().includes(q);
-      const matchesLoc = post.location.toLowerCase().includes(q);
-      const matchesDesc = post.description.toLowerCase().includes(q);
-      const matchesCategories = post.categories.some((c) => c.toLowerCase().includes(q));
-      const matchesTags = post.tags.some((t) => t.toLowerCase().includes(q));
-
-      if (!matchesName && !matchesRole && !matchesLoc && !matchesDesc && !matchesCategories && !matchesTags) {
-        return false;
-      }
-    }
-
-    return true;
+    if (isClosed(post.id) || (post.partnerId && isClosed(post.partnerId))) return false;
+    return matchesHomeFeedFilters(
+      [...post.categories, post.role, ...post.tags],
+      [post.name, post.location, post.description, post.termTag],
+      selectedCategory,
+      searchQuery,
+    );
   });
 
+  const hasActiveFilters = !!selectedCategory || searchQuery.trim().length > 0;
   const today = new Date();
   const dateString = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
 
@@ -378,6 +253,8 @@ export function HomeScreen({
         style={{ flex: 1, backgroundColor: '#F6F5F2' }}
         contentContainerStyle={[styles.scrollContent, { paddingTop: 8 }]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -413,119 +290,25 @@ export function HomeScreen({
           </View>
         </View>
 
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={18} color={THEME.colors.textMuted} style={styles.searchIcon} />
-          <TextInput
-            placeholder={t.searchPlaceholder || 'Search services, kasambahay, location...'}
-            placeholderTextColor={THEME.colors.textMuted}
-            style={styles.searchInput}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            returnKeyType="search"
-          />
-          {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery('')} hitSlop={8} style={{ padding: 4 }}>
-              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-            </Pressable>
-          )}
-        </View>
-
-        {/* Categories Grid (Interactive Filter Buttons) */}
-        <View style={styles.categoriesContainer}>
-          {CATEGORIES.map((cat) => {
-            const isActive = selectedCategory === cat.key;
-            return (
-              <Pressable
-                key={cat.key}
-                style={[
-                  styles.categoryItem,
-                  isActive && styles.categoryItemActive,
-                ]}
-                onPress={() => handleCategoryPress(cat.key)}
-              >
-                <View style={[styles.categoryIconCircle, isActive && styles.categoryIconCircleActive]}>
-                  <MaterialCommunityIcons
-                    name={cat.icon}
-                    size={26}
-                    color={isActive ? '#FFFFFF' : '#0D0D11'}
-                  />
-                </View>
-                <Text
-                  style={[styles.categoryLabel, isActive && styles.categoryLabelActive]}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                >
-                  {cat.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {/* Active Filter Indicator Bar */}
-        {(selectedCategory || searchQuery.trim().length > 0) && (
-          <View style={styles.activeFilterBanner}>
-            <View style={styles.activeFilterInfo}>
-              <Ionicons name="funnel" size={13} color="#FFB43B" style={{ marginRight: 6 }} />
-              <Text style={styles.activeFilterText}>
-                {selectedCategory ? `Filter: ${selectedCategory}` : ''}
-                {selectedCategory && searchQuery.trim() ? ' • ' : ''}
-                {searchQuery.trim() ? `"${searchQuery.trim()}"` : ''}
-              </Text>
-            </View>
-            <Pressable
-              onPress={() => {
-                setSelectedCategory(null);
-                setSearchQuery('');
-              }}
-              style={styles.clearFilterBtn}
-              hitSlop={8}
-            >
-              <Text style={styles.clearFilterBtnText}>Show All</Text>
-              <Ionicons name="close-circle" size={15} color="#FFB43B" />
-            </Pressable>
-          </View>
-        )}
-
-        {/* Recent Posts from Kasambahays Section */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle} numberOfLines={1} adjustsFontSizeToFit>
-            Recent Posts
-          </Text>
-          <Text style={styles.seeAllText}>
-            {filteredPosts.length} available
-          </Text>
-        </View>
+        <HomeFeedFilters
+          placeholder={t.searchWorkers}
+          searchQuery={searchQuery}
+          selectedCategory={selectedCategory}
+          onSearchChange={setSearchQuery}
+          onCategoryChange={setSelectedCategory}
+        />
+        <HomeFeedHeader onViewAll={onViewAll} />
 
         {/* Posts List */}
         <View style={styles.workerList}>
           {isLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#FFB43B" />
-              <Text style={styles.loadingText}>Loading recent posts...</Text>
-            </View>
+            <HomeFeedLoadingState />
           ) : filteredPosts.length === 0 ? (
-            <View style={styles.emptyStateCard}>
-              <Ionicons name="search-outline" size={48} color="#D1D5DB" style={{ marginBottom: 12 }} />
-              <Text style={styles.emptyStateTitle}>No posts found</Text>
-              <Text style={styles.emptyStateSub}>
-                {selectedCategory || searchQuery
-                  ? 'No kasambahays match your current filter. Try searching for other services or clear filters.'
-                  : 'There are no active postings at the moment. Check back soon!'}
-              </Text>
-              {(selectedCategory || searchQuery.length > 0) && (
-                <Pressable
-                  style={styles.resetFilterBtn}
-                  onPress={() => {
-                    setSelectedCategory(null);
-                    setSearchQuery('');
-                  }}
-                >
-                  <Text style={styles.resetFilterBtnText}>Reset Filters</Text>
-                </Pressable>
-              )}
-            </View>
+            <HomeFeedEmptyState
+              role="homeowner"
+              hasActiveFilters={hasActiveFilters}
+              onResetFilters={() => { setSelectedCategory(null); setSearchQuery(''); }}
+            />
           ) : (
             filteredPosts.map((post) => (
               <View key={post.id} style={styles.workerCard}>
@@ -720,167 +503,8 @@ const styles = StyleSheet.create({
     fontFamily: THEME.typography.fontFamily.display,
     color: THEME.colors.ink,
   },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: THEME.colors.white,
-    borderRadius: THEME.roundness.pill,
-    marginHorizontal: 20,
-    marginTop: 14,
-    marginBottom: 10,
-    paddingHorizontal: 18,
-    height: 48,
-  },
-  searchIcon: {
-    marginRight: 10,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: THEME.typography.fontFamily.bodyMedium,
-    color: THEME.colors.ink,
-  },
-  categoriesContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  categoryItem: {
-    flex: 1,
-    aspectRatio: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: THEME.colors.white,
-    borderRadius: 22,
-    padding: 6,
-  },
-  categoryItemActive: {
-    backgroundColor: '#FFB43B',
-  },
-  categoryIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  categoryIconCircleActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
-  },
-  categoryLabel: {
-    marginTop: 4,
-    fontSize: 10.5,
-    fontFamily: THEME.typography.fontFamily.secondaryMedium,
-    color: THEME.colors.ink,
-    textAlign: 'center',
-  },
-  categoryLabelActive: {
-    color: '#FFFFFF',
-    fontFamily: THEME.typography.fontFamily.display,
-    fontWeight: '700',
-  },
-  activeFilterBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFF8EC',
-    marginHorizontal: 20,
-    marginBottom: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 14,
-  },
-  activeFilterInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  activeFilterText: {
-    fontSize: 12,
-    fontFamily: THEME.typography.fontFamily.secondarySemiBold,
-    color: '#B45309',
-  },
-  clearFilterBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-  },
-  clearFilterBtnText: {
-    fontSize: 11.5,
-    fontFamily: THEME.typography.fontFamily.secondaryBold,
-    color: '#B45309',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginTop: 14,
-    marginBottom: 14,
-  },
-  sectionTitle: {
-    flex: 1,
-    fontSize: 21,
-    fontFamily: THEME.typography.fontFamily.display,
-    color: THEME.colors.ink,
-    marginRight: 12,
-  },
-  seeAllText: {
-    flexShrink: 0,
-    fontSize: 12.5,
-    color: THEME.colors.brandDark,
-    fontFamily: THEME.typography.fontFamily.secondarySemiBold,
-  },
   workerList: {
     paddingHorizontal: 20,
-  },
-  loadingContainer: {
-    paddingVertical: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 13,
-    fontFamily: THEME.typography.fontFamily.secondaryMedium,
-    color: THEME.colors.textMuted,
-  },
-  emptyStateCard: {
-    backgroundColor: THEME.colors.white,
-    borderRadius: 24,
-    padding: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 10,
-  },
-  emptyStateTitle: {
-    fontSize: 17,
-    fontFamily: THEME.typography.fontFamily.display,
-    color: THEME.colors.ink,
-    marginBottom: 6,
-  },
-  emptyStateSub: {
-    fontSize: 12.5,
-    fontFamily: THEME.typography.fontFamily.secondaryRegular,
-    color: THEME.colors.textMuted,
-    textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 16,
-  },
-  resetFilterBtn: {
-    backgroundColor: '#FFB43B',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: THEME.roundness.pill,
-  },
-  resetFilterBtnText: {
-    color: '#FFFFFF',
-    fontFamily: THEME.typography.fontFamily.display,
-    fontSize: 12.5,
   },
   workerCard: {
     backgroundColor: THEME.colors.white,

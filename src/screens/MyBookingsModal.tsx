@@ -31,6 +31,7 @@ export interface MyBookingsModalProps {
   onClose: () => void;
   token?: string | null;
   accountType?: string; // 'Homeowner' | 'Kasambahay'
+  initialTab?: TabType;
 }
 
 type TabType = 'active' | 'pending' | 'completed' | 'cancelled';
@@ -47,10 +48,11 @@ export function MyBookingsModal({
   onClose,
   token,
   accountType = 'Homeowner',
+  initialTab = 'active',
 }: MyBookingsModalProps) {
   const insets = useSafeAreaInsets();
 
-  const [activeTab, setActiveTab] = useState<TabType>('active');
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [bookings, setBookings] = useState<BookingItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -156,6 +158,12 @@ export function MyBookingsModal({
       }
     }
   };
+
+  useEffect(() => {
+    if (visible && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [visible, initialTab]);
 
   useEffect(() => {
     if (visible) {

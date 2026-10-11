@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, Image, ScrollView, Pressable, Modal, RefreshControl } from 'react-native';
+import { StyleSheet, Text, View, Image, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../../context/LanguageContext';
@@ -12,6 +12,8 @@ import { API_BASE_URL, fetchWithTimeout } from '../../config/api';
 import { formatBookingAddress, formatBookingLocationShort } from '../../api/bookingApi';
 import { ChatDetailScreen } from '../ChatDetailScreen';
 import { UserProfileModal } from '../UserProfileModal';
+import { HomeFeedFilters, HomeFeedHeader, HomeFeedEmptyState, HomeFeedLoadingState } from '../../components/HomeFeedControls';
+import { HomeFeedCategory, matchesHomeFeedFilters } from '../../utils/homeFeedFilters';
 
 const logoSource = require('../../../assets/serbisure_new_clean.png');
 
@@ -60,6 +62,8 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
   const [jobs, setJobs] = useState<JobOffer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<HomeFeedCategory | null>(null);
   const [selectedJob, setSelectedJob] = useState<JobOffer | null>(null);
   const { isSaved, isApplied, isClosed, isJobClosed, toggleSave, applyJob, markJobClosed, refreshSavedFromBackend } = useJobsActivity();
   const [activeChat, setActiveChat] = useState<{
@@ -103,7 +107,7 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
 
       if (response.ok) {
         const data = await response.json();
-        const liveJobs: JobOffer[] = data.map((item: any) => {
+        const liveJobs: JobOffer[] = (Array.isArray(data) ? data : []).map((item: any) => {
           const rawCategories = Array.isArray(item.service_category)
             ? item.service_category
             : item.service_category
@@ -156,9 +160,12 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
           };
         });
         setJobs(liveJobs);
+      } else {
+        setJobs([]);
       }
     } catch (error) {
       console.warn('[HomeScreen] Failed to fetch feed', error);
+      setJobs([]);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -166,8 +173,8 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
   };
 
   useEffect(() => {
+    fetchJobs();
     if (effectiveToken) {
-      fetchJobs();
       refreshSavedFromBackend(effectiveToken);
     }
   }, [effectiveToken]);
@@ -217,6 +224,17 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
     }
   };
 
+  const visibleJobs = jobs.filter((job) => {
+    if (isClosed(job.id) || isClosed(job.partnerId) || isClosed(job.employerName)) return false;
+    return matchesHomeFeedFilters(
+      [job.roleTag, ...(job.tags || [])],
+      [job.employerName, job.location, job.aboutText, job.termTag, job.setupTag || ''],
+      selectedCategory,
+      searchQuery,
+    );
+  });
+  const hasActiveFilters = !!selectedCategory || searchQuery.trim().length > 0;
+
   const today = new Date();
   const dateString = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
 
@@ -228,6 +246,8 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
         style={{ flex: 1, backgroundColor: '#F6F5F2' }}
         contentContainerStyle={[styles.scrollContent, { paddingTop: 8 }]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -261,30 +281,27 @@ export function HomeScreen({ avatarUri, onAvatarPress, onViewProfile, onViewAll,
           </View>
         </View>
 
-        {/* Section Header */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle} numberOfLines={1} adjustsFontSizeToFit>Recent Posts</Text>
-          <Pressable onPress={onViewAll} hitSlop={10}>
-            <Text style={styles.seeAllText}>View All</Text>
-          </Pressable>
-        </View>
+        <HomeFeedFilters
+          placeholder={t.searchJobs}
+          searchQuery={searchQuery}
+          selectedCategory={selectedCategory}
+          onSearchChange={setSearchQuery}
+          onCategoryChange={setSelectedCategory}
+        />
+        <HomeFeedHeader onViewAll={onViewAll} />
 
         {/* Job List */}
         {(() => {
-          const visibleJobs = jobs.filter(
-            (job) => !isClosed(job.id) && !isClosed(job.partnerId) && !isClosed(job.employerName)
-          );
-
           return (
             <View style={styles.jobList}>
-              {visibleJobs.length === 0 && !isLoading ? (
-                <View style={styles.emptyStateContainer}>
-                  <Ionicons name="newspaper-outline" size={36} color="#CBD5E1" style={{ marginBottom: 8 }} />
-                  <Text style={styles.emptyStateTitle}>No Recent Posts</Text>
-                  <Text style={styles.emptyStateSubtitle}>
-                    There are no open job requests at the moment. Check back soon!
-                  </Text>
-                </View>
+              {isLoading ? (
+                <HomeFeedLoadingState />
+              ) : visibleJobs.length === 0 ? (
+                <HomeFeedEmptyState
+                  role="kasambahay"
+                  hasActiveFilters={hasActiveFilters}
+                  onResetFilters={() => { setSelectedCategory(null); setSearchQuery(''); }}
+                />
               ) : (
                 visibleJobs.map((job) => {
                   const applied = isApplied(job.id);
@@ -474,35 +491,6 @@ const styles = StyleSheet.create({
     fontSize: 19,
     fontFamily: THEME.typography.fontFamily.display,
     color: THEME.colors.ink,
-  },
-  filterBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: THEME.colors.canvas,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginTop: 22,
-    marginBottom: 14,
-  },
-  sectionTitle: {
-    flex: 1,
-    fontSize: 22,
-    fontFamily: THEME.typography.fontFamily.display,
-    color: THEME.colors.ink,
-    marginRight: 12,
-  },
-  seeAllText: {
-    flexShrink: 0,
-    fontSize: 13,
-    color: THEME.colors.brandDark,
-    fontFamily: THEME.typography.fontFamily.secondarySemiBold,
   },
   jobList: {
     paddingHorizontal: 20,
@@ -796,28 +784,5 @@ const styles = StyleSheet.create({
     fontFamily: THEME.typography.fontFamily.secondaryRegular,
     color: THEME.colors.textMuted,
     textAlign: 'center',
-  },
-  emptyStateContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  emptyStateTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0D0D11',
-    marginBottom: 4,
-    fontFamily: THEME.typography.fontFamily.display,
-  },
-  emptyStateSubtitle: {
-    fontSize: 12.5,
-    color: '#64748B',
-    textAlign: 'center',
-    lineHeight: 18,
-    fontWeight: '500',
-    fontFamily: THEME.typography.fontFamily.secondaryRegular,
   },
 });

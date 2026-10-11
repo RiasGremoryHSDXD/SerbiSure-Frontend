@@ -39,6 +39,7 @@ import { AllReviewsModal } from '../AllReviewsModal';
 import { NotificationBell } from '../../context/NotificationContext';
 import { fetchNotifications } from '../../api/notificationsApi';
 import { formatRegisteredLocation } from '../../services/locationService';
+import { BookingItem, fetchMyBookings, cancelBooking, formatBookingAddress } from '../../api/bookingApi';
 import THEME from '../../config/theme';
 
 const logoSource = require('../../../assets/serbisure-logo.png');
@@ -86,6 +87,64 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
   const [showContactNumber, setShowContactNumber] = useState<boolean>(user.showContactNumber ?? false);
   const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const [pendingPosts, setPendingPosts] = useState<BookingItem[]>([]);
+  const [isLoadingPendingPosts, setIsLoadingPendingPosts] = useState(false);
+  const [pendingPostsError, setPendingPostsError] = useState<string | null>(null);
+  const [activeProfileTab, setActiveProfileTab] = useState<'posts' | 'reviews'>('posts');
+  const [isCancellingPostId, setIsCancellingPostId] = useState<string | null>(null);
+  const [bookingsModalInitialTab, setBookingsModalInitialTab] = useState<'active' | 'pending' | 'completed' | 'cancelled'>('active');
+
+  const openMyBookings = (initialTab: 'active' | 'pending' | 'completed' | 'cancelled' = 'active') => {
+    setBookingsModalInitialTab(initialTab);
+    setIsMyBookingsModalVisible(true);
+  };
+
+  const loadPendingPosts = async (silent = false) => {
+    if (!user.token) return;
+    if (!silent) setIsLoadingPendingPosts(true);
+    setPendingPostsError(null);
+    try {
+      const data = await fetchMyBookings(user.token, 'pending');
+      setPendingPosts(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.warn('[HomeownerProfile] fetchMyBookings error:', err);
+      setPendingPostsError(err?.message || 'Failed to load pending posts');
+    } finally {
+      if (!silent) setIsLoadingPendingPosts(false);
+    }
+  };
+
+  const handleCancelPendingPost = (bookingId: string) => {
+    if (!user.token || isCancellingPostId) return;
+    Alert.alert(
+      'Cancel Pending Post',
+      'Are you sure you want to cancel this pending post? This action cannot be undone.',
+      [
+        { text: 'Keep Post', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            setIsCancellingPostId(bookingId);
+            try {
+              const res = await cancelBooking(user.token!, bookingId, { reason: 'Cancelled by poster from profile' });
+              if (res.success) {
+                setPendingPosts((prev) => prev.filter((p) => p.booking_id !== bookingId));
+                Alert.alert('Post Cancelled', 'Your pending post has been cancelled successfully.');
+              } else {
+                Alert.alert('Error', res.error || 'Failed to cancel post. Please try again.');
+              }
+            } catch (err: any) {
+              Alert.alert('Error', err?.message || 'An error occurred while cancelling.');
+            } finally {
+              setIsCancellingPostId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -135,6 +194,7 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
             updateUser({ showContactNumber: show });
           }).catch(() => {})
         );
+        promises.push(loadPendingPosts(true));
       }
       await Promise.allSettled(promises);
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -247,6 +307,7 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
         .catch((err) => console.warn('[HomeownerProfile] fetch contact privacy error:', err));
 
       loadVerificationStatus();
+      loadPendingPosts(false);
     }
   }, [user.token, user.id]);
 
@@ -496,80 +557,322 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
               )}
             </View>
 
-            {/* Reviews Section */}
-            <View style={styles.reviewsSection}>
-              <View style={styles.reviewsHeader}>
-                <Text style={styles.reviewsSectionTitle}>{t.recentReviews}</Text>
-                {totalReviews >= 2 ? (
-                  <Pressable
-                    onPress={() => setIsReviewsExpanded((prev) => !prev)}
-                    hitSlop={15}
-                    style={({ pressed }) => [styles.viewAllBtnWrap, pressed && { opacity: 0.7 }]}
+            {/* Segmented Tab Switcher (Option A) */}
+            <View style={styles.segmentedTabContainer}>
+              <Pressable
+                style={[
+                  styles.segmentedTabButton,
+                  activeProfileTab === 'posts' && styles.segmentedTabButtonActive,
+                ]}
+                onPress={() => setActiveProfileTab('posts')}
+              >
+                <Ionicons
+                  name="newspaper-outline"
+                  size={14}
+                  color={activeProfileTab === 'posts' ? '#C2410C' : '#6B7280'}
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={[
+                    styles.segmentedTabText,
+                    activeProfileTab === 'posts' && styles.segmentedTabTextActive,
+                  ]}
+                >
+                  My Pending Posts
+                </Text>
+                <View
+                  style={[
+                    styles.tabBadge,
+                    activeProfileTab === 'posts' ? styles.tabBadgeActive : styles.tabBadgeInactive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.tabBadgeText,
+                      activeProfileTab === 'posts' ? styles.tabBadgeTextActive : styles.tabBadgeTextInactive,
+                    ]}
                   >
-                    <Text style={styles.viewAllPill}>
-                      {isReviewsExpanded ? 'Show Less' : `${t.viewAll} (${totalReviews})`}
-                    </Text>
-                    <Ionicons
-                      name={isReviewsExpanded ? 'chevron-up' : 'chevron-down'}
-                      size={13}
-                      color="#F97316"
-                      style={{ marginLeft: 3 }}
-                    />
-                  </Pressable>
-                ) : null}
-              </View>
-
-              {reviews.length > 0 ? (
-                <>
-                  {(isReviewsExpanded ? reviews : reviews.slice(0, 3)).map((r) => {
-                    const badgeBg = r.nlp_sentiment === 'Negative'
-                      ? '#FFF1F2'
-                      : r.nlp_sentiment === 'Neutral'
-                      ? '#F1F5F9'
-                      : '#ECFDF5';
-                    const badgeColor = r.nlp_sentiment === 'Negative'
-                      ? '#BE123C'
-                      : r.nlp_sentiment === 'Neutral'
-                      ? '#475569'
-                      : '#065F46';
-
-                    return (
-                      <View key={r.review_id} style={styles.reviewCard}>
-                        <View style={styles.reviewCardHeader}>
-                          <View style={styles.starsRow}>
-                            {[1, 2, 3, 4, 5].map((i) => (
-                              <Ionicons
-                                key={i}
-                                name={i <= (Number(r.rating) || 5) ? 'star' : 'star-outline'}
-                                size={14}
-                                color="#FFB380"
-                                style={{ marginRight: 2 }}
-                              />
-                            ))}
-                          </View>
-                          <View style={[styles.positiveBadge, { backgroundColor: badgeBg }]}>
-                            <Text style={[styles.positiveBadgeText, { color: badgeColor }]}>{r.nlp_sentiment || 'Positive'}</Text>
-                          </View>
-                        </View>
-                        <Text style={styles.reviewText}>"{r.unstructured_feedback}"</Text>
-                        <Text style={styles.reviewAuthor}>
-                          — {r.reviewer_name || 'Verified Worker'}
-                          {r.createdAt ? `, ${new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : ''}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </>
-              ) : (
-                <View style={styles.emptyReviewsCard}>
-                  <Ionicons name="chatbubbles-outline" size={32} color="#D1D5DB" />
-                  <Text style={styles.emptyReviewsTitle}>{t.noReviewsYet}</Text>
-                  <Text style={styles.emptyReviewsSubtitle}>
-                    {t.noReviewsSubtitle}
+                    {pendingPosts.length}
                   </Text>
                 </View>
-              )}
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.segmentedTabButton,
+                  activeProfileTab === 'reviews' && styles.segmentedTabButtonActive,
+                ]}
+                onPress={() => setActiveProfileTab('reviews')}
+              >
+                <Ionicons
+                  name="star-outline"
+                  size={14}
+                  color={activeProfileTab === 'reviews' ? '#C2410C' : '#6B7280'}
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={[
+                    styles.segmentedTabText,
+                    activeProfileTab === 'reviews' && styles.segmentedTabTextActive,
+                  ]}
+                >
+                  Reviews & Feedback
+                </Text>
+                <View
+                  style={[
+                    styles.tabBadge,
+                    activeProfileTab === 'reviews' ? styles.tabBadgeActive : styles.tabBadgeInactive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.tabBadgeText,
+                      activeProfileTab === 'reviews' ? styles.tabBadgeTextActive : styles.tabBadgeTextInactive,
+                    ]}
+                  >
+                    {reviews.length}
+                  </Text>
+                </View>
+              </Pressable>
             </View>
+
+            {/* Tab 1: Current Pending Posts */}
+            {activeProfileTab === 'posts' ? (
+              <View style={styles.pendingPostsSection}>
+                <View style={styles.tabSectionHeader}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={styles.tabSectionTitle}>My Pending Posts</Text>
+                    <Text style={styles.tabSectionSubtitle}>
+                      Your job posts waiting for worker acceptance or proposals
+                    </Text>
+                  </View>
+                  <Pressable
+                    style={styles.refreshIconBtn}
+                    onPress={() => loadPendingPosts(false)}
+                    disabled={isLoadingPendingPosts}
+                    hitSlop={8}
+                  >
+                    <Ionicons
+                      name="refresh-outline"
+                      size={15}
+                      color={isLoadingPendingPosts ? '#9CA3AF' : '#EA580C'}
+                    />
+                  </Pressable>
+                </View>
+
+                {/* State 1: Loading */}
+                {isLoadingPendingPosts ? (
+                  <View style={styles.postsLoadingTile}>
+                    <ActivityIndicator size="small" color="#FFB380" />
+                    <Text style={styles.postsLoadingText}>Loading your pending posts...</Text>
+                  </View>
+                ) : pendingPostsError ? (
+                  /* State 2: Error */
+                  <View style={styles.postsErrorTile}>
+                    <Ionicons name="alert-circle-outline" size={32} color="#DC2626" />
+                    <Text style={styles.postsErrorTitle}>Failed to load pending posts</Text>
+                    <Text style={styles.postsErrorSubtitle}>{pendingPostsError}</Text>
+                    <Pressable style={styles.postsRetryButton} onPress={() => loadPendingPosts(false)}>
+                      <Ionicons name="reload" size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
+                      <Text style={styles.postsRetryButtonText}>Try Again</Text>
+                    </Pressable>
+                  </View>
+                ) : pendingPosts.length === 0 ? (
+                  /* State 3: Empty */
+                  <View style={styles.emptyPendingPostsCard}>
+                    <View style={styles.emptyPostsIconCircle}>
+                      <Ionicons name="time-outline" size={26} color="#9CA3AF" />
+                    </View>
+                    <Text style={styles.emptyPendingPostsTitle}>No Pending Posts</Text>
+                    <Text style={styles.emptyPendingPostsSubtitle}>
+                      You don't have any pending job posts right now. Posts you publish will appear here while waiting for worker applications.
+                    </Text>
+                  </View>
+                ) : (
+                  /* State 4: Success / List */
+                  <View style={styles.pendingPostsList}>
+                    {pendingPosts.map((post) => {
+                      const isCancelling = isCancellingPostId === post.booking_id;
+                      const categories = Array.isArray(post.service_category)
+                        ? post.service_category
+                        : [String(post.service_category || 'Service')];
+                      const startDateStr = post.start_time
+                        ? new Date(post.start_time).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })
+                        : 'Flexible';
+
+                      return (
+                        <View key={post.booking_id} style={styles.pendingPostCard}>
+                          {/* Top row: Category chips + Pending Status */}
+                          <View style={styles.pendingPostTopRow}>
+                            <View style={styles.categoryChipsWrap}>
+                              {categories.map((cat, idx) => (
+                                <View key={`${cat}-${idx}`} style={styles.categoryChip}>
+                                  <Text style={styles.categoryChipText}>{cat}</Text>
+                                </View>
+                              ))}
+                            </View>
+                            <View style={styles.pendingStatusBadge}>
+                              <Ionicons name="time" size={11} color="#B45309" style={{ marginRight: 3 }} />
+                              <Text style={styles.pendingStatusBadgeText}>Pending</Text>
+                            </View>
+                          </View>
+
+                          {/* Rate & Booking Type */}
+                          <View style={styles.pendingPostRateRow}>
+                            <Text style={styles.pendingPostRate}>
+                              ₱{Number(post.daily_rate || 0).toLocaleString()}
+                            </Text>
+                            <Text style={styles.pendingPostRateUnit}>
+                              / day · {post.booking_type === 'long_term' ? 'Stay-In' : 'Part-time'}
+                            </Text>
+                          </View>
+
+                          {/* Details */}
+                          <View style={styles.pendingPostDetails}>
+                            <View style={styles.pendingPostDetailItem}>
+                              <Ionicons name="location-outline" size={13} color="#6B7280" style={{ marginRight: 4 }} />
+                              <Text style={styles.pendingPostDetailText} numberOfLines={1}>
+                                {formatBookingAddress(post)}
+                              </Text>
+                            </View>
+                            <View style={styles.pendingPostDetailItem}>
+                              <Ionicons name="calendar-outline" size={13} color="#6B7280" style={{ marginRight: 4 }} />
+                              <Text style={styles.pendingPostDetailText}>
+                                Starts: {startDateStr}
+                              </Text>
+                            </View>
+                          </View>
+
+                          {/* Special instruction if available */}
+                          {post.special_instruction ? (
+                            <View style={styles.pendingPostInstructionBox}>
+                              <Text style={styles.pendingPostInstructionText} numberOfLines={2}>
+                                "{post.special_instruction}"
+                              </Text>
+                            </View>
+                          ) : null}
+
+                          {/* Proposals / Assignment note */}
+                          <View style={styles.pendingPostProposalsRow}>
+                            <Ionicons name="people-outline" size={13} color="#D97706" style={{ marginRight: 5 }} />
+                            <Text style={styles.pendingPostProposalsText}>
+                              {post.proposals_count && post.proposals_count > 0
+                                ? `${post.proposals_count} Proposal(s) received`
+                                : 'Waiting for worker acceptance'}
+                            </Text>
+                          </View>
+
+                          {/* Action Buttons */}
+                          <View style={styles.pendingPostActionsRow}>
+                            <Pressable
+                              style={styles.pendingPostManageBtn}
+                              onPress={() => openMyBookings('pending')}
+                            >
+                              <Ionicons name="options-outline" size={14} color="#0D0D11" style={{ marginRight: 4 }} />
+                              <Text style={styles.pendingPostManageBtnText}>Manage Post</Text>
+                            </Pressable>
+
+                            <Pressable
+                              style={[styles.pendingPostCancelBtn, isCancelling && { opacity: 0.6 }]}
+                              onPress={() => handleCancelPendingPost(post.booking_id)}
+                              disabled={isCancelling}
+                            >
+                              {isCancelling ? (
+                                <ActivityIndicator size="small" color="#DC2626" />
+                              ) : (
+                                <>
+                                  <Ionicons name="close-circle-outline" size={14} color="#DC2626" style={{ marginRight: 3 }} />
+                                  <Text style={styles.pendingPostCancelBtnText}>Cancel</Text>
+                                </>
+                              )}
+                            </Pressable>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            ) : (
+              /* Tab 2: Reviews & Feedback */
+              <View style={styles.reviewsSection}>
+                <View style={styles.reviewsHeader}>
+                  <Text style={styles.reviewsSectionTitle}>{t.recentReviews}</Text>
+                  {totalReviews >= 2 ? (
+                    <Pressable
+                      onPress={() => setIsReviewsExpanded((prev) => !prev)}
+                      hitSlop={15}
+                      style={({ pressed }) => [styles.viewAllBtnWrap, pressed && { opacity: 0.7 }]}
+                    >
+                      <Text style={styles.viewAllPill}>
+                        {isReviewsExpanded ? 'Show Less' : `${t.viewAll} (${totalReviews})`}
+                      </Text>
+                      <Ionicons
+                        name={isReviewsExpanded ? 'chevron-up' : 'chevron-down'}
+                        size={13}
+                        color="#F97316"
+                        style={{ marginLeft: 3 }}
+                      />
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                {reviews.length > 0 ? (
+                  <>
+                    {(isReviewsExpanded ? reviews : reviews.slice(0, 3)).map((r) => {
+                      const badgeBg = r.nlp_sentiment === 'Negative'
+                        ? '#FFF1F2'
+                        : r.nlp_sentiment === 'Neutral'
+                        ? '#F1F5F9'
+                        : '#ECFDF5';
+                      const badgeColor = r.nlp_sentiment === 'Negative'
+                        ? '#BE123C'
+                        : r.nlp_sentiment === 'Neutral'
+                        ? '#475569'
+                        : '#065F46';
+
+                      return (
+                        <View key={r.review_id} style={styles.reviewCard}>
+                          <View style={styles.reviewCardHeader}>
+                            <View style={styles.starsRow}>
+                              {[1, 2, 3, 4, 5].map((i) => (
+                                <Ionicons
+                                  key={i}
+                                  name={i <= (Number(r.rating) || 5) ? 'star' : 'star-outline'}
+                                  size={14}
+                                  color="#FFB380"
+                                  style={{ marginRight: 2 }}
+                                />
+                              ))}
+                            </View>
+                            <View style={[styles.positiveBadge, { backgroundColor: badgeBg }]}>
+                              <Text style={[styles.positiveBadgeText, { color: badgeColor }]}>{r.nlp_sentiment || 'Positive'}</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.reviewText}>"{r.unstructured_feedback}"</Text>
+                          <Text style={styles.reviewAuthor}>
+                            — {r.reviewer_name || 'Verified Worker'}
+                            {r.createdAt ? `, ${new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : ''}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <View style={styles.emptyReviewsCard}>
+                    <Ionicons name="chatbubbles-outline" size={32} color="#D1D5DB" />
+                    <Text style={styles.emptyReviewsTitle}>{t.noReviewsYet}</Text>
+                    <Text style={styles.emptyReviewsSubtitle}>
+                      {t.noReviewsSubtitle}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
 
             {/* Bottom padding for tab bar */}
             <View style={{ height: 90 }} />
@@ -714,7 +1017,7 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
               <SettingsRow
                 icon="calendar"
                 title="My Bookings & Hires"
-                onPress={() => setIsMyBookingsModalVisible(true)}
+                onPress={() => openMyBookings('active')}
               />
               <View style={styles.rowDivider} />
               <SettingsRow
@@ -942,6 +1245,7 @@ export function ProfileScreen({ avatarUri, initialView = 'main', onUpdateAvatar,
         onClose={() => setIsMyBookingsModalVisible(false)}
         token={user.token || ''}
         accountType="Homeowner"
+        initialTab={bookingsModalInitialTab}
       />
 
       {/* Manage Tags Modal */}
@@ -1759,5 +2063,341 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+
+  /* Segmented Tab Switcher (Option A) */
+  segmentedTabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 16,
+    padding: 4,
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  segmentedTabButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  segmentedTabButtonActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  segmentedTabText: {
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  segmentedTabTextActive: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    color: '#C2410C',
+    fontWeight: '700',
+  },
+  tabBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 9999,
+    marginLeft: 6,
+  },
+  tabBadgeActive: {
+    backgroundColor: '#FFEDD5',
+  },
+  tabBadgeInactive: {
+    backgroundColor: '#E5E7EB',
+  },
+  tabBadgeText: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  tabBadgeTextActive: {
+    color: '#C2410C',
+  },
+  tabBadgeTextInactive: {
+    color: '#6B7280',
+  },
+
+  /* Pending Posts Styles */
+  pendingPostsSection: {
+    paddingHorizontal: 16,
+    marginBottom: 14,
+  },
+  tabSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  tabSectionTitle: {
+    fontFamily: THEME.typography.fontFamily.mainExtraBold,
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0D0D11',
+  },
+  tabSectionSubtitle: {
+    fontFamily: THEME.typography.fontFamily.secondary,
+    fontSize: 11.5,
+    fontWeight: '500',
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  refreshIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFF7ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  postsLoadingTile: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  postsLoadingText: {
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
+    fontSize: 13,
+    color: '#9CA3AF',
+    marginTop: 8,
+  },
+  postsErrorTile: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  postsErrorTitle: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#DC2626',
+    marginTop: 8,
+  },
+  postsErrorSubtitle: {
+    fontFamily: THEME.typography.fontFamily.secondary,
+    fontSize: 12,
+    color: '#7F1D1D',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  postsRetryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 9999,
+  },
+  postsRetryButtonText: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  emptyPendingPostsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyPostsIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  emptyPendingPostsTitle: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  emptyPendingPostsSubtitle: {
+    fontFamily: THEME.typography.fontFamily.secondary,
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    lineHeight: 18,
+    maxWidth: 260,
+  },
+  pendingPostsList: {
+    gap: 12,
+  },
+  pendingPostCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  pendingPostTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  categoryChipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    flex: 1,
+    marginRight: 8,
+  },
+  categoryChip: {
+    backgroundColor: '#FFF7ED',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
+  },
+  categoryChipText: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#C2410C',
+  },
+  pendingStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  pendingStatusBadgeText: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#B45309',
+  },
+  pendingPostRateRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 10,
+  },
+  pendingPostRate: {
+    fontFamily: THEME.typography.fontFamily.mainExtraBold,
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0D0D11',
+  },
+  pendingPostRateUnit: {
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
+    fontSize: 12,
+    color: '#6B7280',
+    marginLeft: 4,
+  },
+  pendingPostDetails: {
+    gap: 6,
+    marginBottom: 10,
+  },
+  pendingPostDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pendingPostDetailText: {
+    fontFamily: THEME.typography.fontFamily.secondary,
+    fontSize: 12,
+    color: '#4B5563',
+    flex: 1,
+  },
+  pendingPostInstructionBox: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+  },
+  pendingPostInstructionText: {
+    fontFamily: THEME.typography.fontFamily.secondary,
+    fontSize: 11.5,
+    color: '#4B5563',
+    fontStyle: 'italic',
+    lineHeight: 16,
+  },
+  pendingPostProposalsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  pendingPostProposalsText: {
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#B45309',
+  },
+  pendingPostActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    paddingTop: 12,
+  },
+  pendingPostManageBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 9,
+    borderRadius: 12,
+  },
+  pendingPostManageBtnText: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0D0D11',
+  },
+  pendingPostCancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  pendingPostCancelBtnText: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#DC2626',
   },
 });

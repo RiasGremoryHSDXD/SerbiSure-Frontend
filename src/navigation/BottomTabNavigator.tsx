@@ -82,9 +82,9 @@ export function BottomTabNavigator({ role = 'homeowner', avatarUri: oldAvatarUri
     switch (activeTab) {
       case 'home':
         return isKasambahay ? (
-          <KasambahayHomeScreen avatarUri={avatarUri} onAvatarPress={handleOpenProfileView} onViewProfile={handleOpenProfileView} />
+          <KasambahayHomeScreen avatarUri={avatarUri} onAvatarPress={handleOpenProfileView} onViewProfile={handleOpenProfileView} onViewAll={() => setActiveTab('services')} token={authToken} />
         ) : (
-          <HomeownerHomeScreen avatarUri={avatarUri} onAvatarPress={handleOpenProfileView} onViewProfile={handleOpenProfileView} />
+          <HomeownerHomeScreen avatarUri={avatarUri} onAvatarPress={handleOpenProfileView} onViewProfile={handleOpenProfileView} onViewAll={() => setActiveTab('services')} token={authToken} />
         );
       case 'services':
         return isKasambahay ? (

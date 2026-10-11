@@ -33,9 +33,9 @@ export function HomeownerApp({
     switch (activeTab) {
       case 'home':
         return isKasambahay ? (
-          <KasambahayHomeScreen avatarUri={avatarUri} onAvatarPress={() => setActiveTab('profile')} />
+          <KasambahayHomeScreen avatarUri={avatarUri} onAvatarPress={() => setActiveTab('profile')} onViewAll={() => setActiveTab('services')} />
         ) : (
-          <HomeScreen avatarUri={avatarUri} onAvatarPress={() => setActiveTab('profile')} />
+          <HomeScreen avatarUri={avatarUri} onAvatarPress={() => setActiveTab('profile')} onViewAll={() => setActiveTab('services')} />
         );
       case 'services':
         return isKasambahay ? <KasambahayJobsScreen /> : <ServicesScreen avatarUri={avatarUri} />;
