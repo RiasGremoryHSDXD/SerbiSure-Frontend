@@ -2343,6 +2343,7 @@ export function ChatDetailScreen({
         <UserProfileModal
           visible={profileModalVisible}
           onClose={() => setProfileModalVisible(false)}
+          onMessage={() => setProfileModalVisible(false)}
           userId={partnerId}
           token={effectiveToken}
           prefilledName={contactName}

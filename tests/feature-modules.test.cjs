@@ -41,6 +41,7 @@ const cache = load('src/features/feed/feedCache.ts');
 const postingApi = load('src/features/posting/api/postingApi.ts');
 const date = load('src/shared/utils/date.ts');
 const browse = load('src/features/feed/browsePresentation.ts');
+const bookingApi = load('src/features/bookings/api/bookingApi.ts');
 const emptyFilters = { categories: [], bookingType: null, maxRate: null, location: '', sortBy: 'newest' };
 const dto = {
   booking_id: 'post-1', poster_id: 'author-1', name: 'Test User', profile_link: 'https://test.local/avatar.png',
@@ -64,6 +65,30 @@ test('account roles select the correct posting mode and verification documents',
   assert.equal(roles.ROLE_CONFIG.kasambahay.postingMode, 'service');
   assert.equal(roles.ROLE_CONFIG.kasambahay.workerProfile, true);
   assert.deepEqual(roles.ROLE_CONFIG.kasambahay.requiredDocuments, ['nbi_clearance', 'police_clearance']);
+});
+
+test('public-profile posts use the requested author and preserve pending proposal state', async () => {
+  const post = { ...dto, booking_status: 'Pending', viewer_proposal: { proposal_id: 'proposal-1', status: 'Pending' } };
+  await withFetch(async (url, options) => {
+    assert.equal(url, 'http://test.local/api/v1/booking/profile/author-1/pending/');
+    assert.equal(new Headers(options.headers).get('Authorization'), 'Bearer viewer-token');
+    return response([post]);
+  }, async () => {
+    const posts = await bookingApi.fetchPublicPendingPosts('viewer-token', 'author-1');
+    assert.deepEqual(posts, [post]);
+  });
+});
+
+test('public-profile post failures are distinguishable from an empty list', async () => {
+  await withFetch(async () => response([]), async () => {
+    assert.deepEqual(await bookingApi.fetchPublicPendingPosts('token', 'author'), []);
+  });
+  await withFetch(async () => response({ detail: 'Profile not found.' }, 404), async () => {
+    await assert.rejects(bookingApi.fetchPublicPendingPosts('token', 'author'), /Profile not found/);
+  });
+  await withFetch(async () => response({ results: [] }), async () => {
+    await assert.rejects(bookingApi.fetchPublicPendingPosts('token', 'author'), /Unexpected posts response/);
+  });
 });
 
 test('Home maps the same DTO into distinct job and worker cards', () => {

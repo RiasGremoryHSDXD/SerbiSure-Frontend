@@ -93,6 +93,16 @@ Search and filter selections remain local to each screen. Custom hooks share log
 
 `roleConfig.ts` owns account capabilities and navigation choices. `postingConfig.ts` owns posting copy and descriptions. `profileConfig.ts` owns profile copy. Keep genuinely different card layouts and workflows in dedicated components rather than adding many role checks to a generic component.
 
+## Public profiles and proposals
+
+Own and public profiles share `profileStyles`, `ProfileTabs`, `PendingPostCard`, and `ReviewsSection`. Public profiles keep the same identity card, bio, and Posts/Reviews layout, with read-only identity details and viewer actions in place of editing or cancelling controls. Contact numbers and social links follow the public-profile API's privacy settings.
+
+`usePublicProfile` loads identity, reviews, and open posts, and ignores responses from a previously viewed profile. `/api/v1/booking/profile/<user_id>/pending/` returns only that active user's Pending posts and the viewer's own latest proposal status. It does not return other applicants' proposals or contact details.
+
+Kasambahay can Apply to a homeowner's post; homeowners can Offer to Hire from a kasambahay's post. Both submit the existing booking proposal API with a daily rate and optional message. The backend validates verification, roles, rate, post status, and duplicate pending proposals, then notifies the owner. The post remains pending until the owner responds through My Pending Posts → Manage Post → Offers. These profile actions do not immediately accept a booking.
+
+For manual testing, submit a proposal from the opposite account, reopen the public profile to confirm Application Sent/Offer Sent, then sign in as the owner and review the notification and offer. Accept it and refresh the public profile: the confirmed post should disappear from Pending Posts.
+
 ## How to extend it
 
 1. Put endpoint requests in the owning feature's `api` folder. Use the shared HTTP client; pass the session token explicitly. Keep response error handling that is specific to the endpoint in the feature.

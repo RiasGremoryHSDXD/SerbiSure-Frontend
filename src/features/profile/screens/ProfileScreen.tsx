@@ -31,6 +31,7 @@ import { AvailabilitySection } from '../worker/AvailabilitySection';
 import { SettingsSection } from '../components/SettingsSection';
 import { PendingPostsSection } from '../components/PendingPostsSection';
 import { ReviewsSection } from '../components/ReviewsSection';
+import { ProfileTabs } from '../components/ProfileTabs';
 
 export function ProfileScreen(props: ProfileScreenProps) {
   const profile = useProfile(props);
@@ -261,84 +262,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
             <BioSection profile={profile} />
             {isWorker && <ResumeSection profile={profile} />}
             {isWorker && <ReputationSection profile={profile} />}
-            {/* Segmented Tab Switcher (Option A) */}
-            <View style={styles.segmentedTabContainer}>
-              <Pressable
-                style={[
-                  styles.segmentedTabButton,
-                  activeProfileTab === 'posts' && styles.segmentedTabButtonActive,
-                ]}
-                onPress={() => setActiveProfileTab('posts')}
-              >
-                <Ionicons
-                  name="newspaper-outline"
-                  size={14}
-                  color={activeProfileTab === 'posts' ? '#C2410C' : '#6B7280'}
-                  style={{ marginRight: 6 }}
-                />
-                <Text
-                  style={[
-                    styles.segmentedTabText,
-                    activeProfileTab === 'posts' && styles.segmentedTabTextActive,
-                  ]}
-                >
-                  My Pending Posts
-                </Text>
-                <View
-                  style={[
-                    styles.tabBadge,
-                    activeProfileTab === 'posts' ? styles.tabBadgeActive : styles.tabBadgeInactive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.tabBadgeText,
-                      activeProfileTab === 'posts' ? styles.tabBadgeTextActive : styles.tabBadgeTextInactive,
-                    ]}
-                  >
-                    {pendingPosts.length}
-                  </Text>
-                </View>
-              </Pressable>
-
-              <Pressable
-                style={[
-                  styles.segmentedTabButton,
-                  activeProfileTab === 'reviews' && styles.segmentedTabButtonActive,
-                ]}
-                onPress={() => setActiveProfileTab('reviews')}
-              >
-                <Ionicons
-                  name="star-outline"
-                  size={14}
-                  color={activeProfileTab === 'reviews' ? '#C2410C' : '#6B7280'}
-                  style={{ marginRight: 6 }}
-                />
-                <Text
-                  style={[
-                    styles.segmentedTabText,
-                    activeProfileTab === 'reviews' && styles.segmentedTabTextActive,
-                  ]}
-                >
-                  Reviews & Feedback
-                </Text>
-                <View
-                  style={[
-                    styles.tabBadge,
-                    activeProfileTab === 'reviews' ? styles.tabBadgeActive : styles.tabBadgeInactive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.tabBadgeText,
-                      activeProfileTab === 'reviews' ? styles.tabBadgeTextActive : styles.tabBadgeTextInactive,
-                    ]}
-                  >
-                    {reviews.length}
-                  </Text>
-                </View>
-              </Pressable>
-            </View>
+            <ProfileTabs activeTab={activeProfileTab} onChange={setActiveProfileTab} postsCount={pendingPosts.length} reviewsCount={reviews.length} own />
 
             {/* Tab 1: Current Pending Posts */}
             {activeProfileTab === 'posts' ? <PendingPostsSection profile={profile} /> : <ReviewsSection profile={profile} />}

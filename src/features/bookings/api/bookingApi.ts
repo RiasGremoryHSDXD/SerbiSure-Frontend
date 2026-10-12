@@ -1,5 +1,15 @@
 import { API_BASE_URL } from '../../../shared/api/config';
-import { requestResponse } from '../../../shared/api/httpClient';
+import { requestJson, requestResponse } from '../../../shared/api/httpClient';
+
+export interface PublicPendingPost extends BookingItem {
+  viewer_proposal: { proposal_id: string; status: BookingProposal['status'] } | null;
+}
+
+export async function fetchPublicPendingPosts(token: string, userId: string): Promise<PublicPendingPost[]> {
+  const data = await requestJson<unknown>(`/api/v1/booking/profile/${encodeURIComponent(userId)}/pending/`, { token });
+  if (!Array.isArray(data)) throw new Error('Unexpected posts response. Please try again.');
+  return data as PublicPendingPost[];
+}
 
 export interface BookingParticipant {
   id: string;

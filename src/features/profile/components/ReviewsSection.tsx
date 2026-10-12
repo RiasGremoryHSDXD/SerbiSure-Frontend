@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { profileStyles as styles } from '../styles';
 import type { ProfileController } from '../hooks/useProfile';
 
-export function ReviewsSection({ profile }: { profile: ProfileController }) {
+export function ReviewsSection({ profile }: { profile: Pick<ProfileController, 't' | 'copy' | 'reviews' | 'isReviewsExpanded' | 'setIsReviewsExpanded' | 'totalReviews'> }) {
   const {
     t,
     copy,
