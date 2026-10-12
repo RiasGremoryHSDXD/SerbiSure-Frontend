@@ -82,6 +82,8 @@ export function WorkersScreen({ avatarUri, onViewProfile, token }: { avatarUri?:
 
   const {
     savedJobs,
+    savedLoadError,
+    loadingSaved,
     savedCount,
     isSaved,
     toggleSave,
@@ -95,12 +97,12 @@ export function WorkersScreen({ avatarUri, onViewProfile, token }: { avatarUri?:
       employerName: (worker as any).name || (worker as any).employerName || 'Kasambahay',
       title: (worker as any).role || (worker as any).title || 'Household Service',
       avatar: worker.avatar || (worker as any).image,
-      location: worker.location || 'Cagayan de Oro',
+      location: worker.location || 'Location not provided',
       roleTag: (worker as any).role || (worker as any).roleTag || 'Kasambahay',
-      termTag: (worker as any).years || (worker as any).termTag || 'Verified',
+      termTag: (worker as any).years || (worker as any).termTag || 'Not specified',
       price: worker.price,
       unit: (worker as any).unit || 'per day',
-      aboutText: (worker as any).aboutText || `${(worker as any).role || 'Experienced kasambahay'} with ${(worker as any).years || 'years of experience'}.`,
+      aboutText: (worker as any).aboutText || 'No description provided.',
       tags: (worker as any).tags || [],
       image: (worker as any).image || worker.avatar,
     }, effectiveToken);
@@ -207,7 +209,7 @@ export function WorkersScreen({ avatarUri, onViewProfile, token }: { avatarUri?:
       });
 
       const serviceRate = currentWorker.price || '';
-      const serviceLocation = currentWorker.location || 'Cagayan de Oro';
+      const serviceLocation = currentWorker.location || 'Location not provided';
       const replySnippet = `${badgeRole}${serviceRate ? ` • ${serviceRate}` : ''} • ${serviceLocation}`;
 
       // Directly open ChatDetailScreen modal with auto message!
@@ -314,7 +316,9 @@ export function WorkersScreen({ avatarUri, onViewProfile, token }: { avatarUri?:
         ) : (
           /* Saved Kasambahays Tab View */
           <View style={styles.activityTabContainer}>
-            {savedJobs.length === 0 ? (
+            {loadingSaved && savedJobs.length === 0 ? <BrowseDeckSkeleton /> : savedLoadError ? (
+              <BrowseEmptyState icon="cloud-offline-outline" title="Unable to load saved posts" description={savedLoadError} action="Retry" onAction={() => { void refreshSavedFromBackend(effectiveToken || null); }} />
+            ) : savedJobs.length === 0 ? (
               <View style={deckStyles.emptyContainer}><BrowseEmptyState icon="bookmark-outline" title="No saved services yet" description="Save service posts to review or message the kasambahay later." action="Find Kasambahay" onAction={() => setSubTab('explore')} /></View>
             ) : (
               <View style={styles.activityList}>

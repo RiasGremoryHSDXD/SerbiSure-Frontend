@@ -1,8 +1,10 @@
+import type { WorkSetup } from '../bookings/workSetup';
 import type { BookingItem } from '../bookings/api/bookingApi';
 import type { SavedJobItem } from '../bookings/store/savedJobsStore';
 
 export interface BookingFeedDto extends Omit<BookingItem, 'service_category'> {
   poster_id: string;
+  poster_verification_status?: string;
   name?: string | null;
   profile_link?: string | null;
   service_category: string[] | string;
@@ -25,7 +27,9 @@ export interface FeedPost extends SavedJobItem {
 export interface FeedQuery {
   categories: string[];
   bookingType: string | null;
+  workSetup?: WorkSetup | null;
   maxRate: number | null;
+  ratePeriod?: 'day' | 'month';
   location: string;
   sortBy: string;
 }

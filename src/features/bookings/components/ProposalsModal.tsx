@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, Pressable, Modal, ActivityIndicator, Alert, ScrollView, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { BookingProposal, fetchBookingProposals, submitBookingProposal, respondToProposal } from '../api/bookingApi';
+import { BookingProposal, fetchBookingProposals, submitBookingProposal, respondToProposal, confirmPostRate } from '../api/bookingApi';
 
 export interface ProposalsModalProps {
   visible: boolean;
@@ -10,6 +10,8 @@ export interface ProposalsModalProps {
   bookingId: string;
   isPoster: boolean;
   currentRate: string;
+  ratePeriod: 'day' | 'month';
+  rateNeedsReview?: boolean;
   token?: string | null;
   onUpdated?: () => void;
 }
@@ -20,6 +22,8 @@ export function ProposalsModal({
   bookingId,
   isPoster,
   currentRate,
+  ratePeriod,
+  rateNeedsReview = false,
   token,
   onUpdated,
 }: ProposalsModalProps) {
@@ -55,16 +59,29 @@ export function ProposalsModal({
     }
   }, [visible, bookingId, isPoster, currentRate]);
 
+  const confirmLegacyRate = async () => {
+    if (!token) return;
+    setSubmitting(true);
+    try {
+      await confirmPostRate(token, bookingId, counterRate, ratePeriod);
+      Alert.alert('Monthly Amount Confirmed', 'The post can now receive new proposals. Old pending proposals were invalidated.');
+      onUpdated?.();
+      onClose();
+    } catch (error) {
+      Alert.alert('Unable to Confirm', error instanceof Error ? error.message : 'Please try again.');
+    } finally { setSubmitting(false); }
+  };
+
   const handleSubmitProposal = async () => {
     if (!token) return;
     const numRate = parseFloat(counterRate);
     if (isNaN(numRate) || numRate <= 0) {
-      Alert.alert('Invalid Rate', 'Please enter a valid daily rate.');
+      Alert.alert('Invalid Rate', 'Please enter a valid compensation amount.');
       return;
     }
 
     setSubmitting(true);
-    const res = await submitBookingProposal(token, bookingId, numRate, message.trim());
+    const res = await submitBookingProposal(token, bookingId, numRate, message.trim(), ratePeriod);
     setSubmitting(false);
 
     if (res.success) {
@@ -83,7 +100,7 @@ export function ProposalsModal({
     Alert.alert(
       action === 'accept' ? 'Accept Offer?' : 'Decline Offer?',
       action === 'accept'
-        ? 'Accepting will confirm this booking at the proposed daily rate.'
+        ? 'Accepting confirms this booking at the proposed amount and payment period.'
         : 'Are you sure you want to decline this proposal?',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -131,9 +148,15 @@ export function ProposalsModal({
           showsVerticalScrollIndicator={false}
         >
           {/* Current Rate Banner */}
-          <View style={styles.rateBanner}>
+          {isPoster && rateNeedsReview ? <View style={{ padding: 16, backgroundColor: '#FFF4ED', borderRadius: 16, marginBottom: 12 }}>
+              <Text style={{ fontWeight: '700' }}>Confirm the monthly salary</Text>
+              <Text>This older post used an ambiguous rate field. Enter the actual monthly amount before accepting any proposal.</Text>
+              <TextInput value={counterRate} onChangeText={setCounterRate} keyboardType="decimal-pad" style={{ padding: 12, backgroundColor: '#FFFFFF', marginVertical: 8 }} />
+              <Pressable disabled={submitting} onPress={confirmLegacyRate}><Text style={{ color: '#C2410C', fontWeight: '700' }}>{submitting ? 'Confirming...' : 'Confirm Monthly Amount'}</Text></Pressable>
+            </View> : null}
+            <View style={styles.rateBanner}>
             <Text style={styles.rateBannerLabel}>LISTED RATE</Text>
-            <Text style={styles.rateBannerVal}>₱{currentRate || '0.00'} / day</Text>
+            <Text style={styles.rateBannerVal}>₱{currentRate || '0.00'} / {ratePeriod}</Text>
           </View>
 
           {/* Offer Form for Worker */}
@@ -150,7 +173,7 @@ export function ProposalsModal({
                   value={counterRate}
                   onChangeText={setCounterRate}
                 />
-                <Text style={styles.perDay}>/ day</Text>
+                <Text style={styles.perDay}>/ {ratePeriod}</Text>
               </View>
 
               <Text style={[styles.cardTitle, { marginTop: 14 }]}>Note / Message (Optional)</Text>
@@ -210,7 +233,7 @@ export function ProposalsModal({
                     </View>
 
                     <View style={styles.offerBadge}>
-                      <Text style={styles.offerAmount}>₱{item.proposed_rate}</Text>
+                      <Text style={styles.offerAmount}>₱{item.proposed_rate} / {item.rate_period}</Text>
                       <Text style={styles.offerStatus}>{item.status}</Text>
                     </View>
                   </View>

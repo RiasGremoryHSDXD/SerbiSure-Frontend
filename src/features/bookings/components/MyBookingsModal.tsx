@@ -1,3 +1,6 @@
+import { workSetupLabel } from '../workSetup';
+import { useUser } from '../../auth/session/UserContext';
+import { ContractDownloadCard } from './ContractDownloadCard';
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, Pressable, Modal, ActivityIndicator, Alert, ScrollView, RefreshControl, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,6 +35,7 @@ export function MyBookingsModal({
   initialTab = 'active',
 }: MyBookingsModalProps) {
   const insets = useSafeAreaInsets();
+  const { user } = useUser();
 
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [bookings, setBookings] = useState<BookingItem[]>([]);
@@ -55,6 +59,8 @@ export function MyBookingsModal({
     id: string;
     isPoster: boolean;
     currentRate: string;
+    ratePeriod: 'day' | 'month';
+    rateNeedsReview?: boolean;
   } | null>(null);
 
   // User Profile Modal State
@@ -66,7 +72,7 @@ export function MyBookingsModal({
   } | null>(null);
 
   const loadData = async (isPullToRefresh = false) => {
-    if (!token) return;
+    if (!token) { setLoading(false); setRefreshing(false); setErrorMessage('Sign in to view your bookings.'); return; }
     if (!isPullToRefresh) setLoading(true);
     setErrorMessage(null);
 
@@ -75,53 +81,10 @@ export function MyBookingsModal({
     try {
       let data: BookingItem[] = [];
 
-      if (currentTab === 'pending') {
-        // Pending postings are open listings waiting for worker/homeowner acceptance or bids.
-        if (accountType === 'Kasambahay') {
-          // Kasambahay may have posted a service or have an assigned pending listing
-          const [postedPending, assignedPending] = await Promise.all([
-            fetchMyBookings(token, 'pending'),
-            fetchMyAssignedBookings(token, 'pending'),
-          ]);
-          const map = new Map<string, BookingItem>();
-          [...postedPending, ...assignedPending].forEach((item) => {
-            if (item && item.booking_id) map.set(item.booking_id, item);
-          });
-          data = Array.from(map.values());
-        } else {
-          // Homeowner posted job openings waiting for workers
-          data = await fetchMyBookings(token, 'pending');
-        }
-      } else if (currentTab === 'active') {
-        if (accountType === 'Kasambahay') {
-          // Kasambahay active jobs: assigned contracts + any active bookings they posted
-          const [assignedActive, postedActive] = await Promise.all([
-            fetchMyAssignedBookings(token, 'active'),
-            fetchMyBookings(token, 'active'),
-          ]);
-          const map = new Map<string, BookingItem>();
-          [...assignedActive, ...postedActive].forEach((item) => {
-            if (item && item.booking_id) map.set(item.booking_id, item);
-          });
-          data = Array.from(map.values());
-        } else {
-          // Homeowner active contracts
-          data = await fetchMyBookings(token, 'active');
-        }
-      } else if (accountType === 'Homeowner') {
-        data = await fetchMyBookings(token, currentTab);
-      } else {
-        // Kasambahay completed / cancelled
-        const [assigned, posted] = await Promise.all([
-          fetchMyAssignedBookings(token, currentTab),
-          fetchMyBookings(token, currentTab),
-        ]);
-        const map = new Map<string, BookingItem>();
-        [...assigned, ...posted].forEach((item) => {
-          if (item && item.booking_id) map.set(item.booking_id, item);
-        });
-        data = Array.from(map.values());
-      }
+      const [posted, assigned] = await Promise.all([
+        fetchMyBookings(token, currentTab), fetchMyAssignedBookings(token, currentTab),
+      ]);
+      data = Array.from(new Map([...posted, ...assigned].map(item => [item.booking_id, item])).values());
 
       // Concurrency guard: ignore if tab changed while in-flight
       if (activeTabRef.current !== currentTab) return;
@@ -458,7 +421,7 @@ export function MyBookingsModal({
           ) : bookings.length > 0 ? (
             bookings.map((booking) => {
               const counterparty =
-                accountType === 'Homeowner' ? booking.assigned_partner : booking.poster;
+                String(booking.poster?.id) === String(user.id) ? booking.assigned_partner || booking.recipient : booking.poster;
               const statusStyle = getStatusBadgeStyle(booking.booking_status);
               const categories = Array.isArray(booking.service_category)
                 ? booking.service_category
@@ -490,11 +453,14 @@ export function MyBookingsModal({
 
                   {/* Daily Rate & Type */}
                   <View style={styles.rateRow}>
-                    <Text style={styles.rateValue}>₱{booking.daily_rate}</Text>
+                    <Text style={styles.rateValue}>₱{booking.rate_amount}</Text>
                     <Text style={styles.rateUnit}>
-                      / day · {booking.booking_type === 'long_term' ? 'Stay-in' : 'Part-time'}
+                      / {booking.rate_period} · {booking.booking_type === 'long_term' ? 'Long-term' : 'Short-term'} · {workSetupLabel(booking.work_setup)}
                     </Text>
                   </View>
+
+                  {booking.rate_needs_review ? <Text style={{ color: '#B45309', marginBottom: 8 }}>Legacy rate: the monthly amount needs confirmation.</Text> : null}
+                  {booking.contract_summary ? <ContractDownloadCard summary={booking.contract_summary} /> : null}
 
                   {/* Address */}
                   <View style={styles.infoRow}>
@@ -543,7 +509,7 @@ export function MyBookingsModal({
                       <View style={{ flex: 1 }}>
                         <Text style={styles.partnerName}>{counterparty.name}</Text>
                         <Text style={styles.partnerRole}>
-                          {counterparty.account_type} · ⭐ {counterparty.rating}
+                          {counterparty.account_type} · ⭐ {counterparty.rating > 0 ? counterparty.rating : 'Unrated'}
                         </Text>
                       </View>
                       <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
@@ -617,7 +583,9 @@ export function MyBookingsModal({
                         setProposalsTarget({
                           id: booking.booking_id,
                           isPoster: accountType === 'Homeowner',
-                          currentRate: booking.daily_rate,
+                          currentRate: booking.rate_amount,
+                          ratePeriod: booking.rate_period,
+                          rateNeedsReview: booking.rate_needs_review,
                         })
                       }
                     >
@@ -628,7 +596,7 @@ export function MyBookingsModal({
                     </Pressable>
 
                     {/* Status-specific triggers */}
-                    {booking.booking_status === 'Accepted' && (
+                    {(booking.booking_status === 'Accepted' || (booking.booking_status === 'InProgress' && !booking.started_at)) && (
                       <Pressable
                         style={styles.actionBtnPrimary}
                         disabled={actionInProgress}
@@ -638,7 +606,7 @@ export function MyBookingsModal({
                       </Pressable>
                     )}
 
-                    {booking.booking_status === 'InProgress' && (
+                    {booking.booking_status === 'InProgress' && !!booking.started_at && (
                       <Pressable
                         style={[styles.actionBtnPrimary, { backgroundColor: '#10B981' }]}
                         disabled={actionInProgress}
@@ -761,6 +729,8 @@ export function MyBookingsModal({
             bookingId={proposalsTarget.id}
             isPoster={proposalsTarget.isPoster}
             currentRate={proposalsTarget.currentRate}
+            ratePeriod={proposalsTarget.ratePeriod}
+            rateNeedsReview={proposalsTarget.rateNeedsReview}
             token={token}
             onUpdated={() => loadData()}
           />

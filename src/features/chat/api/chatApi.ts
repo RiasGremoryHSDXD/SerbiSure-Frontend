@@ -1,3 +1,4 @@
+import type { PersistedChatOffer } from '../bookingCards';
 import { API_BASE_URL } from '../../../shared/api/config';
 import { requestResponse } from '../../../shared/api/httpClient';
 
@@ -28,6 +29,7 @@ export interface ChatMessageItem {
   sender_id: string;
   receiver_id: string;
   booking_id: string | null;
+  booking_offer?: PersistedChatOffer | null;
   message_payload: string | null;
   message_type?: 'text' | 'image';
   image_url?: string | null;

@@ -1,3 +1,4 @@
+import { WorkLocationFields } from '../../bookings/components/WorkLocationFields';
 import React from 'react';
 import { Text, View, Pressable, TextInput } from 'react-native';
 
@@ -10,30 +11,16 @@ import type { PostFormController } from '../hooks/usePostForm';
 
 export function PostStep3({ form }: { form: PostFormController }) {
   const {
-    mode,
     config,
     user,
     step,
     engagementType,
-    selectedRegion,
-    selectedProvince,
-    selectedCity,
-    selectedBarangay,
-    streetAddress,
-    setStreetAddress,
-    floorUnit,
-    setFloorUnit,
-    zipcode,
-    setZipcode,
     instructions,
     setInstructions,
+    wagePolicy,
     offerAmount,
     setOfferAmount,
     applyUserProfileAddress,
-    handleOpenRegionPicker,
-    handleOpenProvincePicker,
-    handleOpenCityPicker,
-    handleOpenBarangayPicker,
     getSelectedRoleLabel,
   } = form;
   return (<>
@@ -51,106 +38,7 @@ export function PostStep3({ form }: { form: PostFormController }) {
           ) : null}
         </View>
 
-        {/* Region Dropdown Button */}
-        <Pressable style={styles.locationSelectButton} onPress={handleOpenRegionPicker}>
-          <Ionicons name="map-outline" size={18} color="#0D0D11" style={styles.locationIcon} />
-          <Text
-            style={[styles.locationSelectText, !selectedRegion && styles.locationPlaceholderText]}
-            numberOfLines={1}
-          >
-            {selectedRegion ? selectedRegion.displayName || selectedRegion.name : 'Select Region'}
-          </Text>
-          <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
-        </Pressable>
-
-        {/* Province Dropdown Button */}
-        <Pressable
-          style={[styles.locationSelectButton, !selectedRegion && styles.locationSelectButtonDisabled]}
-          onPress={handleOpenProvincePicker}
-          disabled={!selectedRegion}
-        >
-          <Ionicons name="business-outline" size={18} color="#0D0D11" style={styles.locationIcon} />
-          <Text
-            style={[styles.locationSelectText, !selectedProvince && styles.locationPlaceholderText]}
-            numberOfLines={1}
-          >
-            {selectedProvince ? selectedProvince.displayName || selectedProvince.name : 'Select Province'}
-          </Text>
-          <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
-        </Pressable>
-
-        {/* City / Municipality Dropdown Button */}
-        <Pressable
-          style={[styles.locationSelectButton, !selectedProvince && styles.locationSelectButtonDisabled]}
-          onPress={handleOpenCityPicker}
-          disabled={!selectedProvince}
-        >
-          <Ionicons name="location-outline" size={18} color="#0D0D11" style={styles.locationIcon} />
-          <Text
-            style={[styles.locationSelectText, !selectedCity && styles.locationPlaceholderText]}
-            numberOfLines={1}
-          >
-            {selectedCity ? selectedCity.displayName || selectedCity.name : 'Select City / Municipality'}
-          </Text>
-          <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
-        </Pressable>
-
-        {/* Barangay Dropdown Button */}
-        <Pressable
-          style={[styles.locationSelectButton, !selectedCity && styles.locationSelectButtonDisabled]}
-          onPress={handleOpenBarangayPicker}
-          disabled={!selectedCity}
-        >
-          <Ionicons name="home-outline" size={18} color="#0D0D11" style={styles.locationIcon} />
-          <Text
-            style={[styles.locationSelectText, !selectedBarangay && styles.locationPlaceholderText]}
-            numberOfLines={1}
-          >
-            {selectedBarangay ? selectedBarangay.displayName || selectedBarangay.name : 'Select Barangay'}
-          </Text>
-          <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
-        </Pressable>
-
-        {/* House No. / Street / Zone Input */}
-        <View style={styles.locationInputContainer}>
-          <Ionicons name="navigate-outline" size={18} color="#0D0D11" style={styles.locationIcon} />
-          <TextInput
-            style={styles.locationInput}
-            placeholder="House No. / Street / Zone / Subdivision"
-            placeholderTextColor="#9CA3AF"
-            value={streetAddress}
-            onChangeText={setStreetAddress}
-            maxLength={100}
-          />
-        </View>
-
-        {/* Floor / Unit (Optional) & Zip Code in a row */}
-        <View style={styles.addressSubRow}>
-          <View style={[styles.locationInputContainer, { flex: 1.2, marginRight: 8 }]}>
-            <Ionicons name="layers-outline" size={18} color="#0D0D11" style={styles.locationIcon} />
-            <TextInput
-              style={styles.locationInput}
-              placeholder="Floor / Unit (Opt)"
-              placeholderTextColor="#9CA3AF"
-              value={floorUnit}
-              onChangeText={setFloorUnit}
-              maxLength={30}
-            />
-          </View>
-
-          <View style={[styles.locationInputContainer, { flex: 1 }]}>
-            <Ionicons name="mail-outline" size={18} color="#0D0D11" style={styles.locationIcon} />
-            <TextInput
-              style={styles.locationInput}
-              placeholder="Zip Code"
-              placeholderTextColor="#9CA3AF"
-              keyboardType="number-pad"
-              maxLength={4}
-              value={zipcode}
-              onChangeText={(t) => setZipcode(t.replace(/\D/g, '').slice(0, 4))}
-            />
-          </View>
-        </View>
+        <WorkLocationFields form={form} disabled={form.isPosting} />
 
         <Text style={styles.inputGroupLabel}>{config.instructionsLabel}</Text>
         <TextInput
@@ -168,7 +56,7 @@ export function PostStep3({ form }: { form: PostFormController }) {
         </Text>
         {(() => {
           const num = Number(offerAmount.replace(/[^0-9.]/g, ''));
-          const isBelowMin = offerAmount.trim().length > 0 && (engagementType === 'short' ? num < 600 : num < 6500);
+          const isBelowMin = offerAmount.trim().length > 0 && (wagePolicy ? num < Number(wagePolicy.minimum_rate) : false);
           return (
             <>
               <View style={[styles.offerInputWrapper, isBelowMin && styles.offerInputWrapperInvalid]}>
@@ -178,7 +66,7 @@ export function PostStep3({ form }: { form: PostFormController }) {
                   value={offerAmount}
                   onChangeText={setOfferAmount}
                   keyboardType="numeric"
-                  placeholder={engagementType === 'short' ? '600' : '6500'}
+                  placeholder={wagePolicy?.minimum_rate || 'Enter amount'}
                   placeholderTextColor={isBelowMin ? '#FCA5A5' : '#9CA3AF'}
                 />
                 <Text style={[styles.rateUnitSuffix, isBelowMin && { color: '#DC2626' }]}>
@@ -188,8 +76,8 @@ export function PostStep3({ form }: { form: PostFormController }) {
               {isBelowMin ? (
                 <Text style={styles.invalidRateHint}>
                   {engagementType === 'short'
-                    ? (mode === 'service' ? 'Minimum daily rate is ₱600/day.' : 'Minimum rate is ₱600 / day')
-                    : (mode === 'service' ? 'Minimum monthly salary is ₱6,500/month (RA 10361).' : 'Minimum salary is ₱6,500 / month')}
+                    ? (wagePolicy?.description || 'Select the work region to load the daily policy.')
+                    : (wagePolicy?.description || 'Select your work region to load the monthly wage policy.')}
                 </Text>
               ) : null}
             </>
@@ -202,13 +90,13 @@ export function PostStep3({ form }: { form: PostFormController }) {
               ? `Suggested rate for ${getSelectedRoleLabel()}: `
               : `Standard monthly rate for ${getSelectedRoleLabel()}: `}
             <Text style={{ fontFamily: THEME.typography.fontFamily.mainExtraBold, fontWeight: '800', color: '#0D0D11' }}>
-              {engagementType === 'short' ? '₱600 - ₱1,500 / day' : '₱6,500 - ₱15,000 / month'}
+              {wagePolicy ? 'Minimum: PHP ' + Number(wagePolicy.minimum_rate).toLocaleString() + '/' + wagePolicy.rate_period : 'Loading applicable minimum...'}
             </Text>
           </Text>
           <Text style={styles.recommendSub}>
             {engagementType === 'short'
-              ? 'Fair compensation based on daily task difficulty and hours (minimum ₱600/day).'
-              : 'Complies with RTWPB Batas Kasambahay statutory regional wage standards (minimum ₱6,500/month).'}
+              ? (wagePolicy?.description || 'The server checks the current platform daily minimum.')
+              : (wagePolicy?.description || 'The server checks the regional monthly minimum.')}
           </Text>
         </View>
       </View>

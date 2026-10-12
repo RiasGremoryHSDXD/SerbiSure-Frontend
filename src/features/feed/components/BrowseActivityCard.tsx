@@ -21,7 +21,7 @@ export function BrowseActivityCard({ post, applied, closed, onProfile, onDetails
     <View style={styles.card}>
       <View style={styles.identityRow}>
         <Pressable accessibilityRole="button" accessibilityLabel={`View ${post.employerName}'s profile`} onPress={onProfile}><ProfileAvatar uri={post.avatar} name={post.employerName} size={48} /></Pressable>
-        <Pressable onPress={onProfile} style={styles.identity}><Text style={styles.name} numberOfLines={2}>{post.employerName}</Text><Text style={styles.location} numberOfLines={1}>{post.location || 'Cagayan de Oro'}</Text></Pressable>
+        <Pressable onPress={onProfile} style={styles.identity}><Text style={styles.name} numberOfLines={2}>{post.employerName}</Text><Text style={styles.location} numberOfLines={1}>{post.location || 'Location not provided'}</Text></Pressable>
         {onUnsave && <Pressable accessibilityRole="button" accessibilityLabel="Unsave post" onPress={onUnsave} style={styles.bookmark}><Ionicons name="bookmark" size={22} color={THEME.colors.brandDark} /></Pressable>}
       </View>
       <Pressable onPress={onDetails} accessibilityRole="button">

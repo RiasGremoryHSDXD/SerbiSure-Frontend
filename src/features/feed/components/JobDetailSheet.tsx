@@ -250,18 +250,18 @@ export function JobDetailSheet({
   const avatarUrl =
     job.avatar ||
     job.image ||
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300';
+    'https://ui-avatars.com/api/?name=' + encodeURIComponent(employerName);
   const rawRole = job.roleTag || (job.tags && job.tags[1]) || 'Household Help';
   const role = rawRole.replace(/_/g, ' ');
-  const term = job.termTag || (job.tags && job.tags[2]) || 'Long-term';
-  const location = job.location || 'Brgy. Pagatpat, CDO';
-  const time = job.time || 'Posted 1h ago';
-  const price = job.price || '₱15,000';
-  const unit = job.unit || '/ month';
+  const term = job.termTag || 'Not specified';
+  const location = job.location || 'Location not provided';
+  const time = job.time || 'Date not available';
+  const price = job.price || 'Rate not provided';
+  const unit = job.unit || '';
   const about =
     job.aboutText ||
     job.description ||
-    'Experienced household assistance needed. Verified and safe family household.';
+    'No description provided.';
 
   const backdropOpacity = panY.interpolate({
     inputRange: [SNAP_EXPANDED, SNAP_COLLAPSED, SNAP_DISMISSED],

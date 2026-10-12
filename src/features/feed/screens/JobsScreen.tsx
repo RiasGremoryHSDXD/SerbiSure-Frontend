@@ -83,6 +83,8 @@ export function JobsScreen({ avatarUri, onViewProfile, token }: { avatarUri?: st
   const [selectedJobForDetails, setSelectedJobForDetails] = useState<JobOpening | SavedJobItem | null>(null);
   const {
     savedJobs,
+    savedLoadError,
+    loadingSaved,
     appliedJobs,
     savedCount,
     appliedCount,
@@ -91,7 +93,6 @@ export function JobsScreen({ avatarUri, onViewProfile, token }: { avatarUri?: st
     isClosed,
     isJobClosed,
     toggleSave,
-    applyJob,
     refreshSavedFromBackend,
   } = useJobsActivity();
 
@@ -102,7 +103,7 @@ export function JobsScreen({ avatarUri, onViewProfile, token }: { avatarUri?: st
       employerName: (job as any).employerName || (job as any).title || 'Homeowner',
       title: (job as any).title || (job as any).roleTag || 'Household Service',
       avatar: job.avatar || (job as any).image,
-      location: job.location || 'Cagayan de Oro',
+      location: job.location || 'Location not provided',
       roleTag: (job as any).roleTag || ((job as any).tags && (job as any).tags[1]) || 'Service',
       termTag: (job as any).termTag || ((job as any).tags && (job as any).tags[2]) || 'Part-time',
       price: job.price,
@@ -114,22 +115,6 @@ export function JobsScreen({ avatarUri, onViewProfile, token }: { avatarUri?: st
   };
 
   const handleApplyJob = (job: JobOpening | SavedJobItem) => {
-    applyJob({
-      id: job.id,
-      partnerId: job.partnerId,
-      employerName: (job as any).employerName || (job as any).title || 'Homeowner',
-      title: (job as any).title || (job as any).roleTag || 'Household Service',
-      avatar: job.avatar || (job as any).image,
-      location: job.location || 'Cagayan de Oro',
-      roleTag: (job as any).roleTag || ((job as any).tags && (job as any).tags[1]) || 'Service',
-      termTag: (job as any).termTag || ((job as any).tags && (job as any).tags[2]) || 'Part-time',
-      price: job.price,
-      unit: job.unit || '/ month',
-      aboutText: (job as any).aboutText || (job as any).description || '',
-      tags: (job as any).tags || [],
-      image: (job as any).image || job.avatar,
-    });
-
     const partnerId = (job as any).partnerId || job.id;
     chatStore.addOrUpdateChat({
       id: partnerId,
@@ -210,7 +195,7 @@ export function JobsScreen({ avatarUri, onViewProfile, token }: { avatarUri?: st
 
       const jobRole = currentJob.roleTag || currentJob.title || 'Household Service';
       const jobRate = `${currentJob.price} ${currentJob.unit}`.trim();
-      const jobLocation = currentJob.location || 'Cagayan de Oro';
+      const jobLocation = currentJob.location || 'Location not provided';
       const jobTerm = currentJob.termTag || (currentJob.tags && currentJob.tags[1]) || '';
       const replySnippet = `${jobRole} • ${jobRate} • ${jobLocation}${jobTerm ? ` • ${jobTerm}` : ''}`;
 
@@ -324,7 +309,9 @@ export function JobsScreen({ avatarUri, onViewProfile, token }: { avatarUri?: st
         ) : subTab === 'saved' ? (
           /* ── Indeed-Style Saved Tab View ── */
           <View style={styles.activityTabContainer}>
-            {savedJobs.length === 0 ? (
+            {loadingSaved && savedJobs.length === 0 ? <BrowseDeckSkeleton /> : savedLoadError ? (
+              <BrowseEmptyState icon="cloud-offline-outline" title="Unable to load saved posts" description={savedLoadError} action="Retry" onAction={() => { void refreshSavedFromBackend(effectiveToken || null); }} />
+            ) : savedJobs.length === 0 ? (
               <View style={deckStyles.emptyContainer}><BrowseEmptyState icon="bookmark-outline" title="No saved jobs yet" description="Save job posts to review and apply when you are ready." action="Find Jobs" onAction={() => setSubTab('explore')} /></View>
             ) : (
               <View style={styles.activityList}>
@@ -335,7 +322,9 @@ export function JobsScreen({ avatarUri, onViewProfile, token }: { avatarUri?: st
         ) : (
           /* ── Indeed-Style Applied Tab View ── */
           <View style={styles.activityTabContainer}>
-            {appliedJobs.length === 0 ? (
+            {loadingSaved && appliedJobs.length === 0 ? <BrowseDeckSkeleton /> : savedLoadError ? (
+              <BrowseEmptyState icon="cloud-offline-outline" title="Unable to load applications" description={savedLoadError} action="Retry" onAction={() => { void refreshSavedFromBackend(effectiveToken || null); }} />
+            ) : appliedJobs.length === 0 ? (
               <View style={deckStyles.emptyContainer}><BrowseEmptyState icon="paper-plane-outline" title="No applications yet" description="Jobs you apply to will appear here." action="Find Jobs" onAction={() => setSubTab('explore')} /></View>
             ) : (
               <View style={styles.activityList}>
@@ -357,7 +346,7 @@ export function JobsScreen({ avatarUri, onViewProfile, token }: { avatarUri?: st
             if (targetJob) {
               const jobRole = targetJob.roleTag || targetJob.title || 'Household Service';
               const jobRate = `${targetJob.price} ${targetJob.unit || ''}`.trim();
-              const jobLocation = targetJob.location || 'Cagayan de Oro';
+              const jobLocation = targetJob.location || 'Location not provided';
               const jobTerm = targetJob.termTag || (targetJob.tags && targetJob.tags[1]) || '';
               const replySnippet = `${jobRole} • ${jobRate} • ${jobLocation}${jobTerm ? ` • ${jobTerm}` : ''}`;
               setSelectedJobForDetails(null);

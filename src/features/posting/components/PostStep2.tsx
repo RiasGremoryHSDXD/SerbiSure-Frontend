@@ -1,3 +1,5 @@
+import { WorkScheduleFields } from '../../bookings/components/WorkScheduleFields';
+import { WorkLocationFields } from '../../bookings/components/WorkLocationFields';
 import React from 'react';
 import { Text, View, Pressable } from 'react-native';
 
@@ -80,47 +82,19 @@ export function PostStep2({ form }: { form: PostFormController }) {
           </Pressable>
         </View>
 
-        {/* 3. Preferred Time (ONLY for Short-term) */}
-        {engagementType === 'short' ? (
-          <View style={{ marginTop: 14 }}>
-            <Text style={styles.sectionLabel}>WHAT TIME WORKS BEST?</Text>
-            <View style={styles.timeSlotRow}>
-              <Pressable
-                style={[styles.timeSlotCard, selectedTime === 'morning' && styles.timeSlotActive]}
-                onPress={() => setSelectedTime('morning')}
-              >
-                <Ionicons name="sunny" size={20} color={selectedTime === 'morning' ? '#0D0D11' : '#FFB380'} />
-                <Text style={styles.timeSlotTitle}>Morning</Text>
-                <Text style={styles.timeSlotSub}>8 AM - 12 PM</Text>
-              </Pressable>
+        {engagementType && <WorkScheduleFields
+          bookingType={engagementType === 'long' ? 'long_term' : 'short_term'}
+          startDate={form.startDate} endDate={form.endDate} workHours={form.workHours} days={form.workDays} shift={selectedTime}
+          onStartDate={form.setStartDate} onEndDate={form.setEndDate} onWorkHours={form.setWorkHours}
+          onDays={form.setWorkDays} onShift={setSelectedTime}
+          disabled={!form.visible || form.isPosting}
+        />}
+        {engagementType === 'long' && <View style={{ marginTop: 14 }}>
+          <Text style={styles.sectionLabel}>WORK REGION</Text>
+          <WorkLocationFields form={form} regionOnly disabled={!form.visible || form.isPosting} />
+          <Text style={styles.longTermScheduleText}>Complete the Province, City / Municipality, Barangay and street address in Step 3.</Text>
+        </View>}
 
-              <Pressable
-                style={[styles.timeSlotCard, selectedTime === 'afternoon' && styles.timeSlotActive]}
-                onPress={() => setSelectedTime('afternoon')}
-              >
-                <Ionicons name="partly-sunny" size={20} color={selectedTime === 'afternoon' ? '#0D0D11' : '#FFB380'} />
-                <Text style={styles.timeSlotTitle}>Afternoon</Text>
-                <Text style={styles.timeSlotSub}>12 PM - 5 PM</Text>
-              </Pressable>
-
-              <Pressable
-                style={[styles.timeSlotCard, selectedTime === 'night' && styles.timeSlotActive]}
-                onPress={() => setSelectedTime('night')}
-              >
-                <Ionicons name="moon" size={20} color={selectedTime === 'night' ? '#0D0D11' : '#FFB380'} />
-                <Text style={styles.timeSlotTitle}>Night</Text>
-                <Text style={styles.timeSlotSub}>5 PM - 9 PM</Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : engagementType === 'long' ? (
-          <View style={styles.longTermScheduleCard}>
-            <Ionicons name="time-outline" size={20} color="#0D0D11" style={{ marginRight: 10, marginTop: 1 }} />
-            <Text style={styles.longTermScheduleText}>
-              Long-term employment follows a standard domestic schedule (approx. 8 hours/day with 1 rest day per week).
-            </Text>
-          </View>
-        ) : null}
       </View>
     )}
   </>);

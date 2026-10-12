@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
-import { StyleSheet, Text, View, TextInput, Pressable, Modal, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { StyleSheet, Text, View, TextInput, Pressable, Modal, ActivityIndicator, Alert, KeyboardAvoidingView, Keyboard, Platform, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { submitReview, predictSentimentViaHuggingFace, SentimentType } from '../api/reviewApi';
+import { submitReview, ReviewItem, ReviewSubmissionError } from '../api/reviewApi';
+import { generateUUID } from '../../chat/api/chatApi';
 
 export interface ReviewModalProps {
   visible: boolean;
@@ -15,274 +16,153 @@ export interface ReviewModalProps {
 }
 
 const RATING_LABELS = ['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent!'];
+const SENTIMENT_COLORS = {
+  Positive: { backgroundColor: '#DCFCE7', color: '#166534' },
+  Negative: { backgroundColor: '#FEE2E2', color: '#991B1B' },
+  Neutral: { backgroundColor: '#F3F4F6', color: '#374151' },
+};
 
-// Multi-lingual NLP Sentiment Keyword Lexicon (English, Tagalog, Bisaya)
-const POSITIVE_LEXICON = [
-  'great', 'good', 'excellent', 'amazing', 'super', 'satisfied', 'recommend', 'rekomenda',
-  'mabait', 'maayo', 'sipag', 'masipag', 'kugihan', 'buotan', 'malinis', 'limpyo',
-  'punctual', 'ontime', 'on-time', 'trusted', 'salamat', 'respectful', 'professional',
-  'honest', 'friendly', 'fast', 'pulido', 'aasahan', 'maasahan'
-];
-
-const NEGATIVE_LEXICON = [
-  'bad', 'poor', 'terrible', 'horrible', 'worst', 'disappointed', 'late', 'rude',
-  'bastos', 'tamad', 'tinamad', 'tapulan', 'hugaw', 'madumi', 'salbahe', 'unprofessional',
-  'scam', 'damage', 'stole', 'complaint', 'walang modo', 'disrespectful', 'liar',
-  'slow', 'unreliable', 'attitude'
-];
-
-export function analyzeNlpSentiment(text: string): SentimentType {
-  const lower = text.toLowerCase().trim();
-  if (!lower) return 'Neutral';
-
-  let posCount = 0;
-  let negCount = 0;
-
-  for (const word of POSITIVE_LEXICON) {
-    if (lower.includes(word)) posCount++;
-  }
-  for (const word of NEGATIVE_LEXICON) {
-    if (lower.includes(word)) negCount++;
-  }
-
-  if (posCount > negCount) return 'Positive';
-  if (negCount > posCount) return 'Negative';
-  return 'Neutral';
-}
-
-export function ReviewModal({
-  visible,
-  onClose,
-  bookingId,
-  revieweeName = 'Service Partner',
-  token,
-  onSuccess,
-  isMandatory = false,
-}: ReviewModalProps) {
+export function ReviewModal({ visible, onClose, bookingId, revieweeName = 'Service Partner', token, onSuccess, isMandatory = false }: ReviewModalProps) {
   const insets = useSafeAreaInsets();
-
-  const [rating, setRating] = useState<number>(5);
-  const [feedback, setFeedback] = useState<string>('');
-  const [sentiment, setSentiment] = useState<SentimentType>('Neutral');
-  const [isAnalyzingHf, setIsAnalyzingHf] = useState<boolean>(false);
-  const [hfConfidence, setHfConfidence] = useState<number | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [rating, setRating] = useState(5);
+  const [feedback, setFeedback] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [stillWaiting, setStillWaiting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [analysisUnavailable, setAnalysisUnavailable] = useState(false);
+  const [savedReview, setSavedReview] = useState<ReviewItem | null>(null);
+  const busy = useRef(false);
+  const scroll = useRef<ScrollView>(null);
+  const session = useRef(0);
+  const submission = useRef<{ body: string; key: string } | null>(null);
 
-  const hfDebounceTimer = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    session.current += 1;
+    busy.current = false;
+    setIsSubmitting(false);
+    setErrorMsg(null);
+    setAnalysisUnavailable(false);
+    setSavedReview(null);
+    setFeedback('');
+    setRating(5);
+    submission.current = null;
+    return () => { session.current += 1; };
+  }, [visible, bookingId]);
 
-  const runHuggingFacePrediction = (text: string) => {
-    if (hfDebounceTimer.current) {
-      clearTimeout(hfDebounceTimer.current);
-    }
-    const trimmed = text.trim();
-    if (trimmed.length < 4) {
-      setHfConfidence(null);
-      return;
-    }
-
-    hfDebounceTimer.current = setTimeout(async () => {
-      setIsAnalyzingHf(true);
-      try {
-        const res = await predictSentimentViaHuggingFace(trimmed);
-        setSentiment(res.sentiment);
-        if (typeof res.confidence === 'number') {
-          setHfConfidence(res.confidence);
-        }
-      } catch (err) {
-        console.warn('[ReviewModal] HF prediction error:', err);
-      } finally {
-        setIsAnalyzingHf(false);
-      }
-    }, 600);
-  };
-
-  const handleStarPress = (score: number) => {
-    // Star rating only sets the star rating — NLP sentiment is determined strictly by the comment text!
-    setRating(score);
-  };
-
-  const handleFeedbackChange = (text: string) => {
-    setFeedback(text);
-    if (errorMsg) setErrorMsg(null);
-    if (text.trim().length >= 4) {
-      const analyzed = analyzeNlpSentiment(text);
-      setSentiment(analyzed);
-      runHuggingFacePrediction(text);
-    } else {
-      setHfConfidence(null);
-      setSentiment('Neutral');
-    }
-  };
+  useEffect(() => {
+    setStillWaiting(false);
+    if (!isSubmitting) return;
+    const timer = setTimeout(() => setStillWaiting(true), 8000);
+    return () => clearTimeout(timer);
+  }, [isSubmitting]);
 
   const handleSubmit = async () => {
+    if (busy.current || savedReview) return;
     if (!token) {
       Alert.alert('Session Expired', 'Please log in again to submit a review.');
       return;
     }
-
     const trimmed = feedback.trim();
     if (trimmed.length < 10) {
-      setErrorMsg('Feedback must be at least 10 characters long.');
+      setErrorMsg('Please write at least 10 characters about your experience.');
       return;
     }
-
-    setErrorMsg(null);
+    const params = { booking_id: bookingId, rating, unstructured_feedback: trimmed };
+    const body = JSON.stringify(params);
+    if (submission.current?.body !== body) submission.current = { body, key: generateUUID() };
+    const currentSession = session.current;
+    busy.current = true;
     setIsSubmitting(true);
-
+    setErrorMsg(null);
+    setAnalysisUnavailable(false);
+    Keyboard.dismiss();
     try {
-      await submitReview(token, {
-        booking_id: bookingId,
-        rating,
-        unstructured_feedback: trimmed,
-        nlp_sentiment: sentiment,
-      });
-
-      setIsSubmitting(false);
-      Alert.alert('Review Submitted', 'Thank you for your valuable feedback!', [
-        {
-          text: 'OK',
-          onPress: () => {
-            setFeedback('');
-            setRating(5);
-            setSentiment('Positive');
-            onClose();
-            onSuccess?.();
-          },
-        },
-      ]);
-    } catch (err: any) {
-      setIsSubmitting(false);
-      setErrorMsg(err.message || 'Failed to submit review. Please try again.');
+      const result = await submitReview(token, params, submission.current.key);
+      if (currentSession !== session.current) return;
+      setSavedReview(result.data);
+      onSuccess?.();
+    } catch (error) {
+      if (currentSession !== session.current) return;
+      setAnalysisUnavailable(error instanceof ReviewSubmissionError && error.code === 'sentiment_unavailable');
+      setErrorMsg(error instanceof Error ? error.message : 'Could not submit your review. Please try again.');
+    } finally {
+      if (currentSession === session.current) {
+        busy.current = false;
+        setIsSubmitting(false);
+      }
     }
   };
 
   const handleAttemptClose = () => {
-    if (isMandatory) {
-      Alert.alert(
-        'Mandatory Service Feedback',
-        'In accordance with Batas Kasambahay (RA 10361), both parties are required to submit service feedback to complete this contract.',
-        [
-          { text: 'Complete Review Now', style: 'default' },
-          { text: 'Exit for Now', style: 'destructive', onPress: onClose },
-        ]
-      );
-    } else {
-      onClose();
-    }
+    if (busy.current) return;
+    if (isMandatory && !savedReview) {
+      Alert.alert('Share Your Feedback', 'Your review helps others choose a service partner. You can return to this booking to review it later.', [
+        { text: 'Keep Writing' }, { text: 'Review Later', onPress: onClose },
+      ]);
+    } else onClose();
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={handleAttemptClose}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        {/* Header */}
+    <Modal visible={visible} animationType="slide" onRequestClose={handleAttemptClose}>
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
-          <Pressable onPress={handleAttemptClose} style={styles.backBtn} hitSlop={12}>
+          <Pressable accessibilityLabel="Close review" disabled={isSubmitting} onPress={handleAttemptClose} style={[styles.backBtn, isSubmitting && { opacity: 0.3 }]} hitSlop={12}>
             <Ionicons name="close" size={24} color="#1A1A1A" />
           </Pressable>
-          <Text style={styles.headerTitle}>
-            {isMandatory ? 'Service Review (Required)' : 'Write a Review'}
-          </Text>
+          <Text style={styles.headerTitle}>{savedReview ? 'Review Submitted' : 'Write a Review'}</Text>
           <View style={{ width: 40 }} />
         </View>
-
-        <ScrollView
-          style={styles.scrollBody}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Mandatory Compliance Banner */}
-          {isMandatory ? (
-            <View style={styles.mandatoryNoticeBanner}>
-              <Ionicons name="shield-checkmark" size={20} color="#B45309" style={{ marginRight: 8, marginTop: 2 }} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.mandatoryNoticeTitle}>Mandatory Service Evaluation</Text>
-                <Text style={styles.mandatoryNoticeSub}>
-                  Statutory feedback required under RA 10361 to finalize this contract and update public resume metrics.
-                </Text>
-              </View>
-            </View>
-          ) : null}
-
-          {/* Card Hero */}
+        <ScrollView ref={scroll} style={styles.scrollBody} contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 16) + 24 }]} keyboardShouldPersistTaps="handled">
           <View style={styles.card}>
             <Text style={styles.revieweeText}>How was your experience with</Text>
             <Text style={styles.revieweeName}>{revieweeName}?</Text>
-
-            {/* Stars Picker */}
             <View style={styles.starsRow}>
-              {[1, 2, 3, 4, 5].map((s) => (
-                <Pressable
-                  key={s}
-                  onPress={() => handleStarPress(s)}
-                  hitSlop={8}
-                  style={styles.starTouch}
-                >
-                  <Ionicons
-                    name={s <= rating ? 'star' : 'star-outline'}
-                    size={38}
-                    color="#FFB43B"
-                  />
+              {[1, 2, 3, 4, 5].map(score => (
+                <Pressable key={score} accessibilityRole="button" accessibilityLabel={`Rate ${score} out of 5 stars`} accessibilityState={{ selected: score === rating, disabled: isSubmitting || !!savedReview }} disabled={isSubmitting || !!savedReview} onPress={() => { setRating(score); setErrorMsg(null); }} hitSlop={8} style={styles.starTouch}>
+                  <Ionicons name={score <= rating ? 'star' : 'star-outline'} size={38} color="#FFB43B" />
                 </Pressable>
               ))}
             </View>
             <Text style={styles.ratingScoreText}>{rating}.0 — {RATING_LABELS[rating]}</Text>
+            <Text style={styles.revieweeText}>Your star rating is separate from feedback sentiment.</Text>
           </View>
-
-          {/* Feedback Form */}
           <View style={styles.inputCard}>
-            <Text style={styles.inputLabel}>FEEDBACK DETAILS</Text>
-            <TextInput
-              style={styles.textArea}
-              placeholder="Tell others about the quality of work, punctuality, and overall satisfaction (minimum 10 characters)..."
-              placeholderTextColor="#9CA3AF"
-              multiline
-              numberOfLines={5}
-              textAlignVertical="top"
-              value={feedback}
-              onChangeText={handleFeedbackChange}
-              maxLength={1000}
-            />
+            <Text style={styles.inputLabel}>YOUR EXPERIENCE</Text>
+            <TextInput style={styles.textArea} accessibilityLabel="Review feedback" placeholder="Share what went well or what could be better. You can write in English, Filipino, or Bisaya." placeholderTextColor="#9CA3AF" multiline textAlignVertical="top" value={feedback} editable={!isSubmitting && !savedReview} onChangeText={text => { setFeedback(text); setErrorMsg(null); setAnalysisUnavailable(false); }} maxLength={1000} />
             <View style={styles.charCountRow}>
-              <Text
-                style={[
-                  styles.charCountText,
-                  feedback.trim().length > 0 && feedback.trim().length < 10
-                    ? { color: '#EF4444' }
-                    : null,
-                ]}
-              >
-                {feedback.trim().length} / 1000 characters (min 10)
-              </Text>
+              <Text style={styles.charCountText}>{feedback.trim().length} / 1000 characters · minimum 10</Text>
             </View>
           </View>
-
-          {/* Error Banner */}
-          {errorMsg ? (
-            <View style={styles.errorBox}>
-              <Ionicons name="alert-circle" size={18} color="#EF4444" style={{ marginRight: 6 }} />
-              <Text style={styles.errorText}>{errorMsg}</Text>
+          {isSubmitting && (
+            <View onLayout={() => scroll.current?.scrollToEnd({ animated: true })} style={styles.statusCard} accessibilityLiveRegion="polite" accessibilityState={{ busy: true }}>
+              <ActivityIndicator size="small" color="#B45309" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.statusTitle}>Analyzing your feedback…</Text>
+                <Text style={styles.statusText}>{stillWaiting ? 'Still checking. Please keep this screen open for a moment.' : 'We’re checking the tone of your feedback before saving your review. This may take a moment.'}</Text>
+              </View>
             </View>
-          ) : null}
-
-          {/* Submit Button */}
-          <Pressable
-            style={({ pressed }) => [
-              styles.submitBtn,
-              isSubmitting && { opacity: 0.7 },
-              pressed && { opacity: 0.9 },
-            ]}
-            onPress={handleSubmit}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text style={styles.submitBtnText}>Submit Review</Text>
-            )}
+          )}
+          {savedReview && (
+            <View onLayout={() => scroll.current?.scrollToEnd({ animated: true })} style={[styles.statusCard, { backgroundColor: '#F0FDF4' }]} accessibilityLiveRegion="polite">
+              <Ionicons name="checkmark-circle" size={28} color="#16A34A" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.statusTitle}>Review submitted</Text>
+                <Text style={styles.statusText}>Thank you! Your review has been saved.</Text>
+                <Text style={[styles.resultBadge, SENTIMENT_COLORS[savedReview.nlp_sentiment]]}>Feedback sentiment: {savedReview.nlp_sentiment}</Text>
+              </View>
+            </View>
+          )}
+          {errorMsg && (
+            <View onLayout={() => scroll.current?.scrollToEnd({ animated: true })} style={styles.errorBox} accessibilityLiveRegion="polite">
+              <Ionicons name="alert-circle-outline" size={22} color="#B45309" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.statusTitle}>{analysisUnavailable ? 'Analysis is unavailable right now' : 'Could not submit your review'}</Text>
+                <Text style={styles.errorText}>{errorMsg}</Text>
+              </View>
+            </View>
+          )}
+          <Pressable accessibilityRole="button" accessibilityState={{ disabled: isSubmitting, busy: isSubmitting }} style={({ pressed }) => [styles.submitBtn, (pressed || isSubmitting) && { opacity: 0.7 }]} disabled={isSubmitting} onPress={savedReview ? onClose : handleSubmit}>
+            <Text style={styles.submitBtnText}>{savedReview ? 'Done' : isSubmitting ? 'Please wait…' : errorMsg ? 'Try Again' : 'Submit Review'}</Text>
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -291,6 +171,10 @@ export function ReviewModal({
 }
 
 const styles = StyleSheet.create({
+  statusCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: '#FFF7ED', borderRadius: 16, padding: 16, marginBottom: 16 },
+  statusTitle: { fontSize: 15, fontWeight: '700', color: '#1F2937', marginBottom: 5 },
+  statusText: { fontSize: 13, lineHeight: 19, color: '#4B5563' },
+  resultBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, fontSize: 12, fontWeight: '700', marginTop: 10 },
   container: {
     flex: 1,
     backgroundColor: '#F8F9FA',
@@ -363,29 +247,6 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginBottom: 16,
   },
-  sentimentRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  sentimentPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: '#F3F4F6',
-  },
-  sentimentPillSelected: {
-    backgroundColor: '#FFB43B',
-  },
-  sentimentPillText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#4B5563',
-  },
-  sentimentPillTextSelected: {
-    color: '#FFFFFF',
-  },
   inputCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -425,8 +286,9 @@ const styles = StyleSheet.create({
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEE2E2',
-    padding: 12,
+    backgroundColor: '#FFF7ED',
+    gap: 10,
+    padding: 16,
     borderRadius: 12,
     marginBottom: 16,
   },
@@ -451,58 +313,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
-  },
-  mandatoryNoticeBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#FEF3C7',
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 16,
-  },
-  mandatoryNoticeTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#92400E',
-    marginBottom: 2,
-  },
-  mandatoryNoticeSub: {
-    fontSize: 12,
-    color: '#78350F',
-    lineHeight: 17,
-  },
-  nlpLiveIndicatorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-    marginBottom: 6,
-    gap: 4,
-  },
-  nlpLiveText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#4B5563',
-  },
-  nlpLiveBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  nlpBadgePositive: {
-    backgroundColor: '#DCFCE7',
-  },
-  nlpBadgeNeutral: {
-    backgroundColor: '#E5E7EB',
-  },
-  nlpBadgeNegative: {
-    backgroundColor: '#FEE2E2',
-  },
-  nlpLiveBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1F2937',
   },
 });

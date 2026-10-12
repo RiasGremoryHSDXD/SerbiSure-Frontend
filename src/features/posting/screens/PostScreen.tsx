@@ -4,7 +4,6 @@ import { Text, View, Image, Pressable, Modal, KeyboardAvoidingView, Platform, An
 import { Ionicons } from '@expo/vector-icons';
 
 import { VerificationRequiredModal } from '../../verification/components/VerificationRequiredModal';
-import { SearchablePickerModal } from '../../../shared/ui/SearchablePickerModal';
 
 const logoSource = require('../../../../assets/serbisure-logo.png');
 
@@ -26,26 +25,11 @@ export function PostScreen(props: PostScreenProps) {
     config,
     insets,
     step,
-    selectedRegion,
-    selectedProvince,
-    selectedCity,
-    selectedBarangay,
-    regionsList,
-    provincesList,
-    citiesList,
-    barangaysList,
-    loadingLocations,
-    activePicker,
-    setActivePicker,
     postedSuccess,
     isPosting,
     showVerificationRequired,
     setShowVerificationRequired,
     verificationStatus,
-    handleSelectRegion,
-    handleSelectProvince,
-    handleSelectCity,
-    handleSelectBarangay,
     scaleAnim,
     spin,
     handleClose,
@@ -180,50 +164,6 @@ export function PostScreen(props: PostScreenProps) {
           verificationStatus={verificationStatus}
         />
 
-        {/* Location Picker Modals */}
-        <SearchablePickerModal
-          visible={activePicker === 'region'}
-          title="Select Region"
-          searchPlaceholder="Search region (e.g. Region X, NCR)..."
-          items={regionsList}
-          selectedCode={selectedRegion?.code}
-          loading={loadingLocations}
-          onSelect={handleSelectRegion}
-          onClose={() => setActivePicker(null)}
-        />
-
-        <SearchablePickerModal
-          visible={activePicker === 'province'}
-          title="Select Province"
-          searchPlaceholder="Search province (e.g. Misamis Oriental)..."
-          items={provincesList}
-          selectedCode={selectedProvince?.code}
-          loading={loadingLocations}
-          onSelect={handleSelectProvince}
-          onClose={() => setActivePicker(null)}
-        />
-
-        <SearchablePickerModal
-          visible={activePicker === 'city'}
-          title="Select City / Municipality"
-          searchPlaceholder="Search city (e.g. CDO, Cagayan, Manila)..."
-          items={citiesList}
-          selectedCode={selectedCity?.code}
-          loading={loadingLocations}
-          onSelect={handleSelectCity}
-          onClose={() => setActivePicker(null)}
-        />
-
-        <SearchablePickerModal
-          visible={activePicker === 'barangay'}
-          title="Select Barangay"
-          searchPlaceholder="Search barangay (e.g. Pagatpat, Carmen, Bulua)..."
-          items={barangaysList}
-          selectedCode={selectedBarangay?.code}
-          loading={loadingLocations}
-          onSelect={handleSelectBarangay}
-          onClose={() => setActivePicker(null)}
-        />
       </KeyboardAvoidingView>
     </Modal>
   );

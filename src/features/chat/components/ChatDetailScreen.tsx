@@ -1,14 +1,17 @@
+import { mapBookingCard, bookingSchedule, type BookingCardInfo } from '../bookingCards';
+import { sendBookingOffer, respondToBookingOffer } from '../api/bookingOffersApi';
+import type { BookingConfirmData } from '../../bookings/components/BookingModal';
 import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, Text, View, Image, TextInput, ScrollView, Pressable, Modal, KeyboardAvoidingView, Platform, Alert, Animated, ActivityIndicator, Dimensions, PanResponder, ToastAndroid, NativeModules, LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { BookingModal } from '../../bookings/components/BookingModal';
-import { UserProfileModal } from '../../profile/components/UserProfileModal';
+import { UserProfileView } from '../../profile/components/UserProfileView';
 
 import { useUser } from '../../auth/session/UserContext';
 import THEME from '../../../shared/theme/theme';
-import { fetchChatThreadDetails, sendChatMessage, sendChatImage, toggleChatReaction, deleteChatMessage, markChatMessageRead, sendChatTyping } from '../api/chatApi';
+import { fetchChatThreadDetails, generateUUID, sendChatMessage, sendChatImage, toggleChatReaction, deleteChatMessage, markChatMessageRead, sendChatTyping } from '../api/chatApi';
 import { chatStore } from '../store/chatStore';
 import { savedJobsStore } from '../../bookings/store/savedJobsStore';
 import { API_BASE_URL } from '../../../shared/api/config';
@@ -17,14 +20,14 @@ import { fetchWithTimeout } from '../../../shared/api/httpClient';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export const formatBookingStartDate = (dateStr?: string) => {
-  if (!dateStr) return 'Soon';
+  if (!dateStr) return 'Not provided';
   try {
     const parts = dateStr.split('/');
     if (parts.length === 3 && parts[0] && parts[1]) {
       const m = parseInt(parts[0], 10) - 1;
       const d = parseInt(parts[1], 10);
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return `${months[m] || 'May'} ${d}`;
+      return `${months[m] || 'Unknown'} ${d}`;
     }
     const parsed = new Date(dateStr);
     if (!isNaN(parsed.getTime())) {
@@ -35,101 +38,8 @@ export const formatBookingStartDate = (dateStr?: string) => {
   return dateStr;
 };
 
-export function parseBookingInfoFromText(
-  cleanText?: string | null,
-  isSender: boolean = false,
-  senderName?: string,
-  contactName?: string
-): NonNullable<ChatMessage['bookingInfo']> | null {
-  if (!cleanText) return null;
-
-  const lower = cleanText.toLowerCase();
-  const isBooking =
-    cleanText.startsWith('[BOOKING') ||
-    lower.includes('booking offer') ||
-    lower.includes('booking ready') ||
-    lower.includes('booking declined') ||
-    cleanText.includes('📋 Booking');
-
-  if (!isBooking) return null;
-
-  const isDeclinedText =
-    cleanText.includes('BOOKING DECLINED') ||
-    lower.includes('declined the booking') ||
-    lower.includes('offer declined');
-
-  const defaultPersonName = isSender ? (senderName || 'You') : (contactName || 'Client');
-
-  // Case 1: JSON payload
-  if (cleanText.startsWith('[BOOKING]:') || cleanText.startsWith('[BOOKING_OFFER]:')) {
-    try {
-      const jsonStr = cleanText.replace(/^\[BOOKING(?:_OFFER)?\]:\s*/, '');
-      const data = JSON.parse(jsonStr);
-      return {
-        title: data.title || (data.isDeclined ? 'BOOKING DECLINED' : data.isConfirmed ? 'BOOKING CONFIRMED' : 'BOOKING READY'),
-        bookedByName: data.bookedByName || defaultPersonName,
-        startDate: data.startDate || '04/27/2026',
-        endDate: data.endDate || '05/27/2026',
-        workHours: data.workHours || '08:00 AM - 05:00 PM',
-        location: data.location || 'Zone 6, Cugman',
-        days: data.days || ['M', 'T', 'W', 'Th', 'F'],
-        salary: data.salary || '6500',
-        bookingType: data.bookingType || 'long_term',
-        jobRole: data.jobRole || 'Household Service',
-        details: data.details || `${data.salary || '6500'} · ${data.workHours || '08:00 AM - 05:00 PM'}`,
-        isConfirmed: !!data.isConfirmed,
-        isDeclined: !!data.isDeclined || isDeclinedText,
-      };
-    } catch (e) { }
-  }
-
-  // Case 2: Human-readable text payload (e.g. 📋 Booking Offer Sent (Long-Term): Yes hello? from 04/27/2026 to 05/27/2026 (₱6500/mo) at Zone 6, Cugman)
-  const dateMatches = cleanText.match(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/g) ||
-    cleanText.match(/\b\d{4}-\d{2}-\d{2}\b/g);
-  const startDate = dateMatches && dateMatches[0] ? dateMatches[0] : '04/27/2026';
-  const endDate = dateMatches && dateMatches[1] ? dateMatches[1] : '05/27/2026';
-
-  const rateMatch = cleanText.match(/₱\s*([0-9,]+)/i);
-  const salaryClean = rateMatch && rateMatch[1] ? rateMatch[1].replace(/,/g, '') : '6500';
-
-  const isShort = /short[-\s]*term/i.test(cleanText) || /\/day/i.test(cleanText);
-  const bookingType: 'short_term' | 'long_term' = isShort ? 'short_term' : 'long_term';
-  const rateLabel = isShort ? `₱${salaryClean}/day` : `₱${salaryClean}/mo`;
-
-  const locMatch = cleanText.match(/\bat\s+([^(\n\r]+)/i);
-  const location = locMatch && locMatch[1] ? locMatch[1].trim() : 'Zone 6, Cugman';
-
-  let jobRole = 'Household Service';
-  const roleMatch = cleanText.match(/:\s*(.*?)\s+from\s+/is);
-  if (roleMatch && roleMatch[1]) {
-    const rawRole = roleMatch[1].trim();
-    if (!rawRole.toLowerCase().includes('hello') && rawRole.length < 40) {
-      jobRole = rawRole;
-    }
-  }
-
-  const isAcquiredText =
-    cleanText.includes('JOB_ACQUIRED') ||
-    cleanText.includes('job position has already been acquired') ||
-    cleanText.includes('LISTING_CLOSED');
-
-  return {
-    title: isAcquiredText ? 'POSITION ACQUIRED' : isDeclinedText ? 'BOOKING DECLINED' : 'BOOKING READY',
-    bookedByName: defaultPersonName,
-    startDate,
-    endDate,
-    workHours: '08:00 AM - 05:00 PM',
-    location,
-    days: ['M', 'T', 'W', 'Th', 'F'],
-    salary: salaryClean,
-    bookingType,
-    jobRole,
-    details: `${rateLabel} · 08:00 AM - 05:00 PM`,
-    isConfirmed: false,
-    isDeclined: isDeclinedText,
-    isAcquired: isAcquiredText,
-  };
-}
+// Historic text offers remain ordinary messages without actionable terms.
+export function parseBookingInfoFromText(..._args: unknown[]): null { return null; }
 
 export interface ChatMessage {
   id: string;
@@ -147,22 +57,7 @@ export interface ChatMessage {
   time: string;
   createdAtRaw?: string;
   avatar?: string;
-  bookingInfo?: {
-    title: string;
-    bookedByName?: string;
-    startDate: string;
-    endDate?: string;
-    workHours?: string;
-    location?: string;
-    days?: string[];
-    salary?: string;
-    bookingType?: 'long_term' | 'short_term';
-    jobRole?: string;
-    details: string;
-    isConfirmed?: boolean;
-    isDeclined?: boolean;
-    isAcquired?: boolean;
-  };
+  bookingInfo?: BookingCardInfo;
   isTyping?: boolean;
   isUploading?: boolean;
 }
@@ -472,7 +367,7 @@ export function ChatDetailScreen({
   contactName = 'User',
   contactRole = 'Member',
   contactAvatar,
-  isOnline = true,
+  isOnline = false,
   initialMessage,
   initialReplyTo,
   userRole = 'homeowner',
@@ -643,7 +538,7 @@ export function ChatDetailScreen({
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [bookingReadOnly, setBookingReadOnly] = useState(false);
   const [activeBookingMsgId, setActiveBookingMsgId] = useState<string | null>(null);
-  const [activeBookingDetails, setActiveBookingDetails] = useState<any>(null);
+  const [activeBookingDetails, setActiveBookingDetails] = useState<BookingCardInfo | null>(null);
 
   // Right-to-left slide transition state
   const [modalVisible, setModalVisible] = useState(visible);
@@ -784,152 +679,65 @@ export function ChatDetailScreen({
     }, 80);
   };
 
-  const handleKasambahayDecline = (msgId: string) => {
-    const timeString = formatTimeOnly();
+  const responseBusyRef = useRef(false);
+  const [responseBusy, setResponseBusy] = useState(false);
+  const threadVersion = useRef(0);
+  const nextPoll = useRef(0);
+  const appliedPoll = useRef(0);
+  const [threadLoading, setThreadLoading] = useState(true);
+  const [threadError, setThreadError] = useState<string | null>(null);
+  const [threadReload, setThreadReload] = useState(0);
+  const offerDraft = useRef<{ body: string; key: string } | null>(null);
 
-    setMessages((prev) => {
-      const updated = prev.map((msg) => {
-        if (msg.id === msgId && msg.bookingInfo) {
-          return {
-            ...msg,
-            bookingInfo: {
-              ...msg.bookingInfo,
-              title: 'BOOKING DECLINED',
-              isConfirmed: false,
-              isDeclined: true,
-            },
-          };
-        }
-        return msg;
-      });
-
-      return [
-        ...updated,
-        {
-          id: `temp-${Date.now()}`,
-          sender: 'other',
-          text: `I appreciate the offer, but I have declined this booking request at this time. Thank you po!`,
-          time: timeString,
-          avatar: resolvedAvatar,
-        },
-      ];
-    });
-
-    if (partnerId && effectiveToken) {
-      sendChatMessage(
-        effectiveToken,
-        partnerId,
-        `I appreciate the offer, but I have declined this booking request at this time. Thank you po!`
-      ).catch(() => { });
-    }
-
-    setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+  const handleOfferResponse = async (msgId: string, action: 'accept' | 'reject') => {
+    const card = messages.find(message => message.id === msgId)?.bookingInfo;
+    if (!card || !effectiveToken || responseBusyRef.current) return;
+    responseBusyRef.current = true; setResponseBusy(true); threadVersion.current++;
+    try {
+      await respondToBookingOffer(effectiveToken, card, action);
+      setMessages(current => current.map(message => message.id === msgId && message.bookingInfo ? {
+        ...message, bookingInfo: { ...message.bookingInfo, canRespond: false,
+          isConfirmed: action === 'accept', isDeclined: action === 'reject',
+          title: action === 'accept' ? 'BOOKING CONFIRMED' : 'BOOKING DECLINED' },
+      } : message));
+      if (action === 'accept') savedJobsStore.markJobClosed(card.bookingId);
+    } finally { responseBusyRef.current = false; setResponseBusy(false); }
+  };
+  const handleKasambahayConfirm = (id: string) => handleOfferResponse(id, 'accept');
+  const handleKasambahayDecline = (id: string) => handleOfferResponse(id, 'reject');
+  const confirmFromCard = (id: string, action: 'accept' | 'reject') => {
+    void handleOfferResponse(id, action).catch(error => Alert.alert('Cannot Confirm', error instanceof Error ? error.message : 'Please try again.'));
   };
 
-  const handleKasambahayConfirm = (msgId: string) => {
-    const timeString = formatTimeOnly();
-
-    const targetMsg = messages.find((m) => m.id === msgId);
-    if (targetMsg?.bookingInfo?.isAcquired || savedJobsStore.isClosed(partnerId)) {
-      Alert.alert('Job Position Acquired', 'This job position has already been acquired.');
-      return;
-    }
-
-    // Mark job listing closed in savedJobsStore
-    const jobKey = activeBookingDetails?.jobPost?.id || targetMsg?.bookingInfo?.jobRole || partnerId;
-    if (jobKey) {
-      savedJobsStore.markJobClosed(jobKey, partnerId, contactName);
-    }
-    if (partnerId) {
-      savedJobsStore.markJobClosed(partnerId, contactName);
-    }
-
-    setMessages((prev) => {
-      const updated = prev.map((msg) => {
-        if (msg.id === msgId && msg.bookingInfo) {
-          return {
-            ...msg,
-            bookingInfo: {
-              ...msg.bookingInfo,
-              title: 'BOOKING CONFIRMED',
-              isConfirmed: true,
-              isDeclined: false,
-            },
-          };
-        }
-        return msg;
-      });
-
-      return [
-        ...updated,
-        {
-          id: `temp-${Date.now()}`,
-          sender: 'other',
-          text: `I have accepted and confirmed the booking request! Contract has been formalized. Thank you po! 😊`,
-          time: timeString,
-          avatar: resolvedAvatar,
-        },
-      ];
-    });
-
-    if (partnerId && effectiveToken) {
-      sendChatMessage(
-        effectiveToken,
-        partnerId,
-        `I have accepted and confirmed the booking request! Contract has been formalized. Thank you po! 😊`
-      ).catch(() => { });
-
-      // Call backend to formalize contract, update booking status to Accepted,
-      // and notify all other Kasambahays who applied!
-      fetchWithTimeout(`${API_BASE_URL}/api/v1/booking/confirm-contract/`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${effectiveToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          partner_id: partnerId,
-          booking_id: activeBookingDetails?.jobPost?.id || (targetMsg?.bookingInfo as any)?.bookingId,
-        }),
-      })
-        .then(async (res) => {
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) {
-            Alert.alert(
-              'Cannot Accept',
-              data?.error || 'This job position has already been acquired.'
-            );
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === msgId && msg.bookingInfo
-                  ? {
-                    ...msg,
-                    bookingInfo: {
-                      ...msg.bookingInfo,
-                      title: 'POSITION ACQUIRED',
-                      isAcquired: true,
-                      isConfirmed: false,
-                    },
-                  }
-                  : msg
-              )
-            );
-            return;
-          }
-          if (data?.booking_id) {
-            savedJobsStore.markJobClosed(data.booking_id, partnerId, contactName);
-          }
-        })
-        .catch((err) => {
-          console.warn('[handleKasambahayConfirm] confirm-contract failed:', err);
-        });
-    }
-
-    setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+  const handleSendOffer = async (details: BookingConfirmData) => {
+    if (!effectiveToken || !partnerId) throw new Error('Sign in and select a conversation before sending an offer.');
+    if (responseBusyRef.current) throw new Error('Please wait for the current booking action to finish.');
+    const times = details.workHours.split(' - ');
+    const start = bookingSchedule(details.startDate, times[0] || '');
+    const end = bookingSchedule(details.endDate, times[1] || '');
+    const payload = {
+      recipient_id: partnerId, booking_type: details.bookingType, work_setup: details.workSetup,
+      service_category: details.serviceCategory, start_time: start.iso, end_time: end.iso,
+      daily_start_time: start.clock, daily_end_time: end.clock, work_days: details.days,
+      region: details.region, province: details.province, city: details.city, barangay: details.barangay,
+      street: details.street, floor_number: details.floorUnit || undefined, zip_code: details.zipCode, special_instruction: '',
+      rate_amount: details.salary, rate_period: details.bookingType === 'long_term' ? 'month' as const : 'day' as const,
+    };
+    const body = JSON.stringify(payload);
+    if (offerDraft.current?.body !== body) offerDraft.current = { body, key: generateUUID() };
+    responseBusyRef.current = true; setResponseBusy(true);
+    try {
+      const version = ++threadVersion.current;
+      const result = await sendBookingOffer(effectiveToken, payload, offerDraft.current.key);
+      const info = mapBookingCard(result.chat_message.booking_offer);
+      if (!info) throw new Error('The server did not return a saved offer. Refresh the conversation before retrying.');
+      if (version !== threadVersion.current) return;
+      setMessages(current => [...current.filter(message => message.id !== result.chat_message.chat_message_id), {
+        id: result.chat_message.chat_message_id, sender: 'system', bookingInfo: info,
+        time: formatTimeOnly(result.chat_message.createdAt), createdAtRaw: result.chat_message.createdAt,
+      }]);
+      offerDraft.current = null;
+    } finally { responseBusyRef.current = false; setResponseBusy(false); }
   };
 
   React.useEffect(() => {
@@ -938,11 +746,16 @@ export function ChatDetailScreen({
     let isMounted = true;
 
     const syncThread = (isInitial = false) => {
-      if (!partnerId || !effectiveToken) return;
+      if (!partnerId || !effectiveToken || responseBusyRef.current) return;
+      const version = threadVersion.current;
+      const poll = ++nextPoll.current;
+      if (isInitial) setThreadLoading(true);
 
       fetchChatThreadDetails(effectiveToken, partnerId)
         .then(({ messages: items, partnerIsTyping, partnerIsOnline }) => {
-          if (!isMounted) return;
+          if (!isMounted || version !== threadVersion.current || poll < appliedPoll.current) return;
+          appliedPoll.current = poll;
+          setThreadLoading(false); setThreadError(null);
           setIsOtherTyping(partnerIsTyping);
           if (typeof partnerIsOnline === 'boolean') {
             setPartnerOnline(partnerIsOnline);
@@ -951,6 +764,10 @@ export function ChatDetailScreen({
           if (items && items.length > 0) {
             const visibleItems = items.filter((m) => !chatStore.isMessageDeleted(m.chat_message_id));
             const mapped: ChatMessage[] = visibleItems.map((m) => {
+              const persistedOffer = mapBookingCard(m.booking_offer);
+              if (persistedOffer) return { id: m.chat_message_id, sender: 'system' as const,
+                bookingInfo: persistedOffer, time: formatTimeOnly(m.createdAt), createdAtRaw: m.createdAt };
+
               let displayReaction = m.my_reaction || undefined;
               if (!displayReaction && m.reaction_summary) {
                 for (const [emoji, count] of Object.entries(m.reaction_summary)) {
@@ -1028,23 +845,6 @@ export function ChatDetailScreen({
                   cleanText = replyMatch[3];
                 }
 
-                // Parse structured or text-based booking offer
-                const bookingInfo = parseBookingInfoFromText(
-                  cleanText,
-                  m.is_sender,
-                  user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'You',
-                  contactName
-                );
-
-                if (bookingInfo) {
-                  return {
-                    id: m.chat_message_id,
-                    sender: 'system' as const,
-                    bookingInfo,
-                    time: formatTimeOnly(m.createdAt),
-                    createdAtRaw: m.createdAt,
-                  };
-                }
               }
 
               return {
@@ -1061,102 +861,7 @@ export function ChatDetailScreen({
               };
             });
 
-            // Deduplicate consecutive duplicate booking cards (prevents double contract cards!)
-            const deduplicatedMapped: ChatMessage[] = [];
-            for (const current of mapped) {
-              const prev = deduplicatedMapped[deduplicatedMapped.length - 1];
-
-              if (current.bookingInfo && prev?.bookingInfo) {
-                const isSameOffer =
-                  current.bookingInfo.startDate === prev.bookingInfo.startDate &&
-                  current.bookingInfo.salary === prev.bookingInfo.salary &&
-                  current.bookingInfo.bookingType === prev.bookingInfo.bookingType;
-
-                if (isSameOffer) {
-                  // Keep only one booking card
-                  if (current.bookingInfo.isConfirmed || current.bookingInfo.isAcquired) {
-                    deduplicatedMapped[deduplicatedMapped.length - 1] = current;
-                  }
-                  continue;
-                }
-              }
-              deduplicatedMapped.push(current);
-            }
-
-            // Check if this thread has an acquired / closed notice
-            const hasClosedNotice = visibleItems.some((m) => {
-              const text = m.message_payload || '';
-              return (
-                text.startsWith('[JOB_ACQUIRED]') ||
-                text.includes('job position has already been acquired') ||
-                text.startsWith('[LISTING_CLOSED]') ||
-                text.startsWith('[LISTING CLOSED]')
-              );
-            });
-
-            // Check if partner or user accepted the booking in this thread
-            const hasConfirmationMessage = visibleItems.some((m) => {
-              const text = m.message_payload || '';
-              return text.includes('agreed and accepted') || text.includes('accepted and confirmed');
-            });
-
-            if (hasClosedNotice) {
-              // Position acquired by another applicant:
-              savedJobsStore.markJobClosed(partnerId, contactName);
-              deduplicatedMapped.forEach((msg) => {
-                if (msg.bookingInfo) {
-                  msg.bookingInfo.isAcquired = true;
-                  msg.bookingInfo.isConfirmed = false;
-                  msg.bookingInfo.title = 'POSITION ACQUIRED';
-                }
-              });
-            } else if (hasConfirmationMessage) {
-              savedJobsStore.markJobClosed(partnerId, contactName);
-              // Only mark the latest booking offer in this thread as confirmed:
-              let lastBookingMsg: ChatMessage | null = null;
-              for (let i = deduplicatedMapped.length - 1; i >= 0; i--) {
-                const candidate = deduplicatedMapped[i];
-                if (candidate?.bookingInfo) {
-                  lastBookingMsg = candidate;
-                  break;
-                }
-              }
-              if (lastBookingMsg && lastBookingMsg.bookingInfo) {
-                lastBookingMsg.bookingInfo.isConfirmed = true;
-                lastBookingMsg.bookingInfo.title = 'BOOKING CONFIRMED';
-              }
-
-              // Ensure contract is confirmed and all other applicants are notified in backend
-              if (effectiveToken && partnerId && !savedJobsStore.isClosed(partnerId)) {
-                fetchWithTimeout(`${API_BASE_URL}/api/v1/booking/confirm-contract/`, {
-                  method: 'POST',
-                  headers: {
-                    Authorization: `Bearer ${effectiveToken}`,
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    partner_id: partnerId,
-                    booking_id: activeBookingDetails?.jobPost?.id,
-                  }),
-                })
-                  .then((r) => r.json())
-                  .then((d) => {
-                    if (d?.booking_id) {
-                      savedJobsStore.markJobClosed(d.booking_id, partnerId, contactName);
-                    }
-                  })
-                  .catch(() => { });
-              }
-            } else if (savedJobsStore.isClosed(partnerId)) {
-              // If marked closed in store, mark booking cards as acquired
-              deduplicatedMapped.forEach((msg) => {
-                if (msg.bookingInfo) {
-                  msg.bookingInfo.isAcquired = true;
-                  msg.bookingInfo.isConfirmed = false;
-                  msg.bookingInfo.title = 'POSITION ACQUIRED';
-                }
-              });
-            }
+            const deduplicatedMapped = mapped;
 
             setMessages((prev) => {
               const hasChanged =
@@ -1167,7 +872,7 @@ export function ChatDetailScreen({
                   if (msg.id !== m.id) return true;
                   if (msg.sender !== m.sender) return true;
                   if (!!msg.bookingInfo !== !!m.bookingInfo) return true;
-                  if (msg.bookingInfo?.isConfirmed !== m.bookingInfo?.isConfirmed) return true;
+                  if (JSON.stringify(msg.bookingInfo) !== JSON.stringify(m.bookingInfo)) return true;
                   if (msg.bookingInfo?.isAcquired !== m.bookingInfo?.isAcquired) return true;
                   if (msg.reaction !== m.reaction) return true;
                   if (msg.imageUri !== m.imageUri) return true;
@@ -1230,29 +935,17 @@ export function ChatDetailScreen({
                 });
               })
               .catch((err) => {
+                if (isMounted) { setMessages(current => current.filter(message => message.id !== tempId)); setThreadError('Could not send the initial message. Please retry.'); }
                 console.warn('[ChatDetailScreen] Failed to auto-send initial message:', err);
               });
-          } else if (isInitial) {
+          } else {
             setMessages([]);
           }
         })
         .catch((err) => {
-          if (!isMounted) return;
-          if (isInitial) {
-            console.warn('[ChatDetailScreen] Could not load thread:', err);
-            if (initialMessage) {
-              setMessages([
-                {
-                  id: `temp-${Date.now()}`,
-                  sender: 'me',
-                  text: initialMessage,
-                  time: formatTimeOnly(),
-                },
-              ]);
-            } else {
-              setMessages([]);
-            }
-          }
+          if (!isMounted || version !== threadVersion.current) return;
+          setThreadLoading(false);
+          setThreadError(err instanceof Error ? err.message : 'Unable to load this conversation.');
         });
     };
 
@@ -1270,23 +963,14 @@ export function ChatDetailScreen({
         clearInterval(intervalId);
       };
     } else {
-      if (initialMessage) {
-        setMessages([
-          {
-            id: `temp-${Date.now()}`,
-            sender: 'me',
-            text: initialMessage,
-            time: formatTimeOnly(),
-          },
-        ]);
-      } else {
-        setMessages([]);
-      }
+      setThreadLoading(false);
+      setThreadError('Sign in and select a conversation to view messages.');
+      setMessages([]);
       return () => {
         isMounted = false;
       };
     }
-  }, [visible, partnerId, effectiveToken, resolvedAvatar, initialMessage]);
+  }, [visible, partnerId, effectiveToken, resolvedAvatar, initialMessage, threadReload]);
 
   const handleSend = () => {
     const trimmed = inputMessage.trim();
@@ -1656,7 +1340,7 @@ export function ChatDetailScreen({
               </View>
             </Pressable>
 
-            {isHomeowner ? (
+            {(user.accountType === 'Homeowner' || user.accountType === 'Kasambahay') ? (
               <Pressable
                 style={styles.bookingHeaderBtn}
                 onPress={() => {
@@ -1693,14 +1377,16 @@ export function ChatDetailScreen({
               }}
             >
               {/* Show initial Date Separator if empty thread */}
-              {messages.length === 0 ? (
-                <View style={styles.datePill}>
-                  <Text style={styles.datePillText}>
-                    {formatCenteredDateTime(new Date().toISOString())}
-                  </Text>
+              {messages.length === 0 && !threadLoading && !threadError ? (
+                <View style={{ padding: 32, alignItems: 'center' }}>
+                  <Ionicons name="chatbubbles-outline" size={38} color="#9CA3AF" />
+                  <Text style={{ marginTop: 12, fontWeight: '700' }}>No messages yet</Text>
+                  <Text style={{ marginTop: 6, color: '#6B7280', textAlign: 'center' }}>Send a message or use the calendar button to propose a booking.</Text>
                 </View>
               ) : null}
 
+              {threadLoading && !messages.length ? <ActivityIndicator style={{ marginTop: 32 }} color="#FFB380" /> : null}
+              {threadError ? <View style={{ padding: 20 }}><Text>{threadError}</Text><Pressable onPress={() => setThreadReload(value => value + 1)}><Text style={{ marginTop: 8, color: '#EA580C' }}>Retry conversation</Text></Pressable></View> : null}
               {/* Messages */}
               {messages.map((item, index) => {
                 const prevMsg = index > 0 ? messages[index - 1] : null;
@@ -1746,7 +1432,7 @@ export function ChatDetailScreen({
                 }
 
                 if (item.sender === 'system' && item.bookingInfo) {
-                  const isAcquired = item.bookingInfo.isAcquired || item.bookingInfo.title === 'POSITION ACQUIRED';
+                  const isAcquired = item.bookingInfo.isAcquired || item.bookingInfo.title === 'OFFER UNAVAILABLE';
                   const isConfirmed = !isAcquired && (item.bookingInfo.isConfirmed || item.bookingInfo.title === 'BOOKING CONFIRMED');
                   const isDeclined = item.bookingInfo.isDeclined || item.bookingInfo.title === 'BOOKING DECLINED';
                   const bookedPersonName =
@@ -1777,23 +1463,7 @@ export function ChatDetailScreen({
                           ]}
                           onPress={() => {
                             setActiveBookingMsgId(item.id);
-                            setActiveBookingDetails({
-                              startDate: item.bookingInfo?.startDate,
-                              endDate: item.bookingInfo?.endDate || '05/27/2026',
-                              workHours:
-                                item.bookingInfo?.workHours ||
-                                item.bookingInfo?.details?.split('·')[1]?.trim() ||
-                                '08:00 AM - 05:00 PM',
-                              salary:
-                                item.bookingInfo?.salary ||
-                                item.bookingInfo?.details?.split('·')[0]?.replace(/[^0-9.]/g, '') ||
-                                '6500',
-                              location: item.bookingInfo?.location || 'Zone 6, Cugman',
-                              days: item.bookingInfo?.days || ['M', 'T', 'W', 'Th', 'F'],
-                              bookingType: item.bookingInfo?.bookingType || 'long_term',
-                              jobPost: undefined,
-                              isAcquired: isAcquired,
-                            } as any);
+                            setActiveBookingDetails(item.bookingInfo || null);
                             setBookingReadOnly(true);
                             setBookingModalVisible(true);
                           }}
@@ -1826,7 +1496,7 @@ export function ChatDetailScreen({
                                 </View>
                               ) : isConfirmed ? (
                                 <View style={styles.confirmedMicroBadge}>
-                                  <Text style={styles.confirmedMicroBadgeText}>Active</Text>
+                                  <Text style={styles.confirmedMicroBadgeText}>Confirmed</Text>
                                 </View>
                               ) : isDeclined ? (
                                 <View style={styles.declinedMicroBadge}>
@@ -1841,7 +1511,7 @@ export function ChatDetailScreen({
                                 : isDeclined
                                   ? `Start date: ${formattedStartDate} • Offer Declined`
                                   : isConfirmed
-                                    ? `Start date: ${formattedStartDate} • Contract Active`
+                                    ? `Start date: ${formattedStartDate} • Booking Confirmed`
                                     : `Start date: ${formattedStartDate} • Tap to review`}
                             </Text>
                           </View>
@@ -1861,16 +1531,16 @@ export function ChatDetailScreen({
                                 This job position has already been acquired.
                               </Text>
                             </View>
-                          ) : isKasambahay ? (
+                          ) : item.bookingInfo.canRespond ? (
                             <View style={styles.compactQuickActionRow}>
                               <Pressable
                                 style={({ pressed }) => [
                                   styles.compactQuickDeclineBtn,
                                   pressed && { opacity: 0.8 },
                                 ]}
-                                onPress={(e) => {
+                                disabled={responseBusy} onPress={(e) => {
                                   e.stopPropagation();
-                                  handleKasambahayDecline(item.id);
+                                  confirmFromCard(item.id, 'reject');
                                 }}
                               >
                                 <Ionicons name="close-circle-outline" size={16} color="#DC2626" style={{ marginRight: 4 }} />
@@ -1882,9 +1552,9 @@ export function ChatDetailScreen({
                                   styles.compactQuickAgreeBtn,
                                   pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
                                 ]}
-                                onPress={(e) => {
+                                disabled={responseBusy} onPress={(e) => {
                                   e.stopPropagation();
-                                  handleKasambahayConfirm(item.id);
+                                  confirmFromCard(item.id, 'accept');
                                 }}
                               >
                                 <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
@@ -2278,69 +1948,30 @@ export function ChatDetailScreen({
           contactName={contactName}
           contactRole={contactRole}
           contactAvatar={contactAvatar}
-          readOnly={bookingReadOnly || isKasambahay}
+          readOnly={bookingReadOnly}
+          canRespond={!!messages.find(message => message.id === activeBookingMsgId)?.bookingInfo?.canRespond}
           isConfirmed={activeBookingMsgId ? ((messages.find((m) => m.id === activeBookingMsgId)?.bookingInfo?.isConfirmed && !messages.find((m) => m.id === activeBookingMsgId)?.bookingInfo?.isAcquired) || false) : false}
           isDeclined={activeBookingMsgId ? messages.find((m) => m.id === activeBookingMsgId)?.bookingInfo?.isDeclined : false}
-          isAcquired={activeBookingMsgId ? Boolean(messages.find((m) => m.id === activeBookingMsgId)?.bookingInfo?.isAcquired || (activeBookingDetails as any)?.isAcquired) : Boolean((activeBookingDetails as any)?.isAcquired)}
+          isAcquired={activeBookingMsgId ? Boolean(messages.find((m) => m.id === activeBookingMsgId)?.bookingInfo?.isAcquired || activeBookingDetails?.isAcquired) : Boolean(activeBookingDetails?.isAcquired)}
           userRole={isHomeowner ? 'homeowner' : 'kasambahay'}
           initialDetails={activeBookingDetails}
           token={effectiveToken}
           bookingType="long_term"
-          onConfirm={(details) => {
-            const now = new Date();
-            const hours = now.getHours();
-            const minutes = now.getMinutes().toString().padStart(2, '0');
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-            const timeString = `${hours % 12 || 12}:${minutes} ${ampm}`;
-            const senderName = user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'You';
-            const termLabel = details.bookingType === 'short_term' ? 'Short-Term' : 'Long-Term';
-            const rateLabel = details.bookingType === 'short_term' ? `₱${details.salary}/day` : `₱${details.salary}/mo`;
-
-            const bookingText = `📋 Booking Offer Sent (${termLabel}): Household Service from ${details.startDate} to ${details.endDate} (${rateLabel}) at ${details.location}`;
-
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: Date.now().toString(),
-                sender: 'system',
-                time: timeString,
-                bookingInfo: {
-                  title: 'BOOKING READY',
-                  bookedByName: senderName,
-                  startDate: details.startDate,
-                  endDate: details.endDate,
-                  workHours: details.workHours,
-                  location: details.location,
-                  days: details.days,
-                  salary: details.salary,
-                  bookingType: details.bookingType,
-                  details: `${rateLabel} · ${details.workHours}`,
-                  isConfirmed: false,
-                  isDeclined: false,
-                },
-              },
-            ]);
-
-            if (partnerId && effectiveToken) {
-              sendChatMessage(effectiveToken, partnerId, bookingText).catch(() => { });
-            }
-
-            setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
-          }}
+          onConfirm={handleSendOffer}
           onKasambahayConfirm={() => {
             if (activeBookingMsgId) {
-              handleKasambahayConfirm(activeBookingMsgId);
+              return handleKasambahayConfirm(activeBookingMsgId);
             }
           }}
           onKasambahayDecline={() => {
             if (activeBookingMsgId) {
-              handleKasambahayDecline(activeBookingMsgId);
+              return handleKasambahayDecline(activeBookingMsgId);
             }
           }}
         />
 
         {/* Counterparty Public Profile Modal */}
-        <UserProfileModal
+        <UserProfileView
           visible={profileModalVisible}
           onClose={() => setProfileModalVisible(false)}
           onMessage={() => setProfileModalVisible(false)}

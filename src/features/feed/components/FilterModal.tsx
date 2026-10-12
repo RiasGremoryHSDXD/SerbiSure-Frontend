@@ -1,4 +1,5 @@
 import THEME from '../../../shared/theme/theme';
+import type { WorkSetup } from '../../bookings/workSetup';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, Pressable, Modal, TextInput, Dimensions, TouchableWithoutFeedback, KeyboardAvoidingView, Platform, Animated, PanResponder } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,7 +10,9 @@ const SCREEN_HEIGHT = Dimensions.get('window').height;
 export interface FeedFilters {
   categories: string[];
   bookingType: string | null; // 'short_term' | 'long_term' | null
+  workSetup?: WorkSetup | null;
   maxRate: number | null;
+  ratePeriod?: 'day' | 'month';
   location: string;
   sortBy: 'newest' | 'rate_asc' | 'rate_desc';
 }
@@ -17,7 +20,9 @@ export interface FeedFilters {
 export const DEFAULT_FILTERS: FeedFilters = {
   categories: [],
   bookingType: null,
+  workSetup: null,
   maxRate: null,
+  ratePeriod: 'day',
   location: '',
   sortBy: 'newest',
 };
@@ -34,8 +39,8 @@ export const CATEGORY_OPTIONS = ['All-around', 'Child Care', 'Cleaning', 'Cookin
 
 const BOOKING_TYPES = [
   { label: 'All Types', value: null },
-  { label: 'Part-time', value: 'short_term' },
-  { label: 'Stay-in', value: 'long_term' },
+  { label: 'Short-term', value: 'short_term' },
+  { label: 'Long-term', value: 'long_term' },
 ];
 
 export const RATE_PRESETS = [400, 500, 600, 800, 1000];
@@ -57,6 +62,8 @@ export function FilterModal({
 
   const [categories, setCategories] = useState<string[]>(initialFilters.categories || []);
   const [bookingType, setBookingType] = useState<string | null>(initialFilters.bookingType || null);
+  const [workSetup, setWorkSetup] = useState<WorkSetup | null>(initialFilters.workSetup || null);
+  const [ratePeriod, setRatePeriod] = useState<'day' | 'month'>(initialFilters.bookingType === 'long_term' ? 'month' : initialFilters.ratePeriod || 'day');
   const [maxRate, setMaxRate] = useState<number | null>(initialFilters.maxRate || null);
   const [customRateText, setCustomRateText] = useState<string>(
     initialFilters.maxRate ? String(initialFilters.maxRate) : ''
@@ -92,6 +99,8 @@ export function FilterModal({
     if (visible) {
       setCategories(initialFilters.categories || []);
       setBookingType(initialFilters.bookingType || null);
+      setWorkSetup(initialFilters.workSetup || null);
+      setRatePeriod(initialFilters.bookingType === 'long_term' ? 'month' : initialFilters.ratePeriod || 'day');
       setMaxRate(initialFilters.maxRate || null);
       setCustomRateText(initialFilters.maxRate ? String(initialFilters.maxRate) : '');
       setLocation(initialFilters.location || '');
@@ -182,6 +191,7 @@ export function FilterModal({
   const handleReset = () => {
     setCategories([]);
     setBookingType(null);
+    setWorkSetup(null);
     setMaxRate(null);
     setCustomRateText('');
     setLocation('');
@@ -191,6 +201,7 @@ export function FilterModal({
   const activeFilterCount =
     categories.length +
     (bookingType !== null ? 1 : 0) +
+    (workSetup !== null ? 1 : 0) +
     (maxRate !== null ? 1 : 0) +
     (location.trim() !== '' ? 1 : 0) +
     (sortBy !== 'newest' ? 1 : 0);
@@ -199,7 +210,9 @@ export function FilterModal({
     onApply({
       categories,
       bookingType,
+      workSetup,
       maxRate,
+      ratePeriod: bookingType === 'long_term' ? 'month' : bookingType === 'short_term' ? 'day' : ratePeriod,
       location: location.trim(),
       sortBy,
     });
@@ -346,10 +359,23 @@ export function FilterModal({
                 </View>
               </View>
 
-              {/* SECTION: Maximum Daily Rate */}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>WORK SETUP</Text>
+                <View style={styles.toggleRow}>
+                  {([{ label: 'Any Setup', value: null }, { label: 'Stay-in', value: 'stay_in' }, { label: 'Stay-out', value: 'stay_out' }] as const).map(option => (
+                    <Pressable key={String(option.value)} accessibilityRole="button"
+                      style={[styles.toggleBtn, workSetup === option.value && styles.toggleBtnActive]}
+                      onPress={() => setWorkSetup(option.value)}>
+                      <Text style={[styles.toggleBtnText, workSetup === option.value && styles.toggleBtnTextActive]}>{option.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              {/* SECTION: Maximum Rate */}
               <View style={styles.section}>
                 <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>MAXIMUM RATE (PER DAY)</Text>
+                  <Text style={styles.sectionTitle}>MAXIMUM RATE (PER {bookingType === 'long_term' ? 'MONTH' : bookingType === 'short_term' ? 'DAY' : ratePeriod.toUpperCase()})</Text>
                   {maxRate !== null && (
                     <Pressable
                       onPress={() => {
@@ -362,9 +388,16 @@ export function FilterModal({
                   )}
                 </View>
 
+                {!bookingType ? <View style={styles.ratePresetsRow}>
+                  {(['day', 'month'] as const).map(period => <Pressable key={period}
+                    style={[styles.rateChip, ratePeriod === period && styles.rateChipActive]}
+                    onPress={() => { setRatePeriod(period); setMaxRate(null); setCustomRateText(''); }}>
+                    <Text style={styles.rateChipText}>{period === 'day' ? 'Daily budget' : 'Monthly budget'}</Text>
+                  </Pressable>)}
+                </View> : null}
                 {/* Quick Presets */}
                 <View style={styles.ratePresetsRow}>
-                  {RATE_PRESETS.map((rate) => {
+                  {(bookingType === 'long_term' || (!bookingType && ratePeriod === 'month') ? [6500, 8000, 10000, 15000] : RATE_PRESETS).map((rate) => {
                     const isSelected = maxRate === rate;
                     return (
                       <Pressable

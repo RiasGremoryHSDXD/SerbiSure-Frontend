@@ -1,3 +1,4 @@
+import { workSetupLabel } from '../bookings/workSetup';
 import type { Role } from '../../app/roleConfig';
 import { formatTimeAgo } from '../../shared/utils/date';
 import { formatBookingAddress, formatBookingLocationShort } from '../bookings/api/bookingApi';
@@ -15,20 +16,20 @@ export function mapFeedPost(item: BookingFeedDto, viewerRole: Role): FeedPost {
   const authorRole = isJob ? 'Homeowner' : 'Kasambahay';
   const name = item.name || (isJob ? 'Homeowner' : 'Kasambahay Worker');
   const longTerm = item.booking_type === 'long_term';
-  const termTag = longTerm ? (isJob ? 'Long-term' : 'Stay-in') : 'Part-time';
-  const location = formatBookingLocationShort(item, 'Cagayan de Oro');
+  const termTag = longTerm ? 'Long-term' : 'Short-term';
+  const setupTag = workSetupLabel(item.work_setup);
+  const location = formatBookingLocationShort(item, 'Location not provided');
   const description = item.special_instruction?.trim() || (isJob
-    ? `I am looking for ${categories.join(' & ')} at ${formatBookingAddress(item, 'residence')}, capable of working on a ${longTerm ? 'stay-in' : 'stay-out'} setup.`
+    ? `I am looking for ${categories.join(' & ')} at ${formatBookingAddress(item, 'residence')}, ${item.work_setup ? 'on a ' + setupTag.toLowerCase() + ' setup' : 'with work setup to be confirmed'}.`
     : `Available for ${categories.join(' & ')} work in ${location}.`);
-  const setupTag = description.toLowerCase().includes('stay-in') ? 'Stay-in' : description.toLowerCase().includes('stay-out') ? 'Stay-out' : longTerm ? 'Stay-in' : 'Stay-out';
   return {
     id: item.booking_id, partnerId: item.poster_id, kind: isJob ? 'job' : 'service', authorRole,
     employerName: name, title: categories[0] || (isJob ? 'Household Service' : 'Kasambahay'),
     avatar: item.profile_link || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || authorRole)}&background=FFB43B&color=fff`,
     time: formatTimeAgo(item.createdAt), location, categories,
     roleTag: categories[0] || (isJob ? 'Household Service' : 'Kasambahay'), termTag, setupTag,
-    price: `₱${item.daily_rate || '0'}`, unit: longTerm ? '/ month' : '/ day', aboutText: description,
-    tags: Array.from(new Set(isJob ? ['Verified Employer', termTag, setupTag, ...categories] : [...categories, termTag])),
+    price: `₱${item.rate_amount || '0'}`, unit: longTerm ? '/ month' : '/ day', aboutText: description,
+    tags: Array.from(new Set(isJob ? [...(item.poster_verification_status === 'Verified' ? ['Verified Employer'] : []), termTag, setupTag, ...categories] : [...categories, termTag, ...(item.work_setup ? [setupTag] : [])])),
   };
 }
 
@@ -44,11 +45,12 @@ export function mapWorkerPreview(item: BookingFeedDto) {
     id: item.booking_id,
     partnerId: item.poster_id,
     name: item.name || 'Anonymous User',
-    location: formatBookingLocationShort(item, 'Cagayan de Oro'),
+    location: formatBookingLocationShort(item, 'Location not provided'),
     role: categories.map((category) => CATEGORY_LABELS[category] || category.replace(/_/g, ' ')).join(', '),
-    years: item.booking_type === 'long_term' ? 'Stay-in' : 'Part-time',
-    tags: categories.map((category) => CATEGORY_LABELS[category] || category.replace(/_/g, ' ')),
-    price: `₱${item.daily_rate || '0'}`,
+    years: item.booking_type === 'long_term' ? 'Long-term' : 'Short-term',
+    setupTag: workSetupLabel(item.work_setup),
+    tags: [...categories.map((category) => CATEGORY_LABELS[category] || category.replace(/_/g, ' ')), ...(item.work_setup ? [workSetupLabel(item.work_setup)] : [])],
+    price: `₱${item.rate_amount || '0'}`,
     unit: item.booking_type === 'long_term' ? 'per month' : 'per day',
     aboutText: item.special_instruction?.trim() || 'Available for household services. View this post for more details.',
     image: avatarUrl,
@@ -77,20 +79,17 @@ export function mapJobPreview(item: BookingFeedDto) {
     `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Homeowner')}&background=FFB43B&color=fff`;
 
   const isLongTerm = item.booking_type === 'long_term';
-  const termTag = isLongTerm ? 'Long-term' : 'Part-time';
+  const termTag = isLongTerm ? 'Long-term' : 'Short-term';
+  const setupTag = workSetupLabel(item.work_setup);
   const unit = isLongTerm ? 'per month' : 'per day';
 
-  const locShort = formatBookingLocationShort(item, 'Cagayan de Oro');
+  const locShort = formatBookingLocationShort(item, 'Location not provided');
   const locForDesc = formatBookingAddress(item, 'residence');
 
   let description = item.special_instruction && item.special_instruction.trim()
     ? item.special_instruction.trim()
-    : (isLongTerm
-      ? `I am looking for ${categories.join(' & ')} at ${locForDesc}, capable of working on a stay-in setup.`
-      : `I am looking for ${categories.join(' & ')} at ${locForDesc}, capable of working on a stay-out setup.`);
+    : `I am looking for ${categories.join(' & ')} at ${locForDesc}, ${item.work_setup ? 'on a ' + setupTag.toLowerCase() + ' setup' : 'with work setup to be confirmed'}.`;
 
-  const descLower = description.toLowerCase();
-  const setupTag = descLower.includes('stay-in') ? 'Stay-in' : descLower.includes('stay-out') ? 'Stay-out' : (isLongTerm ? 'Stay-in' : 'Stay-out');
 
   return {
     id: item.booking_id,
@@ -99,13 +98,14 @@ export function mapJobPreview(item: BookingFeedDto) {
     title: categories.join(' & ') || 'Household Service',
     location: locShort,
     description,
-    price: `₱${item.daily_rate || '0'}`,
+    price: `₱${item.rate_amount || '0'}`,
     unit,
-    tags: ['Verified Employer', termTag, setupTag, ...categories].filter((v, i, a) => a.indexOf(v) === i),
+    tags: [...(item.poster_verification_status === 'Verified' ? ['Verified Employer'] : []), termTag, setupTag, ...categories].filter((v, i, a) => a.indexOf(v) === i),
     image: avatarUrl,
     avatar: avatarUrl,
     roleTag: categories[0] || 'Household Help',
     termTag,
+    setupTag,
     aboutText: description,
   };
 }

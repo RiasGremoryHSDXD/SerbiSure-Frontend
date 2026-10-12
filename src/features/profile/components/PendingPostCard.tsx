@@ -1,3 +1,4 @@
+import { workSetupLabel } from '../../bookings/workSetup';
 import React from 'react';
 import { Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,9 +15,10 @@ export function PendingPostCard({ post, note, children }: Readonly<{ post: Booki
       <View style={styles.pendingStatusBadge}><Ionicons name="time" size={11} color="#B45309" style={{ marginRight: 3 }} /><Text style={styles.pendingStatusBadgeText}>Pending</Text></View>
     </View>
     <View style={styles.pendingPostRateRow}>
-      <Text style={styles.pendingPostRate}>₱{Number(post.daily_rate || 0).toLocaleString()}</Text>
-      <Text style={styles.pendingPostRateUnit}> / day · {post.booking_type === 'long_term' ? 'Stay-In' : 'Part-time'}</Text>
+      <Text style={styles.pendingPostRate}>₱{Number(post.rate_amount || 0).toLocaleString()}</Text>
+      <Text style={styles.pendingPostRateUnit}> {post.rate_needs_review ? '(unit needs confirmation)' : '/ ' + post.rate_period} · {post.booking_type === 'long_term' ? 'Long-term' : 'Short-term'}</Text>
     </View>
+    <Text style={styles.pendingPostDetailText}>Work setup: {workSetupLabel(post.work_setup)}</Text>
     <View style={styles.pendingPostDetails}>
       <View style={styles.pendingPostDetailItem}><Ionicons name="location-outline" size={13} color="#6B7280" style={{ marginRight: 4 }} /><Text style={styles.pendingPostDetailText} numberOfLines={2}>{formatBookingAddress(post)}</Text></View>
       <View style={styles.pendingPostDetailItem}><Ionicons name="calendar-outline" size={13} color="#6B7280" style={{ marginRight: 4 }} /><Text style={styles.pendingPostDetailText}>Starts: {startDate}</Text></View>

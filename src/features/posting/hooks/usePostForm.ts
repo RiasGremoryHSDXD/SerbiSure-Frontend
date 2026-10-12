@@ -1,3 +1,5 @@
+import { toggleService, SERVICE_CHOICES, WORK_SHIFTS, buildEngagementSchedule, type WorkShift } from '../../bookings/engagementForm';
+import { fetchMinimumWage, type MinimumWageData } from '../../bookings/api/bookingApi';
 import { validatePostingRate } from '../validation';
 import { useState, useRef, useEffect } from 'react';
 import { Animated, Easing, Alert } from 'react-native';
@@ -8,7 +10,8 @@ import { submitPost, type PostingPayload } from '../api/postingApi';
 
 import { useUser } from '../../auth/session/UserContext';
 
-import { getRegions, getProvinces, getCities, getBarangays, getZipCodeForCity, Region, Province, CityMunicipality, Barangay, LocationItem } from '../../../shared/services/locationService';
+import { useWorkLocation } from '../../bookings/hooks/useWorkLocation';
+import { workLocationError } from '../../bookings/workLocation';
 
 function generateUUIDv4() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -31,26 +34,18 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [engagementType, setEngagementType] = useState<'short' | 'long' | null>(null);
   const [setupPreference, setSetupPreference] = useState<'stay-out' | 'stay-in' | null>(null);
-  const [selectedTime, setSelectedTime] = useState<'morning' | 'afternoon' | 'night' | null>(null);
+  const [selectedTime, setSelectedTime] = useState<WorkShift | null>(null);
 
-  // PSGC Location State
-  const [selectedRegion, setSelectedRegion] = useState<Region | null>(null);
-  const [selectedProvince, setSelectedProvince] = useState<Province | null>(null);
-  const [selectedCity, setSelectedCity] = useState<CityMunicipality | null>(null);
-  const [selectedBarangay, setSelectedBarangay] = useState<Barangay | null>(null);
-  const [streetAddress, setStreetAddress] = useState('');
-  const [floorUnit, setFloorUnit] = useState('');
-  const [zipcode, setZipcode] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [workDays, setWorkDays] = useState<string[]>([]);
+  const [workHours, setWorkHours] = useState('');
 
-  // Location Picker Lists & Modals
-  const [regionsList, setRegionsList] = useState<Region[]>([]);
-  const [provincesList, setProvincesList] = useState<Province[]>([]);
-  const [citiesList, setCitiesList] = useState<CityMunicipality[]>([]);
-  const [barangaysList, setBarangaysList] = useState<Barangay[]>([]);
-  const [loadingLocations, setLoadingLocations] = useState(false);
-  const [activePicker, setActivePicker] = useState<'region' | 'province' | 'city' | 'barangay' | null>(null);
+  const address = useWorkLocation(visible);
+  const { selectedRegion, selectedProvince, selectedCity, selectedBarangay, streetAddress, floorUnit, zipcode } = address;
 
   const [instructions, setInstructions] = useState('');
+  const [wagePolicy, setWagePolicy] = useState<MinimumWageData | null>(null);
   const [offerAmount, setOfferAmount] = useState<string>(config.dailyDefault);
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [postedSuccess, setPostedSuccess] = useState(false);
@@ -72,257 +67,15 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
     };
   }, [visible, mode, effectiveToken]);
 
-  // Pre-populate with User Profile Address
   const [hasAutoFilled, setHasAutoFilled] = useState(false);
-
-  const applyUserProfileAddress = async () => {
-    if (!user) return;
-    try {
-      const regList = regionsList.length > 0 ? regionsList : await getRegions();
-      setRegionsList(regList);
-
-      let matchedReg: Region | null = null;
-      if (user.region) {
-        matchedReg =
-          regList.find(
-            (r) =>
-              r.name.toLowerCase().includes(user.region!.toLowerCase()) ||
-              (r.displayName && r.displayName.toLowerCase().includes(user.region!.toLowerCase())) ||
-              (r.regionName && r.regionName.toLowerCase().includes(user.region!.toLowerCase()))
-          ) || null;
-      }
-      if (!matchedReg) {
-        matchedReg = regList.find((r) => r.code === '100000000') || null;
-      }
-
-      if (matchedReg) {
-        setSelectedRegion(matchedReg);
-        const provs = await getProvinces(matchedReg.code);
-        setProvincesList(provs);
-
-        let matchedProv: Province | null = null;
-        if (user.province) {
-          matchedProv = provs.find((p) => p.name.toLowerCase().includes(user.province!.toLowerCase())) || null;
-        }
-        if (!matchedProv) {
-          matchedProv = provs.find((p) => p.code === '104300000') || null;
-        }
-
-        if (matchedProv) {
-          setSelectedProvince(matchedProv);
-          const cities = await getCities(matchedProv.code, matchedReg.code);
-          setCitiesList(cities);
-
-          let matchedCity: CityMunicipality | null = null;
-          if (user.city) {
-            matchedCity =
-              cities.find(
-                (c) =>
-                  c.name.toLowerCase().includes(user.city!.toLowerCase()) ||
-                  (c.aliases && c.aliases.some((a) => user.city!.toLowerCase().includes(a)))
-              ) || null;
-          }
-          if (!matchedCity) {
-            matchedCity = cities.find((c) => c.code === '104305000') || null;
-          }
-
-          if (matchedCity) {
-            setSelectedCity(matchedCity);
-            const brgys = await getBarangays(matchedCity.code);
-            setBarangaysList(brgys);
-
-            let matchedBrgy: Barangay | null = null;
-            if (user.barangay) {
-              const bLow = user.barangay.toLowerCase();
-              matchedBrgy =
-                brgys.find(
-                  (b) =>
-                    b.name.toLowerCase() === bLow ||
-                    b.name.toLowerCase().includes(bLow) ||
-                    bLow.includes(b.name.toLowerCase())
-                ) || null;
-            }
-
-            if (matchedBrgy) {
-              setSelectedBarangay(matchedBrgy);
-            } else if (user.barangay) {
-              setSelectedBarangay({
-                code: '',
-                name: user.barangay,
-                displayName:
-                  user.barangay.startsWith('Barangay') || user.barangay.startsWith('Brgy')
-                    ? user.barangay
-                    : `Brgy. ${user.barangay}`,
-              });
-            }
-          }
-        }
-      }
-
-      if (user.street) setStreetAddress(user.street);
-      if (user.zipcode) setZipcode(user.zipcode);
-      else setZipcode('9000');
-    } catch (e) {
-      console.warn('[PostJobScreen] applyUserProfileAddress error:', e);
-      if (user.region) setSelectedRegion({ code: '100000000', name: user.region, displayName: user.region, regionName: user.region });
-      if (user.province) setSelectedProvince({ code: '104300000', name: user.province, displayName: user.province, regionCode: '100000000' });
-      if (user.city) setSelectedCity({ code: '104305000', name: user.city, displayName: user.city });
-      if (user.barangay) setSelectedBarangay({ code: '', name: user.barangay, displayName: user.barangay });
-      if (user.street) setStreetAddress(user.street);
-      if (user.zipcode) setZipcode(user.zipcode);
-    }
-  };
-
+  const applyUserProfileAddress = () => { if (user) address.applyProfileAddress(user); };
   useEffect(() => {
     if (visible && !hasAutoFilled && user && (user.barangay || user.city)) {
       setHasAutoFilled(true);
-      applyUserProfileAddress();
+      address.applyProfileAddress(user);
     }
+    if (!visible) setHasAutoFilled(false);
   }, [user, visible, mode, hasAutoFilled]);
-
-  const loadRegions = async () => {
-    setLoadingLocations(true);
-    try {
-      const data = await getRegions();
-      setRegionsList(data);
-    } catch (err) {
-      console.warn('[PostJobScreen] loadRegions error:', err);
-    } finally {
-      setLoadingLocations(false);
-    }
-  };
-
-  const handleOpenRegionPicker = async () => {
-    setActivePicker('region');
-    if (regionsList.length === 0) {
-      await loadRegions();
-    }
-  };
-
-  const handleSelectRegion = async (item: LocationItem) => {
-    const reg = item as Region;
-    setSelectedRegion(reg);
-    setSelectedProvince(null);
-    setSelectedCity(null);
-    setSelectedBarangay(null);
-    setProvincesList([]);
-    setCitiesList([]);
-    setBarangaysList([]);
-
-    setLoadingLocations(true);
-    try {
-      const provs = await getProvinces(reg.code);
-      setProvincesList(provs);
-      const metroManila = provs.length === 1 && provs[0]?.name === 'Metro Manila' ? provs[0] : null;
-      if (metroManila) {
-        setSelectedProvince(metroManila);
-        const cities = await getCities(metroManila.code, reg.code);
-        setCitiesList(cities);
-      }
-    } catch (err) {
-      console.warn('[PostJobScreen] handleSelectRegion error:', err);
-    } finally {
-      setLoadingLocations(false);
-    }
-  };
-
-  const handleOpenProvincePicker = async () => {
-    if (!selectedRegion) {
-      Alert.alert('Select Region First', 'Please select a Region first.');
-      return;
-    }
-    setActivePicker('province');
-    if (provincesList.length === 0) {
-      setLoadingLocations(true);
-      try {
-        const provs = await getProvinces(selectedRegion.code);
-        setProvincesList(provs);
-      } finally {
-        setLoadingLocations(false);
-      }
-    }
-  };
-
-  const handleSelectProvince = async (item: LocationItem) => {
-    const prov = item as Province;
-    setSelectedProvince(prov);
-    setSelectedCity(null);
-    setSelectedBarangay(null);
-    setCitiesList([]);
-    setBarangaysList([]);
-
-    setLoadingLocations(true);
-    try {
-      const cities = await getCities(prov.code, selectedRegion?.code);
-      setCitiesList(cities);
-    } catch (err) {
-      console.warn('[PostJobScreen] handleSelectProvince error:', err);
-    } finally {
-      setLoadingLocations(false);
-    }
-  };
-
-  const handleOpenCityPicker = async () => {
-    if (!selectedProvince && !selectedRegion) {
-      Alert.alert('Select Region & Province', 'Please select your Region and Province first.');
-      return;
-    }
-    setActivePicker('city');
-    if (citiesList.length === 0) {
-      setLoadingLocations(true);
-      try {
-        const provCode = selectedProvince?.code || '';
-        const regCode = selectedRegion?.code || '';
-        const cities = await getCities(provCode, regCode);
-        setCitiesList(cities);
-      } finally {
-        setLoadingLocations(false);
-      }
-    }
-  };
-
-  const handleSelectCity = async (item: LocationItem) => {
-    const city = item as CityMunicipality;
-    setSelectedCity(city);
-    setSelectedBarangay(null);
-    setBarangaysList([]);
-
-    const suggestedZip = getZipCodeForCity(city.code, city.name);
-    if (suggestedZip) {
-      setZipcode(suggestedZip);
-    }
-
-    setLoadingLocations(true);
-    try {
-      const brgys = await getBarangays(city.code);
-      setBarangaysList(brgys);
-    } catch (err) {
-      console.warn('[PostJobScreen] handleSelectCity error:', err);
-    } finally {
-      setLoadingLocations(false);
-    }
-  };
-
-  const handleOpenBarangayPicker = async () => {
-    if (!selectedCity) {
-      Alert.alert('Select City First', 'Please select your City / Municipality first.');
-      return;
-    }
-    setActivePicker('barangay');
-    if (barangaysList.length === 0) {
-      setLoadingLocations(true);
-      try {
-        const brgys = await getBarangays(selectedCity.code);
-        setBarangaysList(brgys);
-      } finally {
-        setLoadingLocations(false);
-      }
-    }
-  };
-
-  const handleSelectBarangay = (item: LocationItem) => {
-    setSelectedBarangay(item as Barangay);
-  };
 
   // Animation values for Logo Loader
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -358,51 +111,9 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
     outputRange: ['0deg', '360deg'],
   });
 
-  const BASE_SERVICES = ['Cleaning', 'Child_care', 'Cooking', 'Caregiver', 'Laundry'];
+  const services = SERVICE_CHOICES;
 
-  const services = [
-    { id: 'Cleaning', label: 'Cleaning', icon: 'sparkles' },
-    { id: 'Child_care', label: 'Child Care', icon: 'happy' },
-    { id: 'Cooking', label: 'Cook', icon: 'restaurant' },
-    { id: 'Caregiver', label: 'Caregiver', icon: 'heart' },
-    { id: 'Laundry', label: 'Laundry', icon: 'shirt' },
-    { id: 'All-around', label: 'All-around', icon: 'home' },
-  ];
-
-  const handleToggleService = (id: string) => {
-    // 1. If clicking 'All-around'
-    if (id === 'All-around') {
-      if (selectedServices.includes('All-around')) {
-        setSelectedServices([]);
-      } else {
-        setSelectedServices(['All-around']);
-      }
-      return;
-    }
-
-    // 2. If 'All-around' is currently selected and user clicks one of the specific services:
-    // Switch away from All-around and select ONLY the clicked service!
-    if (selectedServices.includes('All-around')) {
-      setSelectedServices([id]);
-      return;
-    }
-
-    // 3. Normal multi-select toggle
-    let updated: string[];
-    if (selectedServices.includes(id)) {
-      updated = selectedServices.filter((s) => s !== id);
-    } else {
-      updated = [...selectedServices, id];
-    }
-
-    // 4. Check if all 5 base services are selected -> automatically switch to All-around!
-    const hasAllFive = BASE_SERVICES.every((baseId) => updated.includes(baseId));
-    if (hasAllFive) {
-      setSelectedServices(['All-around']);
-    } else {
-      setSelectedServices(updated);
-    }
-  };
+  const handleToggleService = (id: string) => setSelectedServices(current => toggleService(current, id));
 
   const resetForm = () => {
     requestVersion.current++;
@@ -415,13 +126,8 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
     setEngagementType(null);
     setSetupPreference(null);
     setSelectedTime(null);
-    setSelectedRegion(null);
-    setSelectedProvince(null);
-    setSelectedCity(null);
-    setSelectedBarangay(null);
-    setStreetAddress('');
-    setFloorUnit('');
-    setZipcode('');
+    setStartDate(''); setEndDate(''); setWorkDays([]); setWorkHours('');
+    address.resetWorkLocation();
     setInstructions('');
     setOfferAmount(config.dailyDefault);
     setAgreedTerms(false);
@@ -442,6 +148,9 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
   }, [mode]);
 
   const handleEngagementChange = (type: 'short' | 'long') => {
+    if (type !== engagementType) {
+      setSelectedTime(null); setEndDate(''); setWorkDays([]); setWorkHours('');
+    }
     setEngagementType(type);
     setOfferAmount(engagementRate(mode, offerAmount, type));
   };
@@ -459,11 +168,14 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
   };
 
   const getTimeLabel = () => {
-    if (selectedTime === 'morning') return 'morning (8 AM - 12 PM)';
-    if (selectedTime === 'afternoon') return 'afternoon (12 PM - 5 PM)';
-    if (selectedTime === 'night') return 'night (5 PM - 9 PM)';
-    return 'flexible hours';
+    const shift = WORK_SHIFTS.find(item => item.value === selectedTime);
+    return engagementType === 'short' && shift ? `${shift.label.toLowerCase()} (${shift.hours})` : workHours;
   };
+
+  const scheduleTerms = () => buildEngagementSchedule({
+    bookingType: engagementType === 'long' ? 'long_term' : 'short_term',
+    startDate, endDate, workHours, days: workDays, shift: selectedTime,
+  });
 
   const buildAutoMessage = () => {
     const roleText = getSelectedRoleLabel();
@@ -479,6 +191,18 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
       time: getTimeLabel(), shortTerm: engagementType === 'short', instructions,
     });
   };
+
+  useEffect(() => {
+    let current = true;
+    setWagePolicy(null);
+    if (engagementType) {
+      void fetchMinimumWage(effectiveToken || undefined, engagementType === 'long' ? 'long_term' : 'short_term',
+        selectedCity?.name || '', selectedRegion?.displayName || selectedRegion?.name || '').then(policy => {
+          if (current) setWagePolicy(policy);
+        });
+    }
+    return () => { current = false; };
+  }, [effectiveToken, engagementType, selectedRegion?.name, selectedRegion?.displayName, selectedCity?.name]);
 
   const handleNext = async () => {
     if (isPosting) return;
@@ -501,34 +225,27 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
         Alert.alert('Selection Required', config.missingTime);
         return;
       }
+      if (engagementType === 'long' && !selectedRegion) {
+        Alert.alert('Work Region Required', 'Select the work region for the applicable monthly wage policy.');
+        return;
+      }
+      try { scheduleTerms(); } catch (error) {
+        Alert.alert('Invalid Schedule', error instanceof Error ? error.message : 'Select a valid schedule.');
+        return;
+      }
       setStep(3);
     } else if (step === 3) {
-      if (!selectedRegion) {
-        Alert.alert('Region Required', 'Please select a Region.');
+      const addressError = workLocationError(address);
+      if (addressError) { Alert.alert('Work Location Required', addressError); return; }
+      const policy = await fetchMinimumWage(effectiveToken || undefined,
+        engagementType === 'long' ? 'long_term' : 'short_term', selectedCity?.name || '',
+        selectedRegion?.displayName || selectedRegion?.name || '');
+      if (!policy) {
+        Alert.alert('Wage Policy Unavailable', 'Reconnect and select a supported work region (Region X or NCR) before continuing.');
         return;
       }
-      if (!selectedProvince) {
-        Alert.alert('Province Required', 'Please select a Province.');
-        return;
-      }
-      if (!selectedCity) {
-        Alert.alert('City / Municipality Required', 'Please select a City or Municipality.');
-        return;
-      }
-      if (!selectedBarangay) {
-        Alert.alert('Barangay Required', 'Please select a Barangay.');
-        return;
-      }
-      if (!streetAddress.trim()) {
-        Alert.alert('Street / House No. Required', 'Please enter your street address, house number, or zone.');
-        return;
-      }
-      const cleanZip = zipcode.trim();
-      if (!cleanZip || !/^\d{4}$/.test(cleanZip)) {
-        Alert.alert('Zip Code Required', 'Please enter a valid 4-digit zip code (e.g. 9000).');
-        return;
-      }
-      const rateError = validatePostingRate(mode, engagementType, offerAmount);
+      setWagePolicy(policy);
+      const rateError = validatePostingRate(mode, engagementType, offerAmount, policy);
       if (rateError) {
         Alert.alert(rateError.title, rateError.message);
         return;
@@ -546,32 +263,23 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
       try {
         const autoMessage = buildAutoMessage();
 
-        const now = new Date();
-        const startTime = new Date(now);
-        startTime.setDate(startTime.getDate() + 1);
-        startTime.setHours(selectedTime === 'morning' ? 8 : selectedTime === 'afternoon' ? 12 : 17, 0, 0, 0);
-
-        const endTime = new Date(startTime);
-        if (engagementType === 'long') {
-          endTime.setDate(endTime.getDate() + 30);
-        } else {
-          endTime.setHours(selectedTime === 'morning' ? 12 : selectedTime === 'afternoon' ? 17 : 21, 0, 0, 0);
-        }
+        const schedule = scheduleTerms();
 
         const payload: PostingPayload = {
           booking_type: engagementType === 'short' ? 'short_term' : 'long_term',
+          work_setup: setupPreference === 'stay-in' ? 'stay_in' : 'stay_out',
           service_category: selectedServices,
-          start_time: startTime.toISOString(),
-          end_time: endTime.toISOString(),
+          ...schedule,
           region: selectedRegion?.displayName || selectedRegion?.name,
           province: selectedProvince?.name,
           city: selectedCity?.name,
           barangay: selectedBarangay?.name,
           street: streetAddress.trim(),
           floor_number: floorUnit.trim() || undefined,
-          zip_code: zipcode.trim() || '9000',
+          zip_code: zipcode.trim(),
           special_instruction: autoMessage,
-          daily_rate: offerAmount.trim(),
+          rate_amount: offerAmount.trim(),
+          rate_period: engagementType === 'long' ? 'month' : 'day',
         };
 
         const response = await submitPost(effectiveToken, payload, generateUUIDv4());
@@ -655,25 +363,11 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
     setSetupPreference,
     selectedTime,
     setSelectedTime,
-    selectedRegion,
-    selectedProvince,
-    selectedCity,
-    selectedBarangay,
-    streetAddress,
-    setStreetAddress,
-    floorUnit,
-    setFloorUnit,
-    zipcode,
-    setZipcode,
-    regionsList,
-    provincesList,
-    citiesList,
-    barangaysList,
-    loadingLocations,
-    activePicker,
-    setActivePicker,
+    startDate, setStartDate, endDate, setEndDate, workDays, setWorkDays, workHours, setWorkHours,
+    ...address,
     instructions,
     setInstructions,
+    wagePolicy,
     offerAmount,
     setOfferAmount,
     agreedTerms,
@@ -684,14 +378,6 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
     setShowVerificationRequired,
     verificationStatus,
     applyUserProfileAddress,
-    handleOpenRegionPicker,
-    handleSelectRegion,
-    handleOpenProvincePicker,
-    handleSelectProvince,
-    handleOpenCityPicker,
-    handleSelectCity,
-    handleOpenBarangayPicker,
-    handleSelectBarangay,
     scaleAnim,
     spin,
     services,

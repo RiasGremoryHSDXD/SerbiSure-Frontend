@@ -1,3 +1,4 @@
+import { WORK_DAYS, WORK_SHIFTS } from '../../bookings/engagementForm';
 import React from 'react';
 import { Text, View, Pressable } from 'react-native';
 
@@ -68,21 +69,26 @@ export function PostStep4({ form }: { form: PostFormController }) {
               ₱{offerAmount} {engagementType === 'short' ? '/ day' : '/ month'}
             </Text>
           </View>
-          {engagementType === 'short' && (
-            <>
-              <View style={styles.summaryDivider} />
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>{config.timeLabel}</Text>
-                <Text style={styles.summaryValue}>
-                  {selectedTime === 'morning'
-                    ? 'Morning (8 AM - 12 PM)'
-                    : selectedTime === 'afternoon'
-                      ? 'Afternoon (12 PM - 5 PM)'
-                      : 'Night (5 PM - 9 PM)'}
-                </Text>
-              </View>
-            </>
-          )}
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>{engagementType === 'short' ? 'Availability Date' : 'Dates'}</Text>
+            <Text style={styles.summaryValue}>{form.startDate}{engagementType === 'long' ? ` – ${form.endDate}` : ''}</Text>
+          </View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Work Hours (PH)</Text>
+            <Text style={styles.summaryValue}>{engagementType === 'short' ? WORK_SHIFTS.find(item => item.value === selectedTime)?.hours : form.workHours}</Text>
+          </View>
+          {engagementType === 'long' && <>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Working Days</Text>
+              <Text style={styles.summaryValue}>{WORK_DAYS.filter(item => form.workDays.includes(item.value)).map(item => item.label).join(', ')}</Text>
+            </View>
+          </>}
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Work Region</Text>
+            <Text style={[styles.summaryValue, { flex: 1, textAlign: 'right', marginLeft: 16 }]}>{form.selectedRegion?.displayName || form.selectedRegion?.name}</Text>
+          </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Location</Text>

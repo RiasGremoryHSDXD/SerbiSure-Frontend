@@ -27,7 +27,7 @@ export function PostStep1({ form }: { form: PostFormController }) {
               onPress={() => handleToggleService(item.id)}
             >
               <Ionicons
-                name={item.icon as any}
+                name={item.icon}
                 size={32}
                 color={isSelected ? '#0D0D11' : '#FFB380'}
                 style={styles.serviceIcon}

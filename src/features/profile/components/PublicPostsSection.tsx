@@ -25,11 +25,15 @@ export function PublicPostsSection({ posts, loading, error, token, ownerId, owne
   const action = isJob ? 'Apply' : 'Offer to Hire';
 
   const openProposal = (post: PublicPendingPost) => {
+    if (post.rate_needs_review) {
+      Alert.alert('Rate Awaiting Confirmation', 'The poster must confirm the monthly amount before this post can receive new proposals.');
+      return;
+    }
     if (user.verificationStatus !== 'Verified') {
       Alert.alert('Verification Required', 'Verify your account before sending an application or hiring offer.');
       return;
     }
-    setRate(post.daily_rate);
+    setRate(post.rate_amount);
     setMessage('');
     setSelected(post);
   };
@@ -38,14 +42,14 @@ export function PublicPostsSection({ posts, loading, error, token, ownerId, owne
     if (!selected || !token || submittingRef.current) return;
     const amount = Number(rate);
     if (!Number.isFinite(amount) || amount < 1 || amount > 999999.99) {
-      Alert.alert('Invalid Rate', 'Enter a daily rate between ₱1 and ₱999,999.99.');
+      Alert.alert('Invalid Rate', 'Enter a valid amount up to ₱999,999.99. The applicable minimum is checked by the server.');
       return;
     }
     submittingRef.current = true;
     setSubmitting(true);
     try {
       const result = await submitBookingProposal(token, selected.booking_id, amount,
-        `${isJob ? 'Job application' : 'Hiring offer'}: ${message.trim() || (isJob ? 'I would like to apply for this job.' : 'I would like to hire you for this service.')}`);
+        `${isJob ? 'Job application' : 'Hiring offer'}: ${message.trim() || (isJob ? 'I would like to apply for this job.' : 'I would like to hire you for this service.')}`, selected.rate_period);
       if (!result.success || !result.proposal) {
         Alert.alert('Unable to Send', result.error || 'Please try again.');
         onRefresh();
@@ -82,8 +86,8 @@ export function PublicPostsSection({ posts, loading, error, token, ownerId, owne
         <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0, maxHeight: '85%', backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24 }} contentContainerStyle={{ padding: 24, paddingBottom: Math.max(insets.bottom, 16) + 16 }}>
           <Text style={styles.tabSectionTitle}>{isJob ? 'Apply for this Job' : 'Send a Hiring Offer'}</Text>
           <Text style={[styles.tabSectionSubtitle, { marginBottom: 16 }]}>The owner will review your proposal before confirming a booking.</Text>
-          <Text style={styles.pendingPostManageBtnText}>Proposed daily rate (₱)</Text>
-          <TextInput accessibilityLabel="Proposed daily rate" value={rate} onChangeText={setRate} keyboardType="decimal-pad" editable={!submitting} style={[styles.bioTextInput, { minHeight: 48, marginTop: 8, marginBottom: 16 }]} />
+          <Text style={styles.pendingPostManageBtnText}>Proposed amount (₱/{selected?.rate_period})</Text>
+          <TextInput accessibilityLabel="Proposed compensation amount" value={rate} onChangeText={setRate} keyboardType="decimal-pad" editable={!submitting} style={[styles.bioTextInput, { minHeight: 48, marginTop: 8, marginBottom: 16 }]} />
           <Text style={styles.pendingPostManageBtnText}>Message (optional)</Text>
           <TextInput accessibilityLabel="Proposal message" value={message} onChangeText={setMessage} multiline maxLength={450} editable={!submitting} placeholder={isJob ? 'Tell the homeowner why you are a good fit...' : 'Describe the work you would like help with...'} style={[styles.bioTextInput, { marginTop: 8, marginBottom: 16 }]} />
           <View style={styles.modalActionButtons}>

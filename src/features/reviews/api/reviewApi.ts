@@ -1,4 +1,4 @@
-import { API_BASE_URL, HUGGINGFACE_SENTIMENT_SPACE_URL, HUGGINGFACE_API_TOKEN } from '../../../shared/api/config';
+import { API_BASE_URL } from '../../../shared/api/config';
 import { requestResponse } from '../../../shared/api/httpClient';
 import { generateUUID } from '../../chat/api/chatApi';
 
@@ -6,117 +6,20 @@ const REVIEW_BASE = `${API_BASE_URL}/api/v1/reviews`;
 
 export type SentimentType = 'Positive' | 'Neutral' | 'Negative';
 
-export interface NlpSentimentResult {
-  sentiment: SentimentType;
-  confidence?: number;
-  source: 'huggingface' | 'local_fallback';
-  probabilities?: Record<string, number>;
+export interface SentimentAnalysis {
+  label: SentimentType;
+  confidence: number;
+  probabilities: Record<SentimentType, number>;
+  source: 'huggingface';
+  model: string;
+  analyzed_at: string;
 }
 
-/**
- * Predicts sentiment using the SerbiSure Hugging Face Space (XLM-RoBERTa / FiReCS):
- * https://riasgremory2-serbisure-sentiment-api.hf.space
- * Analyzes strictly based on the text comment, independently of star rating.
- */
-export async function predictSentimentViaHuggingFace(
-  text: string
-): Promise<NlpSentimentResult> {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return {
-      sentiment: 'Neutral',
-      source: 'local_fallback',
-    };
+export class ReviewSubmissionError extends Error {
+  constructor(message: string, public readonly code?: string) {
+    super(message);
+    this.name = 'ReviewSubmissionError';
   }
-
-  try {
-    // Step 1: Initiate prediction call
-    const postHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (HUGGINGFACE_API_TOKEN) {
-      postHeaders['Authorization'] = `Bearer ${HUGGINGFACE_API_TOKEN}`;
-    }
-
-    const postRes = await requestResponse(
-      `${HUGGINGFACE_SENTIMENT_SPACE_URL}/gradio_api/call/predict`,
-      {
-        method: 'POST',
-        headers: postHeaders,
-        body: JSON.stringify({ data: [trimmed] }),
-      },
-      12000
-    );
-
-    if (!postRes.ok) {
-      throw new Error(`HF Space returned status ${postRes.status}`);
-    }
-
-    const { event_id } = await postRes.json();
-    if (!event_id) {
-      throw new Error('No event_id in HF Space response');
-    }
-
-    // Step 2: Fetch result event stream
-    const streamHeaders: Record<string, string> = {};
-    if (HUGGINGFACE_API_TOKEN) {
-      streamHeaders['Authorization'] = `Bearer ${HUGGINGFACE_API_TOKEN}`;
-    }
-
-    const streamRes = await requestResponse(
-      `${HUGGINGFACE_SENTIMENT_SPACE_URL}/gradio_api/call/predict/${event_id}`,
-      {
-        headers: streamHeaders,
-      },
-      12000
-    );
-
-    if (!streamRes.ok) {
-      throw new Error(`HF Stream returned status ${streamRes.status}`);
-    }
-
-    const streamText = await streamRes.text();
-    for (const line of streamText.split('\n')) {
-      if (line.startsWith('data:')) {
-        const parsed = JSON.parse(line.slice(5).trim());
-        if (Array.isArray(parsed) && parsed[0]?.label) {
-          const rawLabel = String(parsed[0].label).trim().toLowerCase();
-          let sentiment: SentimentType = 'Neutral';
-          if (rawLabel.includes('negative')) sentiment = 'Negative';
-          else if (rawLabel.includes('neutral')) sentiment = 'Neutral';
-          else if (rawLabel.includes('positive')) sentiment = 'Positive';
-
-          return {
-            sentiment,
-            confidence: typeof parsed[1] === 'number' ? parsed[1] : undefined,
-            probabilities: parsed[2] || undefined,
-            source: 'huggingface',
-          };
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('[ReviewApi] HuggingFace Space call failed, using text fallback:', err);
-  }
-
-  // Fallback to text analysis only (no star-based override)
-  const lower = trimmed.toLowerCase();
-  const positiveWords = ['great', 'good', 'excellent', 'amazing', 'super', 'satisfied', 'recommend', 'mabait', 'maayo', 'sipag', 'masipag', 'kugihan', 'buotan', 'malinis', 'limpyo'];
-  const negativeWords = ['bad', 'poor', 'terrible', 'horrible', 'worst', 'disappointed', 'late', 'rude', 'bastos', 'tamad', 'tapulan', 'hugaw', 'madumi', 'salbahe', 'unprofessional', 'guba'];
-
-  let pos = 0;
-  let neg = 0;
-  for (const w of positiveWords) { if (lower.includes(w)) pos++; }
-  for (const w of negativeWords) { if (lower.includes(w)) neg++; }
-
-  let fallbackSentiment: SentimentType = 'Neutral';
-  if (pos > neg) fallbackSentiment = 'Positive';
-  else if (neg > pos) fallbackSentiment = 'Negative';
-
-  return {
-    sentiment: fallbackSentiment,
-    source: 'local_fallback',
-  };
 }
 
 export interface ReviewItem {
@@ -134,6 +37,7 @@ export interface ReviewItem {
   rating: number;
   unstructured_feedback: string;
   nlp_sentiment: SentimentType;
+  sentiment_analysis?: SentimentAnalysis | Record<string, never>;
   createdAt: string;
 }
 
@@ -162,66 +66,41 @@ export interface CreateReviewParams {
   booking_id: string;
   rating: number; // 1 to 5
   unstructured_feedback: string; // Min 10 chars, max 1000 chars
-  nlp_sentiment?: SentimentType; // Auto-inferred / randomized if omitted
 }
 
-/**
- * Helper to determine or assign a sentiment value while ML model is in development.
- * Assigns a valid database enum based on rating score or sensible fallback.
- */
-export function inferOrRandomizeSentiment(rating: number, userSentiment?: SentimentType): SentimentType {
-  if (userSentiment && ['Positive', 'Neutral', 'Negative'].includes(userSentiment)) {
-    return userSentiment;
-  }
-  if (rating >= 4) {
-    return 'Positive';
-  }
-  if (rating === 3) {
-    return 'Neutral';
-  }
-  return 'Negative';
-}
-
-/**
- * POST /api/v1/reviews/create/
- * Submits a new review for a completed booking.
- * Automatically generates a fresh Idempotency-Key and resolves sentiment.
- */
+/** Django validates, analyzes, and saves the review before returning success. */
 export async function submitReview(
   token: string,
-  params: CreateReviewParams
+  params: CreateReviewParams,
+  idempotencyKey: string = generateUUID(),
 ): Promise<{ message: string; data: ReviewItem }> {
-  const idempotencyKey = generateUUID();
-  const sentiment = inferOrRandomizeSentiment(params.rating, params.nlp_sentiment);
-
-  const res = await requestResponse(`${REVIEW_BASE}/create/`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'Idempotency-Key': idempotencyKey,
-    },
-    body: JSON.stringify({
-      booking_id: params.booking_id,
-      rating: params.rating,
-      unstructured_feedback: params.unstructured_feedback.trim(),
-      nlp_sentiment: sentiment,
-    }),
-  });
-
-  const data = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    const errorMsg =
-      data.detail ||
-      data.booking_id?.[0] ||
-      data.rating?.[0] ||
-      data.unstructured_feedback?.[0] ||
-      data.nlp_sentiment?.[0] ||
-      `Failed to submit review (${res.status})`;
-    throw new Error(errorMsg);
+  let res: Response;
+  try {
+    res = await requestResponse(`${REVIEW_BASE}/create/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        booking_id: params.booking_id,
+        rating: params.rating,
+        unstructured_feedback: params.unstructured_feedback.trim(),
+      }),
+    }, 60000);
+  } catch {
+    throw new ReviewSubmissionError('We could not confirm your submission. Your feedback is still here. Tap Try Again to check safely.', 'connection');
   }
-
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = data.detail || data.booking_id?.[0] || data.rating?.[0] ||
+      data.unstructured_feedback?.[0] || 'Could not submit your review. Please try again.';
+    throw new ReviewSubmissionError(String(message), data.code);
+  }
+  if (!data.data?.review_id || !['Positive', 'Neutral', 'Negative'].includes(data.data.nlp_sentiment)) {
+    throw new ReviewSubmissionError('We could not confirm your submission. Please try again.', 'connection');
+  }
   return data;
 }
 

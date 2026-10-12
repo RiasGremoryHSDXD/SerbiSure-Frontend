@@ -40,7 +40,7 @@ export function HomeScreen({ role: requestedRole, avatarUri, onAvatarPress, onVi
   const role = requestedRole || resolveRole(user.accountType);
   const authToken = token || user.token;
   const { posts, isLoading, isRefreshing, error, refresh } = useFeed(role, authToken, user.id);
-  const { isSaved, isApplied, isClosed, toggleSave, applyJob, refreshSavedFromBackend } = useJobsActivity();
+  const { isSaved, isApplied, isClosed, toggleSave, refreshSavedFromBackend } = useJobsActivity();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<HomeFeedCategory | null>(null);
   const [selectedPost, setSelectedPost] = useState<FeedPost | null>(null);
@@ -63,7 +63,6 @@ export function HomeScreen({ role: requestedRole, avatarUri, onAvatarPress, onVi
   const contactPoster = (post: FeedPost) => {
     setSelectedPost(null);
     if (post.kind === 'job') {
-      applyJob(post);
       setActiveChat({
         post, initialMessage: 'I am interested in this job position', initialReplyTo: {
           author: 'Job Post', text: `${post.roleTag} • ${post.price} ${post.unit} • ${post.location} • ${post.termTag}`,

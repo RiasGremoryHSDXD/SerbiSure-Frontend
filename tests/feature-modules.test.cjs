@@ -42,10 +42,12 @@ const postingApi = load('src/features/posting/api/postingApi.ts');
 const date = load('src/shared/utils/date.ts');
 const browse = load('src/features/feed/browsePresentation.ts');
 const bookingApi = load('src/features/bookings/api/bookingApi.ts');
+const bookingCards = load('src/features/chat/bookingCards.ts');
+const offersApi = load('src/features/chat/api/bookingOffersApi.ts');
 const emptyFilters = { categories: [], bookingType: null, maxRate: null, location: '', sortBy: 'newest' };
 const dto = {
-  booking_id: 'post-1', poster_id: 'author-1', name: 'Test User', profile_link: 'https://test.local/avatar.png',
-  booking_type: 'short_term', service_category: ['Cleaning', 'Child_care'], daily_rate: '800',
+  booking_id: 'post-1', poster_id: 'author-1', poster_verification_status: 'Verified', name: 'Test User', profile_link: 'https://test.local/avatar.png',
+  booking_type: 'short_term', work_setup: 'stay_out', service_category: ['Cleaning', 'Child_care'], rate_amount: '800', rate_period: 'day',
   barangay: 'Nazareth', city: 'Cagayan de Oro', street: 'Test Street', createdAt: new Date().toISOString(),
 };
 const response = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
@@ -106,9 +108,9 @@ test('Home maps the same DTO into distinct job and worker cards', () => {
   assert.equal(job.price, '₱800');
   assert.equal(job.unit, '/ day');
   assert.equal(job.location, 'Nazareth, Cagayan de Oro');
-  assert.equal(job.aboutText, 'I am looking for Cleaning & Child Care at Test Street, Nazareth, Cagayan de Oro, capable of working on a stay-out setup.');
+  assert.equal(job.aboutText, 'I am looking for Cleaning & Child Care at Test Street, Nazareth, Cagayan de Oro, on a stay-out setup.');
   assert.equal(worker.aboutText, 'Available for Cleaner & Child Care work in Nazareth, Cagayan de Oro.');
-  assert.deepEqual(job.tags, ['Verified Employer', 'Part-time', 'Stay-out', 'Cleaning', 'Child Care']);
+  assert.deepEqual(job.tags, ['Verified Employer', 'Short-term', 'Stay-out', 'Cleaning', 'Child Care']);
 });
 
 test('Home preserves long-term labels, explicit setup, and partial response fallbacks', () => {
@@ -116,7 +118,7 @@ test('Home preserves long-term labels, explicit setup, and partial response fall
   const job = mapper.mapFeedPost(item, 'kasambahay');
   const worker = mapper.mapFeedPost(item, 'homeowner');
   assert.equal(job.termTag, 'Long-term');
-  assert.equal(worker.termTag, 'Stay-in');
+  assert.equal(worker.termTag, 'Long-term');
   assert.equal(job.unit, '/ month');
   assert.equal(job.setupTag, 'Stay-out');
   assert.equal(job.aboutText, 'Stay-out laundry help');
@@ -131,7 +133,7 @@ test('Explore keeps its own card wording and rate units', () => {
   const job = mapper.mapJobPreview({ ...dto, booking_type: 'long_term' });
   assert.equal(worker.name, 'Test User');
   assert.equal(worker.role, 'Cleaning, Child Care');
-  assert.equal(worker.years, 'Part-time');
+  assert.equal(worker.years, 'Short-term');
   assert.equal(worker.price, '₱800');
   assert.equal(worker.unit, 'per day');
   assert.equal(mapper.mapWorkerPreview({ ...dto, booking_type: 'long_term' }).unit, 'per month');
@@ -140,6 +142,78 @@ test('Explore keeps its own card wording and rate units', () => {
   assert.equal(job.unit, 'per month');
   assert.equal(job.termTag, 'Long-term');
   assert.equal(job.image, dto.profile_link);
+});
+
+test('setup labels use the stored field and never infer from duration or description', () => {
+  const item = { ...dto, booking_type: 'long_term', work_setup: 'stay_out', special_instruction: 'Legacy stay-in wording' };
+  assert.equal(mapper.mapFeedPost(item, 'kasambahay').setupTag, 'Stay-out');
+  assert.equal(mapper.mapFeedPost(item, 'homeowner').setupTag, 'Stay-out');
+  assert.equal(mapper.mapJobPreview(item).setupTag, 'Stay-out');
+  assert.equal(mapper.mapWorkerPreview(item).setupTag, 'Stay-out');
+  const unknown = { ...item, work_setup: null };
+  assert.equal(mapper.mapFeedPost(unknown, 'kasambahay').setupTag, 'Not specified');
+  assert.equal(mapper.mapFeedPost(unknown, 'homeowner').termTag, 'Long-term');
+  assert.ok(!mapper.mapWorkerPreview(unknown).tags.includes('Stay-in'));
+});
+
+test('missing data cannot create a verified feed badge or default contract terms', () => {
+  const item = { ...dto, poster_verification_status: 'Pending' };
+  assert.ok(!mapper.mapFeedPost(item, 'kasambahay').tags.includes('Verified Employer'));
+  assert.equal(bookingCards.mapBookingCard(null), null);
+  const booking = { ...dto, service_category: ['Cleaning'], booking_status: 'Pending', start_time: '2026-10-13T00:00:00Z' };
+  const card = bookingCards.mapBookingCard({ booking, proposal_id: null, proposed_rate: null, status: 'Pending', can_respond: true, sender_name: 'Sender' });
+  assert.equal(card.startDate, '10/13/2026');
+  assert.equal(card.endDate, '');
+  assert.equal(card.workHours, '');
+  assert.equal(card.location, '');
+  assert.equal(card.isConfirmed, false);
+  assert.equal(bookingCards.mapBookingCard({ booking, status: 'Confirmed', can_respond: false, sender_name: 'Sender' }).isConfirmed, true);
+});
+
+test('booking schedules preserve Philippine time and reject invalid dates or clocks', () => {
+  assert.deepEqual(bookingCards.bookingSchedule('10/13/2026', '08:00 AM'), { iso: '2026-10-13T00:00:00.000Z', clock: '08:00:00' });
+  assert.equal(bookingCards.bookingSchedule('10/13/2026', '05:00 PM').iso, '2026-10-13T09:00:00.000Z');
+  assert.throws(() => bookingCards.bookingSchedule('02/30/2026', '08:00 AM'), /calendar/);
+  assert.throws(() => bookingCards.bookingSchedule('10/13/2026', '13:70 PM'), /hours/);
+});
+
+test('chat offers use durable request keys and acceptance waits for authoritative endpoints', async () => {
+  const payload = { recipient_id: 'partner-1', rate_amount: '8000' };
+  await withFetch(async (url, options) => {
+    assert.equal(url, 'http://test.local/api/v1/booking/chat-offers/');
+    assert.equal(options.headers.get('Idempotency-Key'), 'draft-key');
+    assert.deepEqual(JSON.parse(options.body), payload);
+    return response({ booking: { booking_id: 'booking-1' }, chat_message: { chat_message_id: 'message-1' } }, 201);
+  }, async () => assert.equal((await offersApi.sendBookingOffer('session', payload, 'draft-key')).booking.booking_id, 'booking-1'));
+  const card = { bookingId: 'booking-1', canRespond: true };
+  await withFetch(async (url, options) => {
+    assert.equal(url, 'http://test.local/api/v1/booking/booking-1/accept/');
+    assert.equal(options.method, 'PATCH');
+    return response({ booking: { booking_status: 'Accepted' } });
+  }, () => offersApi.respondToBookingOffer('session', card, 'accept'));
+  await withFetch(async (url) => {
+    assert.equal(url, 'http://test.local/api/v1/booking/proposals/proposal-1/respond/');
+    return response({ rate_amount: ['The amount is below the minimum.'] }, 400);
+  }, () => assert.rejects(offersApi.respondToBookingOffer('session', { ...card, proposalId: 'proposal-1' }, 'accept'), /below the minimum/));
+  await withFetch(async () => response({ booking: { booking_status: 'Pending' } }),
+    () => assert.rejects(offersApi.respondToBookingOffer('session', card, 'accept'), /did not confirm/));
+});
+
+test('booking lists distinguish empty results from server failures and malformed responses', async () => {
+  await withFetch(async () => response([]), async () => assert.deepEqual(await bookingApi.fetchMyBookings('session', 'active'), []));
+  await withFetch(async () => response({ detail: 'Service unavailable' }, 503),
+    () => assert.rejects(bookingApi.fetchMyAssignedBookings('session', 'active'), /Service unavailable/));
+  await withFetch(async () => response({ results: 'invalid' }),
+    () => assert.rejects(bookingApi.fetchMyBookings('session'), /Unexpected booking response/));
+});
+
+test('saved posts and applications stay server-backed and preserve failure states', async () => {
+  await withFetch(async () => response({ detail: 'Please reconnect' }, 503),
+    () => assert.rejects(bookingApi.fetchSavedPostsApi('session'), /reconnect/));
+  await withFetch(async (url) => {
+    assert.equal(url, 'http://test.local/api/v1/booking/my-proposals/');
+    return response([dto]);
+  }, async () => assert.equal((await bookingApi.fetchMyProposalPosts('session'))[0].booking_id, 'post-1'));
 });
 
 test('category filters include secondary categories and combine with search', () => {
@@ -174,7 +248,10 @@ test('both Browse roles share clear header counts without claiming distance matc
 test('Browse quick filters work identically for jobs and services and preserve advanced options', () => {
   const advanced = { ...emptyFilters, maxRate: 900, location: 'Nazareth', sortBy: 'rate_asc' };
   const stayIn = browse.quickBrowseFilters(advanced, 'Stay-in');
-  assert.equal(stayIn.bookingType, 'long_term');
+  assert.equal(stayIn.bookingType, null);
+  assert.equal(stayIn.workSetup, 'stay_in');
+  assert.equal(browse.quickBrowseFilters(advanced, 'Stay-out').workSetup, 'stay_out');
+  assert.equal(browse.quickBrowseFilters(advanced, 'Long-term').bookingType, 'long_term');
   assert.deepEqual(stayIn.categories, []);
   assert.equal(stayIn.location, 'Nazareth');
   assert.equal(stayIn.maxRate, 900);
@@ -185,6 +262,7 @@ test('Browse quick filters work identically for jobs and services and preserve a
   const all = browse.quickBrowseFilters(category, 'All');
   assert.deepEqual(all.categories, []);
   assert.equal(all.bookingType, null);
+  assert.equal(all.workSetup, null);
   assert.equal(all.sortBy, 'rate_asc');
   assert.equal(browse.countBrowseFilters(all), 3);
   assert.equal(browse.activeBrowseChip({ ...category, bookingType: 'short_term' }), '');
@@ -210,20 +288,40 @@ test('generated descriptions preserve role and engagement wording', () => {
 test('rate validation handles empty values, formatted amounts, and existing limits', () => {
   assert.ok(validation.validatePostingRate('job', 'short', ''));
   assert.ok(validation.validatePostingRate('service', 'short', 'abc'));
-  assert.ok(validation.validatePostingRate('service', 'short', '599'));
-  assert.equal(validation.validatePostingRate('job', 'short', '600'), null);
-  assert.ok(validation.validatePostingRate('job', 'long', '6499'));
-  assert.equal(validation.validatePostingRate('service', 'long', '₱6,500'), null);
+  assert.ok(validation.validatePostingRate('service', 'short', '599', { rate_period: 'day', minimum_rate: '600' }));
+  assert.equal(validation.validatePostingRate('job', 'short', '600', { rate_period: 'day', minimum_rate: '600' }), null);
+  assert.ok(validation.validatePostingRate('job', 'long', '6499', { rate_period: 'month', minimum_rate: '6500' }));
+  assert.equal(validation.validatePostingRate('service', 'long', '6500', { rate_period: 'month', minimum_rate: '6500' }), null);
 });
 
 test('feed query serialization includes selected filters and no empty defaults', () => {
   assert.equal(feedApi.buildFeedPath(emptyFilters), '/api/v1/booking/feed/');
-  const query = new URL(feedApi.buildFeedPath({ ...emptyFilters, categories: ['Cleaning', 'Cooking'], bookingType: 'short_term', maxRate: 900, location: ' Nazareth ', sortBy: 'rate_asc' }), 'http://test.local').searchParams;
+  const query = new URL(feedApi.buildFeedPath({ ...emptyFilters, categories: ['Cleaning', 'Cooking'], bookingType: 'short_term', workSetup: 'stay_out', maxRate: 900, location: ' Nazareth ', sortBy: 'rate_asc' }), 'http://test.local').searchParams;
   assert.equal(query.get('category'), 'Cleaning,Cooking');
   assert.equal(query.get('booking_type'), 'short_term');
+  assert.equal(query.get('work_setup'), 'stay_out');
   assert.equal(query.get('max_rate'), '900');
   assert.equal(query.get('location'), 'Nazareth');
   assert.equal(query.get('sort'), 'rate_asc');
+  assert.equal(query.get('rate_period'), 'day');
+  const monthly = new URL(feedApi.buildFeedPath({ ...emptyFilters, bookingType: 'long_term', maxRate: 8000 }), 'http://test.local').searchParams;
+  assert.equal(monthly.get('rate_period'), 'month');
+  assert.equal(monthly.get('max_rate'), '8000');
+});
+
+test('legacy amount confirmation sends an explicit period and shows server wage errors', async () => {
+  await withFetch(async (url, options) => {
+    assert.equal(url, 'http://test.local/api/v1/booking/booking-1/rate/');
+    assert.equal(options.method, 'PATCH');
+    assert.equal(options.headers.get('Authorization'), 'Bearer test-session');
+    assert.deepEqual(JSON.parse(options.body), { rate_amount: '6500', rate_period: 'month' });
+    return response({ booking_id: 'booking-1', rate_amount: '6500.00', rate_period: 'month' });
+  }, async () => {
+    const result = await bookingApi.confirmPostRate('test-session', 'booking-1', '6500', 'month');
+    assert.equal(result.rate_period, 'month');
+  });
+  await withFetch(async () => response({ rate_amount: ['Minimum compensation is PHP 6,500.00/month.'] }, 400),
+    async () => assert.rejects(bookingApi.confirmPostRate('test-session', 'booking-1', '500', 'month'), /6,500.00\/month/));
 });
 
 test('HTTP client adds bearer and JSON headers and preserves request metadata', async () => {
@@ -340,4 +438,87 @@ test('shared modules have no dependencies on app or feature modules', () => {
     }
   }
   visit(path.join(root, 'src/shared'));
+});
+
+const engagementForm = load('src/features/bookings/engagementForm.ts');
+
+test('service selections collapse all five roles and All-around stays mutually exclusive', () => {
+  let selected = [];
+  for (const value of engagementForm.BASE_SERVICES) selected = engagementForm.toggleService(selected, value);
+  assert.deepEqual(selected, ['All-around']);
+  assert.deepEqual(engagementForm.toggleService(selected, 'Cooking'), ['Cooking']);
+  assert.deepEqual(engagementForm.toggleService(['Cooking'], 'All-around'), ['All-around']);
+  assert.deepEqual(engagementForm.toggleService(['All-around'], 'All-around'), []);
+  assert.deepEqual(engagementForm.toggleService(['Cleaning', 'Cooking'], 'Cooking'), ['Cleaning']);
+  assert.deepEqual(engagementForm.normalizeServices(['All-around', 'Laundry']), ['All-around']);
+  assert.deepEqual(engagementForm.normalizeServices(['Laundry', 'Laundry']), ['Laundry']);
+});
+
+test('all short-term shifts persist the explicitly chosen Philippine date, never tomorrow', () => {
+  const now = Date.parse('2029-01-01T00:00:00Z');
+  for (const [shift, start, end] of [['morning', '08:00:00', '12:00:00'], ['afternoon', '12:00:00', '17:00:00'], ['night', '17:00:00', '21:00:00']]) {
+    const terms = engagementForm.buildEngagementSchedule({ bookingType: 'short_term', startDate: '01/07/2030', endDate: '', workHours: '', days: [], shift }, now);
+    assert.equal(terms.daily_start_time, start);
+    assert.equal(terms.daily_end_time, end);
+    assert.equal(bookingCards.philippinesDate(terms.start_time), '01/07/2030');
+    assert.equal(bookingCards.philippinesDate(terms.end_time), '01/07/2030');
+    assert.deepEqual(terms.work_days, ['M']);
+  }
+});
+
+test('long-term schedules need explicit ordered dates, daily hours and matching working days', () => {
+  const form = { bookingType: 'long_term', startDate: '01/07/2030', endDate: '02/07/2030', workHours: '08:00 AM - 05:00 PM', days: ['F', 'M', 'W'], shift: null };
+  const now = Date.parse('2029-01-01T00:00:00Z');
+  assert.deepEqual(engagementForm.buildEngagementSchedule(form, now).work_days, ['M', 'W', 'F']);
+  for (const updates of [{startDate: ''}, {endDate: ''}, {endDate: form.startDate}, {days: []}, {days: ['F']}, {workHours: '05:00 PM - 08:00 AM'}]) {
+    assert.throws(() => engagementForm.buildEngagementSchedule({...form, ...updates}, now));
+  }
+  assert.throws(() => engagementForm.buildEngagementSchedule(form, Date.parse('2030-03-01T00:00:00Z')));
+  assert.throws(() => engagementForm.buildEngagementSchedule({...form, bookingType:'short_term'}, now));
+  assert.equal(engagementForm.dayForDate('01/06/2030'), 'Su');
+});
+
+test('both forms require a complete PSGC hierarchy and a real street and ZIP code', () => {
+  const locations = load('src/features/bookings/workLocation.ts');
+  const address = { selectedRegion: {name:'NCR'}, selectedProvince:{name:'Metro Manila'}, selectedCity:{name:'Quezon City'}, selectedBarangay:{name:'Test Barangay'}, streetAddress:'123 Test Street', zipcode:'1100' };
+  assert.equal(locations.workLocationError(address), null);
+  for (const field of ['selectedRegion', 'selectedProvince', 'selectedCity', 'selectedBarangay']) {
+    assert.ok(locations.workLocationError({...address, [field]:null}));
+  }
+  assert.ok(locations.workLocationError({...address, streetAddress:' '}));
+  assert.ok(locations.workLocationError({...address, zipcode:'123'}));
+  assert.ok(locations.workLocationError({...address, zipcode:'11a0'}));
+});
+const reviewApi = load('src/features/reviews/api/reviewApi.ts');
+
+test('review submission routes only to Django and never sends a client sentiment or HF token', async () => {
+  const params = { booking_id: 'booking-1', rating: 1, unstructured_feedback: '  Dili kabalo mo lipyo  ', nlp_sentiment: 'Positive' };
+  await withFetch(async (url, options) => {
+    assert.equal(url, 'http://test.local/api/v1/reviews/create/');
+    const headers = new Headers(options.headers);
+    assert.equal(headers.get('Authorization'), 'Bearer session-token');
+    assert.equal(headers.get('Idempotency-Key'), 'retry-key');
+    assert.deepEqual(JSON.parse(options.body), { booking_id: 'booking-1', rating: 1, unstructured_feedback: 'Dili kabalo mo lipyo' });
+    return response({ message: 'Saved', data: { review_id: 'review-1', nlp_sentiment: 'Negative', sentiment_analysis: { source: 'huggingface', confidence: .7271 } } }, 201);
+  }, async () => {
+    const saved = await reviewApi.submitReview('session-token', params, 'retry-key');
+    assert.equal(saved.data.nlp_sentiment, 'Negative');
+    assert.equal(saved.data.sentiment_analysis.confidence, .7271);
+  });
+});
+
+test('provider failure stays an actionable review error without invented Neutral', async () => {
+  await withFetch(async () => response({ detail: 'Please try again.', code: 'sentiment_unavailable' }, 503), async () => {
+    await assert.rejects(reviewApi.submitReview('token', { booking_id: 'b', rating: 5, unstructured_feedback: 'Syada siya mo hatag ug sweldo' }, 'same-key'), error => {
+      assert.equal(error.code, 'sentiment_unavailable');
+      assert.equal(error.message, 'Please try again.');
+      return true;
+    });
+  });
+});
+
+test('successful HTTP response without a saved review is never presented as submission success', async () => {
+  await withFetch(async () => response({ message: 'OK' }), async () => {
+    await assert.rejects(reviewApi.submitReview('token', { booking_id: 'b', rating: 5, unstructured_feedback: 'The service was good' }, 'same-key'), error => error.code === 'connection');
+  });
 });

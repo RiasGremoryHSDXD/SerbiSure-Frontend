@@ -1,5 +1,6 @@
+import { workSetupLabel } from '../workSetup';
 import { useState, useEffect } from 'react';
-import { toggleSavePostApi, fetchSavedPostsApi, formatBookingLocationShort } from '../api/bookingApi';
+import { toggleSavePostApi, fetchSavedPostsApi, fetchMyProposalPosts, formatBookingLocationShort } from '../api/bookingApi';
 
 export interface SavedJobItem {
   id: string | number;
@@ -11,6 +12,7 @@ export interface SavedJobItem {
   location?: string;
   roleTag?: string;
   termTag?: string;
+  setupTag?: string;
   price: string;
   unit: string;
   aboutText?: string;
@@ -27,6 +29,9 @@ class SavedJobsStore {
   private listeners: Set<StoreListener> = new Set();
   private currentUserId: string | null = null;
   private isSyncing: boolean = false;
+  private sessionVersion = 0;
+  loadError: string | null = null;
+  get loading() { return this.isSyncing; }
 
   constructor() { }
 
@@ -61,9 +66,11 @@ class SavedJobsStore {
    */
   async refreshFromBackend(token: string | null) {
     if (!token || this.isSyncing) return;
-    this.isSyncing = true;
+    const version = this.sessionVersion;
+    this.isSyncing = true; this.loadError = null; this.notify();
     try {
-      const data = await fetchSavedPostsApi(token);
+      const [data, applications] = await Promise.all([fetchSavedPostsApi(token), fetchMyProposalPosts(token)]);
+      if (version !== this.sessionVersion) return;
       if (Array.isArray(data)) {
         // Clear saved map for this fresh sync from DB
         this.savedMap.clear();
@@ -76,9 +83,9 @@ class SavedJobsStore {
             item.profile_link ||
             `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'User')}&background=FFB43B&color=fff`;
           const isLongTerm = item.booking_type === 'long_term';
-          const termTag = isLongTerm ? 'Stay-in' : 'Part-time';
+          const termTag = isLongTerm ? 'Long-term' : 'Short-term';
           const unit = isLongTerm ? '/ month' : '/ day';
-          const loc = formatBookingLocationShort(item, 'Cagayan de Oro');
+          const loc = formatBookingLocationShort(item, 'Location not provided');
 
           const jobItem: SavedJobItem = {
             id: item.booking_id,
@@ -89,20 +96,35 @@ class SavedJobsStore {
             location: loc,
             roleTag: categories.join(', '),
             termTag: termTag,
-            price: `₱${item.daily_rate || '0'}`,
+            setupTag: workSetupLabel(item.work_setup),
+            price: `₱${item.rate_amount || '0'}`,
             unit: unit,
             aboutText: item.special_instruction || undefined,
-            tags: categories,
+            tags: [...categories, ...(item.work_setup ? [workSetupLabel(item.work_setup)] : [])],
             image: avatarUrl,
           };
           this.savedMap.set(jobItem.id, jobItem);
         }
+        this.appliedMap.clear();
+        for (const item of applications) {
+          this.appliedMap.set(item.booking_id, {
+            id: item.booking_id, partnerId: item.poster_id, employerName: item.name || 'User',
+            avatar: item.profile_link || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(item.name || 'User'),
+            roleTag: (item.service_category || []).join(', '), title: (item.service_category || []).join(', '),
+            location: formatBookingLocationShort(item, 'Location not provided'),
+            termTag: item.booking_type === 'long_term' ? 'Long-term' : 'Short-term',
+            price: 'PHP ' + item.rate_amount, unit: '/ ' + item.rate_period,
+            aboutText: item.special_instruction || '', tags: item.service_category || [],
+          });
+        }
         this.notify();
       }
     } catch (err) {
+      if (version !== this.sessionVersion) return;
+      this.loadError = err instanceof Error ? err.message : 'Unable to load saved posts and applications.';
       console.warn('[savedJobsStore] refreshFromBackend error:', err);
     } finally {
-      this.isSyncing = false;
+      if (version === this.sessionVersion) { this.isSyncing = false; this.notify(); }
     }
   }
 
@@ -110,6 +132,8 @@ class SavedJobsStore {
    * Clears all saved jobs, applied jobs, and closed jobs from memory (used on logout).
    */
   clearStore() {
+    this.sessionVersion++; this.isSyncing = false;
+    this.loadError = null;
     this.savedMap.clear();
     this.appliedMap.clear();
     this.closedJobs.clear();
@@ -147,11 +171,6 @@ class SavedJobsStore {
 
   isSaved(id: string | number): boolean {
     return this.savedMap.has(id);
-  }
-
-  applyJob(job: SavedJobItem) {
-    this.appliedMap.set(job.id, { ...job });
-    this.notify();
   }
 
   isApplied(id: string | number): boolean {
@@ -223,6 +242,8 @@ export function useJobsActivity() {
   }, []);
 
   return {
+    savedLoadError: savedJobsStore.loadError,
+    loadingSaved: savedJobsStore.loading,
     savedJobs: savedJobsStore.getSavedJobs(),
     appliedJobs: savedJobsStore.getAppliedJobs(),
     savedCount: savedJobsStore.getSavedCount(),
@@ -234,7 +255,6 @@ export function useJobsActivity() {
     markJobClosed: (id?: string | number | null, ...extraKeys: (string | number | undefined | null)[]) =>
       savedJobsStore.markJobClosed(id, ...extraKeys),
     toggleSave: (job: SavedJobItem, token?: string | null) => savedJobsStore.toggleSave(job, token),
-    applyJob: (job: SavedJobItem) => savedJobsStore.applyJob(job),
     clearStore: () => savedJobsStore.clearStore(),
     refreshSavedFromBackend: (token: string | null) => savedJobsStore.refreshFromBackend(token),
   };

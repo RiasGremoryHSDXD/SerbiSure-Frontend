@@ -1,5 +1,14 @@
+import type { WorkSetup } from '../workSetup';
 import { API_BASE_URL } from '../../../shared/api/config';
 import { requestJson, requestResponse } from '../../../shared/api/httpClient';
+
+function bookingError(data: unknown, fallback: string): string {
+  if (!data || typeof data !== 'object') return fallback;
+  const values = Object.entries(data as Record<string, unknown>).filter(([key]) => key !== 'code');
+  const text = values.flatMap(([, value]) => typeof value === 'string' ? [value]
+    : Array.isArray(value) ? value.filter(v => typeof v === 'string') : []).join(' ');
+  return text || fallback;
+}
 
 export interface PublicPendingPost extends BookingItem {
   viewer_proposal: { proposal_id: string; status: BookingProposal['status'] } | null;
@@ -25,9 +34,15 @@ export interface BookingParticipant {
 export interface BookingItem {
   booking_id: string;
   booking_type: 'short_term' | 'long_term';
+  work_setup?: WorkSetup | null;
   booking_status: 'Pending' | 'Accepted' | 'InProgress' | 'Completed' | 'Cancelled';
   service_category: string[];
   start_time: string;
+  work_days?: string[];
+  daily_start_time?: string | null;
+  daily_end_time?: string | null;
+  recipient_id?: string | null;
+  recipient?: BookingParticipant | null;
   end_time?: string | null;
   region?: string | null;
   province?: string | null;
@@ -38,7 +53,15 @@ export interface BookingItem {
   floor_number?: string | null;
   zip_code?: string | null;
   special_instruction?: string | null;
-  daily_rate: string;
+  rate_amount: string;
+  rate_period: 'day' | 'month';
+  rate_needs_review?: boolean;
+  started_at?: string | null;
+  completed_at?: string | null;
+  contract_summary?: {
+    booking_id: string; service_category: string[]; rate_amount: string | null; rate_period: 'month'; rate_needs_review: boolean;
+    work_setup: WorkSetup | null; start_date: string; location: string; contract_pdf_url: string; source_url: string; notice: string;
+  } | null;
   createdAt: string;
   poster?: BookingParticipant;
   assigned_partner?: BookingParticipant | null;
@@ -116,6 +139,7 @@ export interface BookingProposal {
   proposer_avatar: string | null;
   proposer_rating: number;
   proposed_rate: string;
+  rate_period: 'day' | 'month';
   message?: string;
   status: 'Pending' | 'Accepted' | 'Rejected' | 'Withdrawn';
   createdAt: string;
@@ -134,7 +158,9 @@ export interface RecommendationItem {
   avatar?: string | null;
   poster_name?: string;
   poster_avatar?: string | null;
-  daily_rate?: string;
+  rate_amount?: string;
+  rate_period?: 'day' | 'month';
+  booking_type?: 'short_term' | 'long_term';
   verification_status?: string;
 }
 
@@ -157,39 +183,19 @@ export async function fetchBookingDetail(token: string, bookingId: string): Prom
 /**
  * Fetch bookings posted by current user
  */
-export async function fetchMyBookings(token: string, statusFilter?: string): Promise<BookingItem[]> {
-  try {
-    const url = statusFilter
-      ? `${API_BASE_URL}/api/v1/booking/mine/?status=${encodeURIComponent(statusFilter)}`
-      : `${API_BASE_URL}/api/v1/booking/mine/`;
-    const res = await requestResponse(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return [];
-    return await res.json();
-  } catch (err) {
-    console.warn('[bookingApi] fetchMyBookings failed:', err);
-    return [];
-  }
+async function bookingList(token: string, endpoint: string, statusFilter?: string): Promise<BookingItem[]> {
+  const path = '/api/v1/booking/' + endpoint + '/' + (statusFilter ? '?status=' + encodeURIComponent(statusFilter) : '');
+  const data = await requestJson<unknown>(path, { token });
+  if (!Array.isArray(data)) throw new Error('Unexpected booking response. Please try again.');
+  return data as BookingItem[];
 }
 
-/**
- * Fetch bookings assigned to current user (Kasambahay accepted jobs)
- */
+export async function fetchMyBookings(token: string, statusFilter?: string): Promise<BookingItem[]> {
+  return bookingList(token, 'mine', statusFilter);
+}
+
 export async function fetchMyAssignedBookings(token: string, statusFilter?: string): Promise<BookingItem[]> {
-  try {
-    const url = statusFilter
-      ? `${API_BASE_URL}/api/v1/booking/assigned/?status=${encodeURIComponent(statusFilter)}`
-      : `${API_BASE_URL}/api/v1/booking/assigned/`;
-    const res = await requestResponse(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return [];
-    return await res.json();
-  } catch (err) {
-    console.warn('[bookingApi] fetchMyAssignedBookings failed:', err);
-    return [];
-  }
+  return bookingList(token, 'assigned', statusFilter);
 }
 
 /**
@@ -205,7 +211,7 @@ export async function acceptBooking(token: string, bookingId: string): Promise<{
       },
     });
     const data = await res.json();
-    if (!res.ok) return { success: false, error: data.error || data.detail || 'Could not accept booking.' };
+    if (!res.ok) return { success: false, error: bookingError(data, 'Could not accept booking.') };
     return { success: true, booking: data.booking };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error.' };
@@ -225,7 +231,7 @@ export async function startBooking(token: string, bookingId: string): Promise<{ 
       },
     });
     const data = await res.json();
-    if (!res.ok) return { success: false, error: data.error || data.detail || 'Could not start booking.' };
+    if (!res.ok) return { success: false, error: bookingError(data, 'Could not start booking.') };
     return { success: true, booking: data.booking };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error.' };
@@ -245,7 +251,7 @@ export async function completeBooking(token: string, bookingId: string): Promise
       },
     });
     const data = await res.json();
-    if (!res.ok) return { success: false, error: data.error || data.detail || 'Could not complete booking.' };
+    if (!res.ok) return { success: false, error: bookingError(data, 'Could not complete booking.') };
     return { success: true, booking: data.booking };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error.' };
@@ -270,7 +276,7 @@ export async function cancelBooking(
       body: JSON.stringify(payload || { action: 'request' }),
     });
     const data = await res.json();
-    if (!res.ok) return { success: false, error: data.error || data.detail || 'Could not cancel booking.' };
+    if (!res.ok) return { success: false, error: bookingError(data, 'Could not cancel booking.') };
     return { success: true, message: data.message, booking: data.booking };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error.' };
@@ -284,7 +290,8 @@ export async function submitBookingProposal(
   token: string,
   bookingId: string,
   proposedRate: number | string,
-  message?: string
+  message: string | undefined,
+  ratePeriod: 'day' | 'month'
 ): Promise<{ success: boolean; error?: string; proposal?: BookingProposal }> {
   try {
     const res = await requestResponse(`${API_BASE_URL}/api/v1/booking/${bookingId}/proposals/`, {
@@ -295,11 +302,12 @@ export async function submitBookingProposal(
       },
       body: JSON.stringify({
         proposed_rate: proposedRate,
+        rate_period: ratePeriod,
         message,
       }),
     });
     const data = await res.json();
-    if (!res.ok) return { success: false, error: data.error || data.detail || 'Could not submit proposal.' };
+    if (!res.ok) return { success: false, error: bookingError(data, 'Could not submit proposal.') };
     return { success: true, proposal: data.proposal };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error.' };
@@ -340,7 +348,7 @@ export async function respondToProposal(
       body: JSON.stringify({ action }),
     });
     const data = await res.json();
-    if (!res.ok) return { success: false, error: data.error || data.detail || 'Could not respond to proposal.' };
+    if (!res.ok) return { success: false, error: bookingError(data, 'Could not respond to proposal.') };
     return { success: true, proposal: data.proposal, booking: data.booking };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error.' };
@@ -366,8 +374,10 @@ export async function fetchRecommendations(token: string): Promise<Recommendatio
 
 export interface MinimumWageData {
   booking_type: 'long_term' | 'short_term';
-  min_daily_rate: string;
-  min_monthly_rate?: string;
+  rate_period: 'day' | 'month';
+  minimum_rate: string;
+  min_daily_rate: string | null;
+  min_monthly_rate?: string | null;
   working_days_per_month?: number;
   is_statutory_mandatory?: boolean;
   wage_order?: string;
@@ -377,17 +387,19 @@ export interface MinimumWageData {
 
 /**
  * GET /api/v1/booking/minimum-wage/
- * Returns statutory minimum daily wage metadata under Batas Kasambahay (RA 10361).
+ * Returns the server's minimum compensation and its explicit day/month period.
  */
 export async function fetchMinimumWage(
   token?: string,
   bookingType: 'long_term' | 'short_term' = 'long_term',
-  address: string = ''
+  address: string = '',
+  region: string = ''
 ): Promise<MinimumWageData | null> {
   try {
     const qs = new URLSearchParams({
       booking_type: bookingType,
       address,
+      region,
     });
     const headers: Record<string, string> = {};
     if (token) {
@@ -439,22 +451,23 @@ export async function toggleSavePostApi(
  * Fetches all saved posts for the current authenticated user from the database.
  */
 export async function fetchSavedPostsApi(token?: string | null): Promise<any[]> {
-  if (!token) return [];
-  try {
-    const res = await requestResponse(`${API_BASE_URL}/api/v1/booking/saved/`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    if (!res.ok) {
-      console.warn('[bookingApi] fetchSavedPostsApi returned status:', res.status);
-      return [];
-    }
-    const data = await res.json();
-    return Array.isArray(data) ? data : [];
-  } catch (err) {
-    console.warn('[bookingApi] fetchSavedPostsApi error:', err);
-    return [];
-  }
+  if (!token) throw new Error('Sign in to view saved posts.');
+  const data = await requestJson<unknown>('/api/v1/booking/saved/', { token });
+  if (!Array.isArray(data)) throw new Error('Unexpected saved posts response.');
+  return data;
 }
 
+export async function fetchMyProposalPosts(token: string): Promise<any[]> {
+  const data = await requestJson<unknown>('/api/v1/booking/my-proposals/', { token });
+  if (!Array.isArray(data)) throw new Error('Unexpected applications response.');
+  return data;
+}
+
+export async function confirmPostRate(token: string, bookingId: string, rateAmount: string, ratePeriod: 'day' | 'month'): Promise<BookingItem> {
+  const res = await requestResponse('/api/v1/booking/' + bookingId + '/rate/', {
+    token, method: 'PATCH', body: JSON.stringify({ rate_amount: rateAmount, rate_period: ratePeriod }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(bookingError(data, 'Could not confirm this post amount.'));
+  return data as BookingItem;
+}

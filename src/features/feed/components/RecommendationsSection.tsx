@@ -50,7 +50,7 @@ export function RecommendationsSection({
             {accountType === 'Homeowner' ? 'Top Matched Workers' : 'Recommended Jobs'}
           </Text>
         </View>
-        <Text style={styles.subtext}>AI-Powered Matches</Text>
+        <Text style={styles.subtext}>Based on profile information</Text>
       </View>
 
       {loading ? (
@@ -84,7 +84,7 @@ export function RecommendationsSection({
                     onSelectJob?.({
                       id: item.booking_id,
                       title: nameOrTitle,
-                      rate: item.daily_rate || '0',
+                      rate: item.rate_amount || '0',
                     });
                   }
                 }}
@@ -108,11 +108,11 @@ export function RecommendationsSection({
                 {isWorker ? (
                   <View style={styles.metaRow}>
                     <Ionicons name="star" size={12} color="#FFB43B" />
-                    <Text style={styles.metaText}>{item.rating || '5.0'}</Text>
+                    <Text style={styles.metaText}>{item.rating && item.rating > 0 ? item.rating.toFixed(1) : 'Unrated'}</Text>
                   </View>
                 ) : (
                   <View style={styles.metaRow}>
-                    <Text style={styles.rateText}>₱{item.daily_rate}/day</Text>
+                    <Text style={styles.rateText}>₱{item.rate_amount}/{item.rate_period || (item.booking_type === 'long_term' ? 'month' : 'day')}</Text>
                   </View>
                 )}
               </Pressable>
