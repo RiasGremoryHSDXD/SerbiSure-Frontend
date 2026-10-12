@@ -12,6 +12,7 @@ import { NotificationBell } from '../../notifications/NotificationContext';
 import { useLanguage } from '../../../shared/localization/LanguageContext';
 import { PROFILE_COPY } from '../profileConfig';
 import { ReviewsSection } from './ReviewsSection';
+import { WorkerCvModal } from '../worker/WorkerCvModal';
 
 import { formatRegisteredLocation } from '../../../shared/services/locationService';
 import THEME from '../../../shared/theme/theme';
@@ -56,11 +57,12 @@ export function UserProfileView({
   const { profile, reviews, summary, posts, loading, postsLoading, profileError, postsError, refreshPosts, markSubmitted } = usePublicProfile(visible, userId, effectiveToken);
   const [activeTab, setActiveTab] = useState<'posts' | 'reviews'>('posts');
   const [isReviewsExpanded, setIsReviewsExpanded] = useState(false);
+  const [showCv, setShowCv] = useState(false);
   const activeAvatar = profile?.profile_link || prefilledAvatar;
   const displayName = profile?.full_name || prefilledName;
   const displayRole = profile?.account_type || prefilledRole;
   const isWorker = displayRole === 'Kasambahay';
-  useEffect(() => { setActiveTab('posts'); setIsReviewsExpanded(false); }, [visible, userId]);
+  useEffect(() => { setActiveTab('posts'); setIsReviewsExpanded(false); setShowCv(false); }, [visible, userId]);
 
   const locationText = formatRegisteredLocation(profile?.street, profile?.city, profile?.province);
   const isVerified = profile?.verification_status === 'Verified';
@@ -176,24 +178,15 @@ export function UserProfileView({
             )}
           </View>
 
-          {/* Resume / CV Section (for Kasambahay) */}
-          {profile?.resume_url ? (
+          {isWorker && profile?.id && (
             <View style={profileStyles.sectionCard}>
-              <View style={styles.resumeHeaderRow}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Ionicons name="document-text" size={17} color="#FFB43B" style={{ marginRight: 6 }} />
-                  <Text style={[styles.sectionHeading, { marginBottom: 0 }]}>Resume / CV</Text>
-                </View>
-                <Pressable
-                  style={styles.viewResumeBtn}
-                  onPress={() => profile.resume_url && Linking.openURL(profile.resume_url)}
-                >
-                  <Ionicons name="eye-outline" size={13} color="#333" style={{ marginRight: 4 }} />
-                  <Text style={styles.viewResumeBtnText}>View PDF</Text>
-                </Pressable>
-              </View>
+              <Text style={styles.sectionHeading}>SerbiSure CV</Text>
+              <Text style={profileStyles.sectionCardSubtitle}>Services, experience and work preferences</Text>
+              <Pressable style={styles.viewResumeBtn} onPress={() => setShowCv(true)}><Text style={styles.viewResumeBtnText}>View CV</Text></Pressable>
+              {effectiveToken && <WorkerCvModal visible={showCv} onClose={() => setShowCv(false)} userId={profile.id} token={effectiveToken} />}
             </View>
-          ) : null}
+          )}
+
 
           {/* Social Links & Alternative Contacts Section */}
           {profile?.social_links && profile.social_links.length > 0 ? (

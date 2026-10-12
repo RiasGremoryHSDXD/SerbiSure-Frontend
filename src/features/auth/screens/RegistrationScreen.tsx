@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,21 +13,17 @@ import { getRegions, getProvinces, getCities, getBarangays, getZipCodeForCity, R
 import THEME from '../../../shared/theme/theme';
 import { RegistrationStepper } from '../components/RegistrationStepper';
 import { RegistrationErrorModal } from '../components/RegistrationErrorModal';
+import { SERVICE_CHOICES } from '../../bookings/engagementForm';
+
+import { WorkerCvForm } from '../../profile/worker/WorkerCvForm';
+import { emptyWorkerDraft, validateWorkerPage, workerPayload } from '../../profile/worker/workerCv';
 
 const logoSource = require('../../../../assets/serbisure_new_clean.png');
 
-const KASAMBAHAY_ROLES = [
-  { id: 'Child Care', label: 'Child Care' },
-  { id: 'Senior Care', label: 'Senior Care' },
-  { id: 'Cook', label: 'Cook' },
-  { id: 'Maid', label: 'Maid' },
-  { id: 'Family Driver', label: 'Family Driver' },
-  { id: 'Houseboy', label: 'Houseboy' },
-] as const;
-
-const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widowed', 'Separated'] as const;
-const CHILDREN_OPTIONS = ['No Children', 'With Children'] as const;
-const DIALECT_OPTIONS = ['Bisaya', 'Tagalog', 'English'] as const;
+const KASAMBAHAY_ROLES = SERVICE_CHOICES.map(service => ({
+  ...service,
+  label: service.id === 'Child_care' ? 'Childcare' : service.label,
+}));
 
 const NATIONALITY_OPTIONS: DemographicOption[] = [
   { id: 'Filipino', label: 'Filipino', badge: '🇵🇭' },
@@ -103,13 +99,13 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
 
   // Step 2 (Kasambahay only): Profile & Preferences (unselected by default)
   const [age, setAge] = useState('');
-  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [desiredSalary, setDesiredSalary] = useState('');
-  const [livingArrangement, setLivingArrangement] = useState<'Stay-In' | 'Stay-Out' | null>(null);
-  const [civilStatus, setCivilStatus] = useState<string | null>(null);
-  const [childrenStatus, setChildrenStatus] = useState<string | null>(null);
-  const [selectedDialects, setSelectedDialects] = useState<string[]>([]);
-  const [activePreferencePicker, setActivePreferencePicker] = useState<'civilStatus' | 'children' | null>(null);
+  const [workerDetails, setWorkerDetails] = useState(emptyWorkerDraft);
+  const [workerPage, setWorkerPage] = useState(0);
+  const registrationScroll = useRef<ScrollView>(null);
+  const selectedRoles = workerDetails.service_categories;
+  const desiredSalary = workerDetails.desired_monthly_rate;
+  const livingArrangement = workerDetails.work_setup === 'stay_in' ? 'Stay-In' : workerDetails.work_setup === 'stay_out' ? 'Stay-Out' : workerDetails.work_setup === 'either' ? 'Either' : null;
+  const selectedDialects = workerDetails.languages;
 
   // Step 3: Location & Address info
   const [selectedRegion, setSelectedRegion] = useState<Region | null>(null);
@@ -206,27 +202,6 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
     setRawPhone(digits);
   };
 
-  // --- Step 2 Kasambahay Preference Helpers ---
-  const handleToggleRole = (roleItem: string) => {
-    if (selectedRoles.includes(roleItem)) {
-      setSelectedRoles(selectedRoles.filter((r) => r !== roleItem));
-    } else {
-      if (selectedRoles.length >= 3) {
-        Alert.alert('Role Selection Limit', 'You can select up to 3 roles.');
-        return;
-      }
-      setSelectedRoles([...selectedRoles, roleItem]);
-    }
-  };
-
-  const handleToggleDialect = (dialectItem: string) => {
-    if (selectedDialects.includes(dialectItem)) {
-      setSelectedDialects(selectedDialects.filter((d) => d !== dialectItem));
-    } else {
-      setSelectedDialects([...selectedDialects, dialectItem]);
-    }
-  };
-
   const computedBio = useMemo(() => {
     const fullName = `${firstName.trim()} ${lastName.trim()}`.trim() || 'Kasambahay';
     const ageNum = calculatedAge || parseInt(age, 10);
@@ -235,15 +210,16 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
     const cityStr = selectedCity?.name;
     const provStr = selectedProvince?.name;
     const fromPart = cityStr && provStr ? ` from ${cityStr}, ${provStr}` : '';
+    const roleLabels = selectedRoles.map(id => KASAMBAHAY_ROLES.find(service => service.id === id)?.label || id);
 
     let rolesPart = '';
-    if (selectedRoles.length === 1) {
-      rolesPart = `applying for the role of ${selectedRoles[0]}`;
-    } else if (selectedRoles.length === 2) {
-      rolesPart = `applying for the roles of ${selectedRoles[0]} and ${selectedRoles[1]}`;
-    } else if (selectedRoles.length > 2) {
-      const initial = selectedRoles.slice(0, -1).join(', ');
-      const last = selectedRoles[selectedRoles.length - 1];
+    if (roleLabels.length === 1) {
+      rolesPart = `applying for the role of ${roleLabels[0]}`;
+    } else if (roleLabels.length === 2) {
+      rolesPart = `applying for the roles of ${roleLabels[0]} and ${roleLabels[1]}`;
+    } else if (roleLabels.length > 2) {
+      const initial = roleLabels.slice(0, -1).join(', ');
+      const last = roleLabels[roleLabels.length - 1];
       rolesPart = `applying for the roles of ${initial} and ${last}`;
     } else {
       rolesPart = 'applying for household service roles';
@@ -252,17 +228,18 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
     const salaryNum = parseFloat(desiredSalary.replace(/[^\d.]/g, '')) || 0;
     const salaryFormatted = salaryNum > 0
       ? `₱ ${salaryNum.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-      : '₱ 8,000.00';
+      : '';
 
-    const livingStr = livingArrangement ? livingArrangement.toLowerCase() : 'stay-in';
+    const livingStr = livingArrangement ? livingArrangement.toLowerCase() : 'a flexible';
 
-    return `I am ${fullName}${agePart}${fromPart}, ${rolesPart}. My minimum expected salary is ${salaryFormatted} per month on a ${livingStr} setup.`;
+    return `I am ${fullName}${agePart}${fromPart}, ${rolesPart}.${salaryFormatted ? ` My expected salary is ${salaryFormatted} per month.` : ''} I prefer ${livingStr === 'either' ? 'either stay-in or stay-out' : livingStr} work.`;
   }, [firstName, lastName, calculatedAge, age, selectedCity, selectedProvince, selectedRoles, desiredSalary, livingArrangement]);
 
   const finalBio = computedBio;
 
   const generatedTags = useMemo(() => {
-    return [...selectedRoles, livingArrangement].filter((item): item is string => Boolean(item));
+    const serviceTags = SERVICE_CHOICES.filter(service => selectedRoles.includes(service.id)).map(service => service.label);
+    return livingArrangement ? [...serviceTags, livingArrangement] : serviceTags;
   }, [selectedRoles, livingArrangement]);
 
   // --- Step 1 Validation & Transition ---
@@ -322,46 +299,10 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
 
   // --- Step 2 Validation & Transition ---
   const handleProceedFromStep2 = () => {
-    if (selectedRoles.length === 0) {
-      setServerError({ roles: ["Please select at least one role you can perform (up to 3)."] });
-      return;
-    }
-    const salaryNum = parseFloat(desiredSalary.replace(/[^\d.]/g, ''));
-    if (!desiredSalary.trim() || isNaN(salaryNum) || salaryNum <= 0) {
-      setServerError({ desired_salary: ["Please enter your expected minimum monthly salary."] });
-      return;
-    }
-    if (salaryNum < 6500) {
-      setServerError({
-        desired_salary: ["Under Batas Kasambahay (RA 10361), minimum monthly salary cannot be below ₱6,500/month."]
-      });
-      return;
-    }
-    if (!livingArrangement) {
-      setServerError({ roles: ["Please select whether you prefer Stay-In or Stay-Out."] });
-      return;
-    }
-    const ageNum = calculatedAge || parseInt(age, 10);
-    if (!ageNum || ageNum < 18 || ageNum > 85) {
-      setServerError({ date_of_birth: ["Kasambahay applicants must be at least 18 years old."] });
-      return;
-    }
-    if (!civilStatus) {
-      setServerError({ civil_status: ["Please select your civil status."] });
-      return;
-    }
-    if (!childrenStatus) {
-      setServerError({ children: ["Please indicate if you have children or not."] });
-      return;
-    }
-    if (selectedDialects.length === 0) {
-      setServerError({ language: ["Please select at least one spoken dialect."] });
-      return;
-    }
-
-    if (regionsList.length === 0) {
-      loadRegions();
-    }
+    const message = validateWorkerPage(workerDetails, workerPage);
+    if (message) { setServerError({ worker_profile: [message] }); return; }
+    if (workerPage < 3) { setWorkerPage(workerPage + 1); registrationScroll.current?.scrollTo({ y: 0 }); return; }
+    if (regionsList.length === 0) loadRegions();
     setSubStep(3);
   };
 
@@ -572,6 +513,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
         payload.language = selectedDialects.join(', ');
         payload.user_about = finalBio;
         payload.user_tags = generatedTags;
+        payload.worker_profile = workerPayload(workerDetails);
       }
 
       const generateUUID = () => {
@@ -636,6 +578,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
     if (subStep === 3) {
       setSubStep(isHomeowner ? 1 : 2);
     } else if (subStep === 2) {
+      if (workerPage > 0) { setWorkerPage(workerPage - 1); return; }
       setSubStep(1);
     } else {
       if (onBack) onBack();
@@ -680,7 +623,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
                 subStep === 1
                   ? 'Step 1: Account Information'
                   : subStep === 2
-                    ? 'Step 2: What can you do?'
+                    ? 'Step 2: Your worker profile'
                     : isHomeowner
                       ? 'Step 2: Where do you live?'
                       : 'Step 3: Where do you live?'
@@ -689,12 +632,13 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
                 subStep === 1
                   ? undefined
                   : subStep === 2
-                    ? 'Select up to 3 roles and set your preferences.'
+                    ? 'Answer a few short questions to create your SerbiSure CV.'
                     : 'We use your location to connect you with jobs and household services in your area.'
               }
             />
 
             <ScrollView
+              ref={registrationScroll}
               style={{ flex: 1 }}
               contentContainerStyle={{ paddingTop: 4, paddingBottom: 16 }}
               showsVerticalScrollIndicator={false}
@@ -901,151 +845,9 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
                 </View>
               )}
 
-              {/* SUB-STEP 2: KASAMBAHAY PROFILE & PREFERENCES (SINGLE-SCREEN CLEAN ROUNDED UI) */}
               {subStep === 2 && !isHomeowner && (
-                <View style={styles.compactStep2Wrap}>
-                  {/* Desired Roles (2-Column Grid, No Containers) */}
-                  <View style={styles.step2Block}>
-                    <View style={styles.rolesGrid}>
-                      {KASAMBAHAY_ROLES.map((roleItem) => {
-                        const isSelected = selectedRoles.includes(roleItem.id);
-                        return (
-                          <Pressable
-                            key={roleItem.id}
-                            style={styles.roleGridItem}
-                            onPress={() => handleToggleRole(roleItem.id)}
-                          >
-                            <View style={[styles.compactCheckbox, isSelected && styles.compactCheckboxSelected]}>
-                              {isSelected && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
-                            </View>
-                            <Text
-                              style={[styles.roleGridLabel, isSelected && styles.roleGridLabelSelected]}
-                              numberOfLines={1}
-                            >
-                              {roleItem.label}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-
-                  {/* Desired Salary & Work Setup (Side by Side) */}
-                  <View style={styles.compactRow}>
-                    <View style={{ flex: 1.1, marginRight: 10 }}>
-                      <Text style={styles.compactLabel}>Desired Salary</Text>
-                      <View style={styles.compactInputContainer}>
-                        <Text style={styles.compactPesoSymbol}>₱</Text>
-                        <TextInput
-                          style={styles.compactSalaryInput}
-                          placeholder="8,000"
-                          placeholderTextColor="#9CA3AF"
-                          keyboardType="number-pad"
-                          value={desiredSalary}
-                          onChangeText={(t) => setDesiredSalary(t.replace(/\D/g, ''))}
-                        />
-                        <Text style={styles.compactPerMonthText}>/mo</Text>
-                      </View>
-                    </View>
-
-                    <View style={{ flex: 1.1 }}>
-                      <Text style={styles.compactLabel}>Work Setup</Text>
-                      <View style={styles.setupToggleWrap}>
-                        <Pressable
-                          style={[styles.setupToggleBtn, livingArrangement === 'Stay-In' && styles.setupToggleBtnActive]}
-                          onPress={() => setLivingArrangement((prev) => (prev === 'Stay-In' ? null : 'Stay-In'))}
-                        >
-                          <Text
-                            style={[
-                              styles.setupToggleText,
-                              livingArrangement === 'Stay-In' && styles.setupToggleTextActive,
-                            ]}
-                          >
-                            Stay-In
-                          </Text>
-                        </Pressable>
-                        <Pressable
-                          style={[styles.setupToggleBtn, livingArrangement === 'Stay-Out' && styles.setupToggleBtnActive]}
-                          onPress={() => setLivingArrangement((prev) => (prev === 'Stay-Out' ? null : 'Stay-Out'))}
-                        >
-                          <Text
-                            style={[
-                              styles.setupToggleText,
-                              livingArrangement === 'Stay-Out' && styles.setupToggleTextActive,
-                            ]}
-                          >
-                            Stay-Out
-                          </Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Age, Civil Status & Children (3 in a row) */}
-                  <View style={styles.compactRow}>
-                    <View style={{ width: 68, marginRight: 8 }}>
-                      <Text style={styles.compactLabel}>Age</Text>
-                      <View style={[styles.compactInputContainer, styles.compactAgeContainer]}>
-                        <Text style={styles.compactAgeText}>
-                          {calculatedAge || age || '--'}
-                        </Text>
-                        <Ionicons name="lock-closed" size={10} color="#6B7280" style={{ marginLeft: 3 }} />
-                      </View>
-                    </View>
-
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={styles.compactLabel}>Civil Status</Text>
-                      <Pressable
-                        style={styles.compactDropdownBtn}
-                        onPress={() => setActivePreferencePicker('civilStatus')}
-                      >
-                        <Text
-                          style={[styles.compactDropdownText, !civilStatus && styles.compactPlaceholderText]}
-                          numberOfLines={1}
-                        >
-                          {civilStatus || 'Select'}
-                        </Text>
-                        <Ionicons name="chevron-down" size={13} color="#6B7280" />
-                      </Pressable>
-                    </View>
-
-                    <View style={{ flex: 1.1 }}>
-                      <Text style={styles.compactLabel}>Children</Text>
-                      <Pressable
-                        style={styles.compactDropdownBtn}
-                        onPress={() => setActivePreferencePicker('children')}
-                      >
-                        <Text
-                          style={[styles.compactDropdownText, !childrenStatus && styles.compactPlaceholderText]}
-                          numberOfLines={1}
-                        >
-                          {childrenStatus || 'Select'}
-                        </Text>
-                        <Ionicons name="chevron-down" size={13} color="#6B7280" />
-                      </Pressable>
-                    </View>
-                  </View>
-
-                  {/* Spoken Dialects */}
-                  <View style={{ marginTop: 14 }}>
-                    <Text style={styles.compactLabel}>Spoken Dialects</Text>
-                    <View style={styles.dialectChipsWrap}>
-                      {DIALECT_OPTIONS.map((d) => {
-                        const isChosen = selectedDialects.includes(d);
-                        return (
-                          <Pressable
-                            key={d}
-                            style={[styles.dialectPill, isChosen && styles.dialectPillActive]}
-                            onPress={() => handleToggleDialect(d)}
-                          >
-                            <Text style={[styles.dialectPillText, isChosen && styles.dialectPillTextActive]}>
-                              {d}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
+                <View key={workerPage}>
+                  <WorkerCvForm value={workerDetails} onChange={setWorkerDetails} page={workerPage} />
                 </View>
               )}
 
@@ -1189,7 +991,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
                 <View style={styles.buttonRow}>
                   <Pressable
                     style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
-                    onPress={() => setSubStep(1)}
+                    onPress={() => { if (workerPage > 0) setWorkerPage(workerPage - 1); else setSubStep(1); registrationScroll.current?.scrollTo({ y: 0 }); }}
                   >
                     <Text style={styles.secondaryButtonText}>Back</Text>
                   </Pressable>
@@ -1270,73 +1072,6 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
           onSelect={handleSelectBarangay}
           onClose={() => setActivePicker(null)}
         />
-
-        {/* Preference Picker Modal (Civil Status / Children) */}
-        <Modal
-          visible={activePreferencePicker !== null}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setActivePreferencePicker(null)}
-        >
-          <Pressable
-            style={styles.modalOverlay}
-            onPress={() => setActivePreferencePicker(null)}
-          >
-            <View style={styles.preferenceModalCard}>
-              <View style={styles.preferenceModalHeader}>
-                <Text style={styles.preferenceModalTitle}>
-                  {activePreferencePicker === 'civilStatus' ? 'Select Civil Status' : 'Children Status'}
-                </Text>
-                <Pressable
-                  onPress={() => setActivePreferencePicker(null)}
-                  hitSlop={10}
-                >
-                  <Ionicons name="close-circle" size={22} color="#9CA3AF" />
-                </Pressable>
-              </View>
-
-              <View style={styles.preferenceOptionList}>
-                {(activePreferencePicker === 'civilStatus' ? CIVIL_STATUS_OPTIONS : CHILDREN_OPTIONS).map(
-                  (opt) => {
-                    const isSelected =
-                      activePreferencePicker === 'civilStatus'
-                        ? civilStatus === opt
-                        : childrenStatus === opt;
-                    return (
-                      <Pressable
-                        key={opt}
-                        style={[
-                          styles.preferenceOptionItem,
-                          isSelected && styles.preferenceOptionItemSelected,
-                        ]}
-                        onPress={() => {
-                          if (activePreferencePicker === 'civilStatus') {
-                            setCivilStatus(opt);
-                          } else {
-                            setChildrenStatus(opt);
-                          }
-                          setActivePreferencePicker(null);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.preferenceOptionText,
-                            isSelected && styles.preferenceOptionTextSelected,
-                          ]}
-                        >
-                          {opt}
-                        </Text>
-                        {isSelected && (
-                          <Ionicons name="checkmark-circle" size={20} color="#111827" />
-                        )}
-                      </Pressable>
-                    );
-                  }
-                )}
-              </View>
-            </View>
-          </Pressable>
-        </Modal>
 
         {/* Date of Birth Picker Modal */}
         <DateOfBirthPickerModal

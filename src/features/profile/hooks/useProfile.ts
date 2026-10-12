@@ -25,8 +25,7 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
   const requiredDocuments = ROLE_CONFIG[role].requiredDocuments;
   const copy = PROFILE_COPY[role];
   const worker = useWorkerProfile(isWorker);
-  const { isOnJob, resumeUrl, resumeUploadedAt, isLoadingResume, isUploadingResume, analyticsData, isLoadingAnalytics,
-    refreshWorkerProfile, handleToggleJobStatus, handlePickAndUploadResume, handleViewResume } = worker;
+  const { isOnJob, analyticsData, isLoadingAnalytics, refreshWorkerProfile, handleToggleJobStatus } = worker;
   const [currentView, setCurrentView] = useState<'main' | 'personal_info'>(initialView);
   const [isLanguageExpanded, setIsLanguageExpanded] = useState(false);
   const [localAvatar, setLocalAvatar] = useState<string | null>(avatarUri || null);
@@ -334,14 +333,8 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
     isWorker,
     copy,
     isOnJob,
-    resumeUrl,
-    resumeUploadedAt,
-    isLoadingResume,
-    isUploadingResume,
     analyticsData,
     handleToggleJobStatus,
-    handlePickAndUploadResume,
-    handleViewResume,
     currentView,
     setCurrentView,
     isLanguageExpanded,

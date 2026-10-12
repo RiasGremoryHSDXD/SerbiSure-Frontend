@@ -20,16 +20,16 @@ export function ReputationSection({ profile }: { profile: ProfileController }) {
           <Text style={styles.sectionCardTitle}>Reputation & Stats</Text>
           <Text style={styles.sectionCardSubtitle}>Verified client history</Text>
         </View>
-        <View style={styles.statusBadgeSuccess}>
-          <Ionicons name="shield-checkmark" size={13} color="#10B981" />
-          <Text style={styles.statusBadgeSuccessText}>Trusted</Text>
+        <View style={profile.isVerified ? styles.statusBadgeSuccess : styles.statusBadgeNeutral}>
+          <Ionicons name={profile.isVerified ? "shield-checkmark" : "information-circle-outline"} size={13} color={profile.isVerified ? "#10B981" : "#6B7280"} />
+          <Text style={profile.isVerified ? styles.statusBadgeSuccessText : styles.statusBadgeNeutralText}>{profile.effectiveVerificationStatus}</Text>
         </View>
       </View>
 
       <View style={styles.metricsGrid}>
         <View style={styles.metricTile}>
           <Text style={styles.metricVal}>
-            {analyticsData ? analyticsData.average_rating.toFixed(1) : (summary?.average_rating ? summary.average_rating.toFixed(1) : '5.0')}
+            {analyticsData?.total_reviews ? analyticsData.average_rating.toFixed(1) : (summary?.total_reviews ? summary.average_rating.toFixed(1) : '—')}
           </Text>
           <View style={styles.metricLabelRow}>
             <Ionicons name="star" size={12} color="#F59E0B" style={{ marginRight: 3 }} />
@@ -39,7 +39,7 @@ export function ReputationSection({ profile }: { profile: ProfileController }) {
 
         <View style={styles.metricTile}>
           <Text style={styles.metricVal}>
-            {analyticsData ? analyticsData.total_jobs_completed : '0'}
+            {analyticsData ? analyticsData.total_jobs_completed : '—'}
           </Text>
           <View style={styles.metricLabelRow}>
             <Text style={styles.metricLabel}>Jobs Done</Text>
@@ -48,7 +48,7 @@ export function ReputationSection({ profile }: { profile: ProfileController }) {
 
         <View style={styles.metricTile}>
           <Text style={styles.metricVal}>
-            {analyticsData ? `${analyticsData.positive_percentage}%` : (positivePercentage !== null ? `${positivePercentage}%` : '100%')}
+            {analyticsData?.total_reviews ? `${analyticsData.positive_percentage}%` : (positivePercentage !== null ? `${positivePercentage}%` : '—')}
           </Text>
           <View style={styles.metricLabelRow}>
             <Text style={styles.metricLabel}>Positive</Text>

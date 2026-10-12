@@ -82,7 +82,7 @@ export function PrivacyPolicyModal({ visible, onClose }: PrivacyPolicyModalProps
               <View style={styles.bulletItem}>
                 <Text style={styles.bulletDot}>•</Text>
                 <Text style={styles.bulletText}>
-                  <Text style={styles.boldText}>Resumes & Credentials:</Text> Optional CVs or resumes uploaded by Kasambahays to showcase prior experience.
+                  <Text style={styles.boldText}>Resumes & Credentials:</Text> CVs are generated from saved profile details. Experience and training are self-reported. Workers choose whether phone numbers and family details appear on shared CVs.
                 </Text>
               </View>
             </View>

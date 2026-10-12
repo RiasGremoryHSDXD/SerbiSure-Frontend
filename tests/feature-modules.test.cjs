@@ -522,3 +522,168 @@ test('successful HTTP response without a saved review is never presented as subm
     await assert.rejects(reviewApi.submitReview('token', { booking_id: 'b', rating: 5, unstructured_feedback: 'The service was good' }, 'same-key'), error => error.code === 'connection');
   });
 });
+const workerCv = load('src/features/profile/worker/workerCv.ts');
+const workerCvApi = load('src/features/profile/api/workerCvApi.ts');
+const cvDownload = load('src/features/profile/worker/downloadWorkerCv.ts');
+const cvViewer = load('src/features/profile/worker/viewWorkerCvPdf.ts');
+
+test('PDF viewing opens an authenticated temporary file without a folder save', async () => {
+  const f = cvDownloadFixture();
+  let viewed;
+  await cvViewer.viewWorkerCvPdf({ ...f.options, openPdf: async path => { viewed = path; } });
+  assert.match(viewed, /^file:\/\/\/cache\/SerbiSure_CV_\d+\.pdf$/);
+  assert.equal(f.requests[0][2].headers.Authorization, 'Bearer private-token');
+  assert.equal(f.creates.length, 0);
+  assert.equal(f.writes.length, 0);
+  assert.equal(f.deleted.length, 0);
+});
+
+test('PDF viewing handles missing native support before downloading', async () => {
+  const f = cvDownloadFixture();
+  await assert.rejects(cvViewer.viewWorkerCvPdf({ ...f.options, openPdf: null }), /install the updated/);
+  assert.equal(f.requests.length, 0);
+});
+
+test('PDF viewing cleans failed downloads and never opens a server error', async () => {
+  const f = cvDownloadFixture();
+  f.options.fs.downloadAsync = async () => ({ status: 503 });
+  await assert.rejects(cvViewer.viewWorkerCvPdf({ ...f.options, openPdf: async () => assert.fail('must not open') }), /Could not generate/);
+  assert.equal(f.deleted.length, 1);
+});
+
+test('PDF viewing cleans a file when no PDF application can open it', async () => {
+  const f = cvDownloadFixture();
+  await assert.rejects(cvViewer.viewWorkerCvPdf({ ...f.options, openPdf: async () => { throw new Error('No activity found'); } }), /No activity/);
+  assert.equal(f.deleted.length, 1);
+});
+
+function cvDownloadFixture(format = 'pdf') {
+  const deleted = [], writes = [], requests = [], creates = [];
+  const bytes = Buffer.from(format === 'pdf' ? '%PDF-1.4\n\x00\xff' : '\ufeffName\r\nMaría').toString('base64');
+  const fs = {
+    cacheDirectory: 'file:///cache/', EncodingType: { Base64: 'base64' },
+    readDirectoryAsync: async () => [],
+    downloadAsync: async (...args) => { requests.push(args); return { status: 200 }; },
+    deleteAsync: async uri => { deleted.push(uri); },
+    readAsStringAsync: async (uri, options) => { assert.equal(options.encoding, 'base64'); return bytes; },
+    StorageAccessFramework: {
+      requestDirectoryPermissionsAsync: async () => ({ granted: true, directoryUri: 'content://selected-folder' }),
+      createFileAsync: async (...args) => { creates.push(args); return 'content://saved-cv'; },
+      writeAsStringAsync: async (...args) => { writes.push(args); },
+    },
+  };
+  const options = { platform: 'android', format, fs, token: 'private-token', url: 'http://test.local/export/', isCurrent: () => true,
+    getSharing: () => { throw new Error('Android must not import ExpoSharing'); } };
+  return { options, deleted, writes, requests, creates, bytes };
+}
+
+test('Android PDF and CSV exports save exact bytes without loading ExpoSharing', async () => {
+  for (const format of ['pdf', 'csv']) {
+    const f = cvDownloadFixture(format);
+    assert.equal(await cvDownload.downloadWorkerCv(f.options), 'saved');
+    assert.equal(f.requests[0][0], f.options.url);
+    assert.deepEqual(f.requests[0][2], { headers: { Authorization: 'Bearer private-token' } });
+    assert.deepEqual(f.creates[0], ['content://selected-folder', 'SerbiSure_CV', format === 'pdf' ? 'application/pdf' : 'text/csv']);
+    assert.deepEqual(f.writes[0], ['content://saved-cv', f.bytes, { encoding: 'base64' }]);
+    assert.equal(f.deleted.length, 1);
+    assert.match(f.deleted[0], /^file:\/\/\/cache\/SerbiSure_CV_\d+\.(pdf|csv)$/);
+  }
+});
+
+test('cancelling the folder picker is quiet and cleans the temporary CV', async () => {
+  const f = cvDownloadFixture();
+  f.options.fs.StorageAccessFramework.requestDirectoryPermissionsAsync = async () => ({ granted: false });
+  assert.equal(await cvDownload.downloadWorkerCv(f.options), 'cancelled');
+  assert.equal(f.creates.length, 0);
+  assert.equal(f.deleted.length, 1);
+});
+
+test('export HTTP failure never creates a saved file and cleans the error download', async () => {
+  const f = cvDownloadFixture();
+  f.options.fs.downloadAsync = async () => ({ status: 401 });
+  await assert.rejects(cvDownload.downloadWorkerCv(f.options), /session expired/);
+  assert.equal(f.creates.length, 0);
+  assert.equal(f.writes.length, 0);
+  assert.equal(f.deleted.length, 1);
+});
+
+test('failed Android writes clean both the partial destination and temporary export', async () => {
+  const f = cvDownloadFixture();
+  f.options.fs.StorageAccessFramework.writeAsStringAsync = async () => { throw new Error('Disk full'); };
+  await assert.rejects(cvDownload.downloadWorkerCv(f.options), /Disk full/);
+  assert.equal(f.deleted[0], 'content://saved-cv');
+  assert.equal(f.deleted.length, 2);
+});
+
+test('closing or switching CVs during a download prevents the file picker and save', async () => {
+  const f = cvDownloadFixture();
+  let current = true;
+  f.options.isCurrent = () => current;
+  f.options.fs.downloadAsync = async () => { current = false; return { status: 200 }; };
+  assert.equal(await cvDownload.downloadWorkerCv(f.options), 'cancelled');
+  assert.equal(f.creates.length, 0);
+  assert.equal(f.deleted.length, 1);
+});
+
+test('iOS without the sharing native module shows an actionable error before downloading', async () => {
+  const f = cvDownloadFixture();
+  f.options.platform = 'ios'; f.options.getSharing = () => null;
+  await assert.rejects(cvDownload.downloadWorkerCv(f.options), /install the latest SerbiSure app/);
+  assert.equal(f.requests.length, 0);
+});
+
+test('iOS sharing preserves its temporary file for the receiving app', async () => {
+  const f = cvDownloadFixture();
+  f.options.platform = 'ios';
+  let shared;
+  f.options.getSharing = () => ({ isAvailableAsync: async () => true, shareAsync: async (...args) => { shared = args; } });
+  assert.equal(await cvDownload.downloadWorkerCv(f.options), 'shared');
+  assert.equal(shared[1].mimeType, 'application/pdf');
+  assert.equal(f.deleted.length, 0);
+});
+
+test('CV form preserves zero children and explicit daily/monthly rate units', () => {
+  const draft = { ...workerCv.emptyWorkerDraft(), civil_status: 'Married', number_of_children: '0', desired_monthly_rate: '8000', desired_daily_rate: '800', service_categories: ['Cleaning'], engagement_preference: 'both', work_setup: 'stay_out', languages: ['Bisaya'], experience_level: 'new' };
+  const payload = workerCv.workerPayload(draft);
+  assert.equal(payload.number_of_children, 0);
+  assert.equal(payload.desired_monthly_rate, '8000');
+  assert.equal(payload.desired_daily_rate, '800');
+  assert.equal(payload.share_family_details, false);
+  assert.equal(workerCv.validateWorkerPage(draft, 0), null);
+  assert.equal(workerCv.validateWorkerPage(draft, 1), null);
+  assert.equal(workerCv.validateWorkerPage({ ...draft, number_of_children: '6' }, 1), null);
+  assert.ok(workerCv.validateWorkerPage({ ...draft, number_of_children: '2.5' }, 1));
+});
+
+test('legacy CV drafts never infer experience, salary or children from a biography', () => {
+  const draft = workerCv.workerDraft({}, ['Cook', 'Child Care', 'Family Driver', 'Stay-In'], 'Bisaya, English');
+  assert.deepEqual(draft.service_categories, ['Cooking', 'Child_care']);
+  assert.equal(draft.work_setup, 'stay_in');
+  assert.equal(draft.number_of_children, '');
+  assert.equal(draft.desired_monthly_rate, '');
+  assert.equal(draft.experience_level, '');
+  assert.deepEqual(draft.languages, ['Bisaya', 'English']);
+});
+
+test('CV availability validates real dates and optional training without fabricating defaults', () => {
+  const draft = { ...workerCv.emptyWorkerDraft(), engagement_preference: 'short_term', available_days: ['M'], preferred_shifts: ['morning'], available_from: '2027-02-30' };
+  assert.ok(workerCv.validateWorkerPage(draft, 2));
+  assert.equal(workerCv.validateWorkerPage({ ...draft, available_from: '2027-02-28' }, 2), null);
+  assert.ok(workerCv.validateWorkerPage({ ...draft, training: [{ name: '', provider: 'TESDA', year: '2026' }] }, 3));
+});
+
+test('CV save persists family details, availability and sharing choices through the real owner endpoint', async () => {
+  const draft = { ...workerCv.emptyWorkerDraft(), civil_status: 'Married', number_of_children: '2', share_family_details: true, available_days: ['M'], languages: ['English'] };
+  await withFetch(async (url, options) => {
+    assert.equal(url, 'http://test.local/api/v1/accounts/worker-profile/');
+    assert.equal(options.method, 'PATCH');
+    assert.equal(new Headers(options.headers).get('Authorization'), 'Bearer token');
+    const body = JSON.parse(options.body);
+    assert.equal(body.number_of_children, 2);
+    assert.equal(body.civil_status, 'Married');
+    assert.equal(body.share_family_details, true);
+    assert.deepEqual(body.available_days, ['M']);
+    assert.deepEqual(body.languages, ['English']);
+    return response(body);
+  }, () => workerCvApi.saveWorkerDetails('token', draft));
+});
