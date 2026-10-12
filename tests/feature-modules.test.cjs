@@ -40,6 +40,7 @@ const feedApi = load('src/features/feed/api/feedApi.ts');
 const cache = load('src/features/feed/feedCache.ts');
 const postingApi = load('src/features/posting/api/postingApi.ts');
 const date = load('src/shared/utils/date.ts');
+const browse = load('src/features/feed/browsePresentation.ts');
 const emptyFilters = { categories: [], bookingType: null, maxRate: null, location: '', sortBy: 'newest' };
 const dto = {
   booking_id: 'post-1', poster_id: 'author-1', name: 'Test User', profile_link: 'https://test.local/avatar.png',
@@ -104,9 +105,12 @@ test('Explore keeps its own card wording and rate units', () => {
   const worker = mapper.mapWorkerPreview(dto);
   const job = mapper.mapJobPreview({ ...dto, booking_type: 'long_term' });
   assert.equal(worker.name, 'Test User');
-  assert.equal(worker.role, 'Cleaning, Child_care');
+  assert.equal(worker.role, 'Cleaning, Child Care');
   assert.equal(worker.years, 'Part-time');
-  assert.equal(worker.price, 'P 800');
+  assert.equal(worker.price, '₱800');
+  assert.equal(worker.unit, 'per day');
+  assert.equal(mapper.mapWorkerPreview({ ...dto, booking_type: 'long_term' }).unit, 'per month');
+  assert.equal(job.price, '₱800');
   assert.equal(job.title, 'Cleaning & Child Care');
   assert.equal(job.unit, 'per month');
   assert.equal(job.termTag, 'Long-term');
@@ -120,6 +124,45 @@ test('category filters include secondary categories and combine with search', ()
   assert.equal(matches(['All-around'], ['Test User'], 'Laundry', ''), true);
   assert.equal(matches(['Caregiver'], ['Test User'], null, ''), true);
   assert.equal(matches(['Laundry'], ['Test User'], 'Laundry', 'missing'), false);
+});
+
+test('Browse distinguishes an empty database, filtered results, reviewed posts, and errors', () => {
+  assert.equal(browse.browseEmptyCopy('kasambahay', 0, false).title, 'No jobs available yet');
+  assert.equal(browse.browseEmptyCopy('homeowner', 0, false).title, 'No services available yet');
+  assert.equal(browse.browseEmptyCopy('homeowner', 0, true).action, 'Clear Filters');
+  assert.equal(browse.browseEmptyCopy('kasambahay', 4, true).title, "You're all caught up!");
+  const failure = browse.browseEmptyCopy('homeowner', 4, true, 'Request failed');
+  assert.equal(failure.title, 'Could not load posts');
+  assert.equal(failure.description, 'Request failed');
+  assert.equal(failure.action, 'Try Again');
+});
+
+test('both Browse roles share clear header counts without claiming distance matching', () => {
+  assert.equal(browse.browseHeaderCopy('homeowner', 'explore', 1, false).subtitle, '1 service post to explore');
+  assert.equal(browse.browseHeaderCopy('kasambahay', 'explore', 2, false).subtitle, '2 job posts to explore');
+  assert.equal(browse.browseHeaderCopy('kasambahay', 'applied', 1, false).subtitle, '1 submitted application');
+  assert.equal(browse.browseHeaderCopy('homeowner', 'saved', 0, false).title, 'Saved Kasambahay');
+  assert.equal(browse.browseHeaderCopy('homeowner', 'explore', 0, true).subtitle, 'Finding service posts...');
+  assert.equal(browse.browseHeaderCopy('kasambahay', 'explore', 0, false, 'Offline').subtitle, 'Unable to load posts');
+});
+
+test('Browse quick filters work identically for jobs and services and preserve advanced options', () => {
+  const advanced = { ...emptyFilters, maxRate: 900, location: 'Nazareth', sortBy: 'rate_asc' };
+  const stayIn = browse.quickBrowseFilters(advanced, 'Stay-in');
+  assert.equal(stayIn.bookingType, 'long_term');
+  assert.deepEqual(stayIn.categories, []);
+  assert.equal(stayIn.location, 'Nazareth');
+  assert.equal(stayIn.maxRate, 900);
+  assert.equal(browse.activeBrowseChip(stayIn), 'Stay-in');
+  const category = browse.quickBrowseFilters(stayIn, 'Child Care');
+  assert.equal(category.bookingType, null);
+  assert.deepEqual(category.categories, ['Child Care']);
+  const all = browse.quickBrowseFilters(category, 'All');
+  assert.deepEqual(all.categories, []);
+  assert.equal(all.bookingType, null);
+  assert.equal(all.sortBy, 'rate_asc');
+  assert.equal(browse.countBrowseFilters(all), 3);
+  assert.equal(browse.activeBrowseChip({ ...category, bookingType: 'short_term' }), '');
 });
 
 test('posting defaults switch with engagement while preserving a custom rate', () => {

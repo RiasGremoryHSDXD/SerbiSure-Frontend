@@ -1,3 +1,4 @@
+import THEME from '../../../shared/theme/theme';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, Pressable, Modal, TextInput, Dimensions, TouchableWithoutFeedback, KeyboardAvoidingView, Platform, Animated, PanResponder } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,16 +30,7 @@ interface FilterModalProps {
   mode: 'homeowner' | 'kasambahay'; // homeowner searches kasambahays; kasambahay searches jobs
 }
 
-export const CATEGORY_OPTIONS = [
-  'All-Around',
-  'Yaya / Nanny',
-  'Housemaid',
-  'Cook / Chef',
-  'Elderly Care',
-  'Gardener',
-  'Driver',
-  'Laundry',
-];
+export const CATEGORY_OPTIONS = ['All-around', 'Child Care', 'Cleaning', 'Cooking', 'Caregiver', 'Laundry'];
 
 const BOOKING_TYPES = [
   { label: 'All Types', value: null },
@@ -251,7 +243,7 @@ export function FilterModal({
               {/* Header */}
               <View style={styles.header}>
                 <View style={styles.headerLeft}>
-                  <Ionicons name="funnel" size={20} color="#FFB43B" style={{ marginRight: 8 }} />
+                  <Ionicons name="funnel" size={20} color={THEME.colors.brandDark} style={{ marginRight: 8 }} />
                   <Text style={styles.title}>Filter & Sort</Text>
                   {activeFilterCount > 0 && (
                     <View style={styles.badge}>
@@ -264,7 +256,7 @@ export function FilterModal({
                   onPress={handleClose}
                   hitSlop={8}
                 >
-                  <Ionicons name="close" size={22} color="#666" />
+                  <Ionicons name="close" size={22} color={THEME.colors.textSecondary} />
                 </Pressable>
               </View>
 
@@ -319,7 +311,7 @@ export function FilterModal({
                         <Ionicons
                           name={isSelected ? 'checkmark' : 'add'}
                           size={14}
-                          color={isSelected ? '#FFFFFF' : '#666666'}
+                          color={isSelected ? THEME.colors.ink : THEME.colors.textSecondary}
                           style={{ marginRight: 4 }}
                         />
                         <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
@@ -423,7 +415,7 @@ export function FilterModal({
                   )}
                 </View>
                 <View style={styles.inputBox}>
-                  <Ionicons name="location-outline" size={18} color="#FFB43B" style={{ marginRight: 8 }} />
+                  <Ionicons name="location-outline" size={18} color={THEME.colors.brandDark} style={{ marginRight: 8 }} />
                   <TextInput
                     style={styles.locationInput}
                     placeholder="e.g. Carmen, Nazareth, Macasandig..."
@@ -456,7 +448,7 @@ export function FilterModal({
                           <Ionicons
                             name={opt.icon}
                             size={18}
-                            color={isSelected ? '#FFB43B' : '#666'}
+                            color={isSelected ? THEME.colors.brandDark : THEME.colors.textSecondary}
                             style={{ marginRight: 10 }}
                           />
                           <Text style={[styles.sortLabel, isSelected && styles.sortLabelActive]}>
@@ -466,7 +458,7 @@ export function FilterModal({
                         <Ionicons
                           name={isSelected ? 'radio-button-on' : 'radio-button-off'}
                           size={20}
-                          color={isSelected ? '#FFB43B' : '#CCC'}
+                          color={isSelected ? THEME.colors.brandDark : '#CCC'}
                         />
                       </Pressable>
                     );
@@ -478,7 +470,7 @@ export function FilterModal({
             {/* Sticky Action Footer */}
             <View style={styles.footer}>
               <Pressable style={styles.resetButton} onPress={handleReset}>
-                <Ionicons name="refresh-outline" size={16} color="#666" style={{ marginRight: 6 }} />
+                <Ionicons name="refresh-outline" size={16} color={THEME.colors.textSecondary} style={{ marginRight: 6 }} />
                 <Text style={styles.resetButtonText}>Reset All</Text>
               </Pressable>
 
@@ -511,7 +503,7 @@ const styles = StyleSheet.create({
     maxHeight: SCREEN_HEIGHT * 0.88,
   },
   sheetContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: THEME.colors.white,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
@@ -547,17 +539,17 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#2A2925',
+    color: THEME.colors.ink,
   },
   badge: {
-    backgroundColor: '#FFB43B',
+    backgroundColor: THEME.colors.brand,
     borderRadius: 12,
     paddingHorizontal: 7,
     paddingVertical: 2,
     marginLeft: 8,
   },
   badgeText: {
-    color: '#FFFFFF',
+    color: THEME.colors.white,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -568,7 +560,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 13,
-    color: '#777777',
+    color: THEME.colors.textSecondary,
     marginBottom: 14,
     lineHeight: 18,
   },
@@ -590,13 +582,13 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#888888',
+    color: THEME.colors.textSecondary,
     letterSpacing: 0.8,
   },
   clearSectionText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#FFB43B',
+    color: THEME.colors.brandDark,
   },
   chipGrid: {
     flexDirection: 'row',
@@ -609,26 +601,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F7F6F2',
+    backgroundColor: THEME.colors.canvas,
     borderWidth: 1,
     borderColor: '#E8E6DF',
   },
   chipActive: {
-    backgroundColor: '#FFB43B',
-    borderColor: '#FFB43B',
+    backgroundColor: THEME.colors.brand,
+    borderColor: THEME.colors.brandDark,
   },
   chipText: {
     fontSize: 13,
-    color: '#555555',
+    color: THEME.colors.textSecondary,
     fontWeight: '500',
   },
   chipTextActive: {
-    color: '#FFFFFF',
+    color: THEME.colors.ink,
     fontWeight: '700',
   },
   toggleRow: {
     flexDirection: 'row',
-    backgroundColor: '#F3F2EE',
+    backgroundColor: THEME.colors.canvasSubtle,
     borderRadius: 12,
     padding: 4,
     gap: 4,
@@ -640,7 +632,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
   },
   toggleBtnActive: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: THEME.colors.white,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
@@ -650,10 +642,10 @@ const styles = StyleSheet.create({
   toggleBtnText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#777777',
+    color: THEME.colors.textSecondary,
   },
   toggleBtnTextActive: {
-    color: '#2A2925',
+    color: THEME.colors.ink,
     fontWeight: '700',
   },
   ratePresetsRow: {
@@ -665,28 +657,28 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: '#F7F6F2',
+    backgroundColor: THEME.colors.canvas,
     borderWidth: 1,
     borderColor: '#E8E6DF',
     alignItems: 'center',
   },
   rateChipActive: {
-    backgroundColor: '#FFF7EB',
-    borderColor: '#FFB43B',
+    backgroundColor: THEME.colors.brandLight,
+    borderColor: THEME.colors.brandDark,
   },
   rateChipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#555',
+    color: THEME.colors.textSecondary,
   },
   rateChipTextActive: {
-    color: '#FFB43B',
+    color: THEME.colors.brandDark,
     fontWeight: '700',
   },
   inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F7F6F2',
+    backgroundColor: THEME.colors.canvas,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E8E6DF',
@@ -696,18 +688,18 @@ const styles = StyleSheet.create({
   currencyPrefix: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#555',
+    color: THEME.colors.textSecondary,
     marginRight: 6,
   },
   rateInput: {
     flex: 1,
     fontSize: 14,
-    color: '#2A2925',
+    color: THEME.colors.ink,
   },
   locationInput: {
     flex: 1,
     fontSize: 14,
-    color: '#2A2925',
+    color: THEME.colors.ink,
   },
   sortContainer: {
     backgroundColor: '#FBFBFA',
@@ -734,11 +726,11 @@ const styles = StyleSheet.create({
   },
   sortLabel: {
     fontSize: 14,
-    color: '#555555',
+    color: THEME.colors.textSecondary,
     fontWeight: '500',
   },
   sortLabelActive: {
-    color: '#2A2925',
+    color: THEME.colors.ink,
     fontWeight: '700',
   },
   footer: {
@@ -756,21 +748,21 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     paddingHorizontal: 16,
     borderRadius: 14,
-    backgroundColor: '#F3F2EE',
+    backgroundColor: THEME.colors.canvasSubtle,
   },
   resetButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666666',
+    color: THEME.colors.textSecondary,
   },
   applyButton: {
     flex: 1,
-    backgroundColor: '#FFB43B',
+    backgroundColor: THEME.colors.brand,
     paddingVertical: 13,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#FFB43B',
+    shadowColor: THEME.colors.brandDark,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
@@ -779,6 +771,6 @@ const styles = StyleSheet.create({
   applyButtonText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: THEME.colors.ink,
   },
 });

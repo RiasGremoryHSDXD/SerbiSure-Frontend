@@ -79,9 +79,9 @@ export function AppNavigator({ role = 'homeowner', avatarUri: oldAvatarUri, toke
         return <HomeScreen role={activeRole} avatarUri={avatarUri} onAvatarPress={handleOpenProfileView} onViewAll={() => setActiveTab('browse')} token={authToken} />;
       case 'browse':
         return isKasambahay ? (
-          <JobsScreen onViewProfile={handleOpenProfileView} token={token} />
+          <JobsScreen avatarUri={avatarUri} onViewProfile={handleOpenProfileView} token={authToken} />
         ) : (
-          <WorkersScreen avatarUri={avatarUri} onViewProfile={handleOpenProfileView} token={token} />
+          <WorkersScreen avatarUri={avatarUri} onViewProfile={handleOpenProfileView} token={authToken} />
         );
       case 'chats':
         return <ChatsScreen role={activeRole} />;

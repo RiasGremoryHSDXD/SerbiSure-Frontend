@@ -3,6 +3,7 @@ import { toggleSavePostApi, fetchSavedPostsApi, formatBookingLocationShort } fro
 
 export interface SavedJobItem {
   id: string | number;
+  partnerId?: string | number;
   employerName: string;
   title?: string;
   avatar: string;
@@ -81,6 +82,7 @@ class SavedJobsStore {
 
           const jobItem: SavedJobItem = {
             id: item.booking_id,
+            partnerId: item.poster_id,
             employerName: item.name || 'User',
             title: categories[0] || 'Household Service',
             avatar: avatarUrl,

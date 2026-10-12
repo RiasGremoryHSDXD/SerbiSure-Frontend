@@ -16,11 +16,12 @@ src/
     auth/                        Login, registration, session context
     feed/
       screens/                   HomeScreen, WorkersScreen, JobsScreen
-      components/                Filters, empty/loading states, cards, details
-      hooks/                     useFeed, useExploreFeed
+      components/                Home and Browse headers, filters, cards, states
+      hooks/                     useFeed, useExploreFeed, useBrowseSwipeDeck
       api/feedApi.ts             Authenticated feed endpoint and query parameters
       feedMapper.ts              Backend response to Home and Explore models
       feedFilters.ts             Home category and search matching
+      browsePresentation.ts      Browse copy, quick filters, and empty-state rules
       feedCache.ts               Explore cache keyed by role, token, and filters
       types.ts                   Feed DTOs and view models
     posting/
@@ -46,7 +47,7 @@ src/
     api/config.ts                Local/cloud server selection and URL building
     api/httpClient.ts            Headers, bearer token, timeout, JSON errors
     components/                  AppHeader, GreetingCard, ScreenLayout
-    ui/                          Generic pickers and ErrorNotice
+    ui/                          Generic pickers, ProfileAvatar, and ErrorNotice
     theme/                       Colors, fonts, spacing
     localization/                Language provider and translated strings
     services/                    Location lookup
@@ -102,6 +103,14 @@ Search and filter selections remain local to each screen. Custom hooks share log
 
 Cross-feature workflows can import explicit modules from another feature. Application-level orchestration belongs in `app`. For example, generic image preloading lives in `shared`, while preloading an authenticated chat inbox lives in `app/services`.
 
+## Browse presentation
+
+WorkersScreen and JobsScreen share BrowseHeader, BrowseFilters, BrowsePostCard, BrowseActivityCard, and deck loading/empty states. Both use the theme's peach accent and the same typefaces. Both headers show the signed-in user's avatar. Explore keeps the original swipe deck: a large profile photo fills each card, with the post information overlaid at the bottom and small X/heart controls at its edges. There are no Skip/Apply/Message buttons below the deck. Missing or failed photos use initials rather than an unrelated person's photo.
+
+Kasambahay keeps Explore, Saved, and Applied tabs with Apply actions. Homeowner keeps Explore and Saved tabs with Message actions. Category and booking-type chips behave consistently for both roles. Service rates use the backend's daily or monthly unit, rather than a fixed hourly label. Saved posts retain their author's identifier so profile and chat actions target the author.
+
+An empty response shows “No jobs available yet” or “No services available yet.” Exhausting a populated deck shows “You're all caught up!” Filtered-empty results offer Clear Filters, and request failures offer Try Again. The shared swipe hook handles horizontal gestures without capturing ordinary button taps or vertical scrolling, cancels when the active card changes, and prevents duplicate swipe actions during animation.
+
 ## Verification and local testing
 
 From `front_end_2/SerbiSure-Frontend`:
@@ -126,6 +135,7 @@ Use a local Homeowner and Kasambahay account for this manual checklist:
 - Combine Home search and category chips. Test reset filters, no matching results, and View All.
 - Open profiles and chat from both feeds. Save and unsave posts. Check saved posts after changing tabs.
 - Browse workers as Homeowner and jobs as Kasambahay. Check filtering, refresh, swipe/card interactions, application state, and saved/applied tabs.
+- Compare both Browse screens: header avatar, profile photos, colors, filter buttons, and card spacing should match. Test a missing or broken photo, an empty database, filters with no results, a failed request, and swiping through all results. Confirm profile, bookmark, and details buttons still respond to taps and cards scroll vertically with the page.
 - Open the posting wizard for both roles. Change engagement type, check rate defaults, go back between steps, edit address and instructions, review the preview, submit, and check success/error handling.
 - Check that an unverified account reaches verification and that a verified account can post. Homeowner requires ID; Kasambahay requires clearances.
 - Edit bio, tags, social links, privacy, avatar, and personal information. Check reviews and pending posts. Confirm resume, availability, and reputation appear only for Kasambahay.

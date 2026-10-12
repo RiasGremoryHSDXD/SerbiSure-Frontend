@@ -7,10 +7,11 @@ export function useExploreFeed<T>(role: Role, token: string | null | undefined, 
   const [items, setItems] = useState<T[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fetchedCount, setFetchedCount] = useState(0);
   const generation = useRef(0);
 
   useEffect(() => {
-    setItems([]); setError(null);
+    setItems([]); setError(null); setFetchedCount(0);
     return () => { generation.current++; };
   }, [role, token]);
 
@@ -23,6 +24,7 @@ export function useExploreFeed<T>(role: Role, token: string | null | undefined, 
       if (request !== generation.current) return null;
       const mapped = data.map(map);
       setItems(mapped);
+      setFetchedCount(mapped.length);
       return mapped;
     } catch (failure) {
       if (request === generation.current) setError(failure instanceof Error ? failure.message : 'Could not load posts. Please try again.');
@@ -32,5 +34,5 @@ export function useExploreFeed<T>(role: Role, token: string | null | undefined, 
     }
   }, [role, token, map]);
 
-  return { items, setItems, isLoading, error, fetchItems };
+  return { items, setItems, isLoading, error, fetchItems, fetchedCount };
 }
