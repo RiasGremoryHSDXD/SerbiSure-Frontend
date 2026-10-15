@@ -52,18 +52,11 @@ export function AppNavigator({ role = 'homeowner', avatarUri: oldAvatarUri, toke
       preloadPostLoginAssets(authToken, avatarUri);
     }
 
-    const interval = setInterval(() => {
-      if (authToken) {
-        chatStore.loadInbox(authToken);
-      }
-    }, 6000);
-
     const unsubscribe = chatStore.subscribe(() => {
       setTotalUnreadChats(chatStore.getTotalUnreadCount());
     });
 
     return () => {
-      clearInterval(interval);
       unsubscribe();
     };
   }, [authToken]);

@@ -10,6 +10,7 @@ import { NotificationBell } from '../../notifications/NotificationContext';
 
 import { ChatDetailScreen } from '../components/ChatDetailScreen';
 import { chatStore, ChatConversation, cleanMessagePreview } from '../store/chatStore';
+import { useRealtimeStatus } from '../../../shared/realtime/useRealtimeStatus';
 
 const logoSource = require('../../../../assets/serbisure_new_clean.png');
 
@@ -17,6 +18,7 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
   const insets = useSafeAreaInsets();
   const { t } = useLanguage();
   const { user } = useUser();
+  const liveStatus = useRealtimeStatus();
   const role = requestedRole || resolveRole(user.accountType);
 
   const [chatList, setChatList] = useState<ChatConversation[]>(chatStore.getChats());
@@ -74,18 +76,12 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
     setChatList([...chatStore.getChats()]);
     loadInboxData();
 
-    // Poll inbox every 6 seconds while viewing Chats tab
-    const intervalId = setInterval(() => {
-      loadInboxData();
-    }, 6000);
-
     const unsubscribe = chatStore.subscribe(() => {
       setChatList([...chatStore.getChats()]);
       setIsLoading(false);
     });
 
     return () => {
-      clearInterval(intervalId);
       unsubscribe();
     };
   }, [loadInboxData]);
@@ -104,9 +100,6 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
     isOnline?: boolean,
     initialReplyTo?: { author: string; text: string }
   ) => {
-    if (partnerId) {
-      chatStore.markAsRead(partnerId);
-    }
     setActiveChat({ visible: true, name, role, avatar, partnerId, isOnline, initialReplyTo });
   };
 
@@ -147,6 +140,9 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
         {/* Clean Header Area: Title & Pill Search */}
         <View style={styles.headerArea}>
           <Text style={styles.headerTitle}>{t.chatsHeader || 'Messages'}</Text>
+          <Text accessibilityLiveRegion="polite" style={{ marginTop: 4, marginBottom: 8, fontSize: 12, color: liveStatus === 'connected' ? '#15803D' : '#71717A' }}>
+            {liveStatus === 'connected' ? '● Live updates' : liveStatus === 'unauthorized' ? 'Sign in again to restore live updates' : liveStatus === 'connecting' || liveStatus === 'idle' ? 'Connecting to live updates…' : 'Reconnecting… Messages will sync when connected.'}
+          </Text>
           <View style={styles.searchContainer}>
             <Ionicons name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
             <TextInput

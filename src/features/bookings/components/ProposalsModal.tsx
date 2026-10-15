@@ -1,3 +1,4 @@
+import { realtime } from '../../../shared/realtime';
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, Pressable, Modal, ActivityIndicator, Alert, ScrollView, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -58,6 +59,13 @@ export function ProposalsModal({
       setCounterRate(currentRate ? currentRate.replace(/[^0-9.]/g, '') : '');
     }
   }, [visible, bookingId, isPoster, currentRate]);
+
+  useEffect(() => {
+    if (!visible || !bookingId) return;
+    return realtime.subscribe(event => {
+      if (event.type === 'sync' || (event.type === 'booking.changed' && event.booking_id === bookingId)) void loadProposals();
+    });
+  }, [visible, bookingId, token]);
 
   const confirmLegacyRate = async () => {
     if (!token) return;

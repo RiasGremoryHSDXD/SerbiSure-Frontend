@@ -1,3 +1,6 @@
+import { AppState } from 'react-native';
+import { realtime } from '../../../shared/realtime';
+import { useRealtimeStatus } from '../../../shared/realtime/useRealtimeStatus';
 import { mapBookingCard, bookingSchedule, type BookingCardInfo } from '../bookingCards';
 import { sendBookingOffer, respondToBookingOffer } from '../api/bookingOffersApi';
 import type { BookingConfirmData } from '../../bookings/components/BookingModal';
@@ -11,8 +14,9 @@ import { UserProfileView } from '../../profile/components/UserProfileView';
 
 import { useUser } from '../../auth/session/UserContext';
 import THEME from '../../../shared/theme/theme';
-import { fetchChatThreadDetails, generateUUID, sendChatMessage, sendChatImage, toggleChatReaction, deleteChatMessage, markChatMessageRead, sendChatTyping } from '../api/chatApi';
+import { fetchChatThreadDetails, generateUUID, sendChatMessage, sendChatImage, toggleChatReaction, deleteChatMessage, sendChatTyping } from '../api/chatApi';
 import { chatStore } from '../store/chatStore';
+import { createThreadRefreshQueue } from '../threadRefreshQueue';
 import { savedJobsStore } from '../../bookings/store/savedJobsStore';
 import { API_BASE_URL } from '../../../shared/api/config';
 import { fetchWithTimeout } from '../../../shared/api/httpClient';
@@ -680,10 +684,12 @@ export function ChatDetailScreen({
   };
 
   const responseBusyRef = useRef(false);
+  const refreshThreadRef = useRef<(() => void) | null>(null);
   const [responseBusy, setResponseBusy] = useState(false);
   const threadVersion = useRef(0);
   const nextPoll = useRef(0);
   const appliedPoll = useRef(0);
+  const liveStatus = useRealtimeStatus();
   const [threadLoading, setThreadLoading] = useState(true);
   const [threadError, setThreadError] = useState<string | null>(null);
   const [threadReload, setThreadReload] = useState(0);
@@ -701,7 +707,7 @@ export function ChatDetailScreen({
           title: action === 'accept' ? 'BOOKING CONFIRMED' : 'BOOKING DECLINED' },
       } : message));
       if (action === 'accept') savedJobsStore.markJobClosed(card.bookingId);
-    } finally { responseBusyRef.current = false; setResponseBusy(false); }
+    } finally { responseBusyRef.current = false; setResponseBusy(false); refreshThreadRef.current?.(); }
   };
   const handleKasambahayConfirm = (id: string) => handleOfferResponse(id, 'accept');
   const handleKasambahayDecline = (id: string) => handleOfferResponse(id, 'reject');
@@ -737,26 +743,27 @@ export function ChatDetailScreen({
         time: formatTimeOnly(result.chat_message.createdAt), createdAtRaw: result.chat_message.createdAt,
       }]);
       offerDraft.current = null;
-    } finally { responseBusyRef.current = false; setResponseBusy(false); }
+    } finally { responseBusyRef.current = false; setResponseBusy(false); refreshThreadRef.current?.(); }
   };
 
   React.useEffect(() => {
     if (!visible) return;
 
     let isMounted = true;
+    let typingTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const syncThread = (isInitial = false) => {
-      if (!partnerId || !effectiveToken || responseBusyRef.current) return;
+    const queue = createThreadRefreshQueue((isInitial) => {
+      if (!partnerId || !effectiveToken) return Promise.resolve();
       const version = threadVersion.current;
       const poll = ++nextPoll.current;
       if (isInitial) setThreadLoading(true);
 
-      fetchChatThreadDetails(effectiveToken, partnerId)
+      return fetchChatThreadDetails(effectiveToken, partnerId)
         .then(({ messages: items, partnerIsTyping, partnerIsOnline }) => {
           if (!isMounted || version !== threadVersion.current || poll < appliedPoll.current) return;
           appliedPoll.current = poll;
           setThreadLoading(false); setThreadError(null);
-          setIsOtherTyping(partnerIsTyping);
+          if (realtime.status !== 'connected') setIsOtherTyping(partnerIsTyping);
           if (typeof partnerIsOnline === 'boolean') {
             setPartnerOnline(partnerIsOnline);
           }
@@ -887,12 +894,7 @@ export function ChatDetailScreen({
               return prev;
             });
 
-            // Mark unread messages from partner as read
-            items.forEach((m) => {
-              if (!m.is_sender && !m.is_read) {
-                markChatMessageRead(effectiveToken, m.chat_message_id).catch(() => { });
-              }
-            });
+            void chatStore.loadInbox(effectiveToken, true);
           } else if (isInitial && initialMessage) {
             // New thread with initial auto-message!
             const replyHeader = initialReplyTo
@@ -947,27 +949,33 @@ export function ChatDetailScreen({
           setThreadLoading(false);
           setThreadError(err instanceof Error ? err.message : 'Unable to load this conversation.');
         });
-    };
+    }, () => isMounted && !!partnerId && !!effectiveToken && !responseBusyRef.current && AppState.currentState === 'active');
+    const syncThread = queue.request;
 
     if (partnerId && effectiveToken) {
-      // 1. Initial immediate sync
+      // Attach listeners before fetching so an event during the request is retained.
+      refreshThreadRef.current = syncThread;
+      const off = realtime.subscribe(event => {
+        if (event.type === 'chat.typing' && event.partner_id === partnerId) {
+          setIsOtherTyping(Boolean(event.is_typing));
+          clearTimeout(typingTimer);
+          if (event.is_typing) typingTimer = setTimeout(() => setIsOtherTyping(false), 5000);
+        } else if (event.type === 'sync' || event.type === 'booking.changed' ||
+                   (event.type === 'chat.changed' && event.partner_id === partnerId)) syncThread(false);
+      });
       syncThread(true);
-
-      // 2. Poll every 3 seconds while chat modal is visible
-      const intervalId = setInterval(() => {
-        syncThread(false);
-      }, 3000);
-
+      const appState = AppState.addEventListener('change', state => { if (state === 'active') syncThread(false); });
+      const intervalId = setInterval(() => { if (realtime.status !== 'connected') syncThread(false); }, 30000);
       return () => {
-        isMounted = false;
-        clearInterval(intervalId);
+        isMounted = false; queue.stop(); off(); appState.remove(); clearTimeout(typingTimer); clearInterval(intervalId);
+        if (refreshThreadRef.current === syncThread) refreshThreadRef.current = null;
       };
     } else {
       setThreadLoading(false);
       setThreadError('Sign in and select a conversation to view messages.');
       setMessages([]);
       return () => {
-        isMounted = false;
+        isMounted = false; queue.stop();
       };
     }
   }, [visible, partnerId, effectiveToken, resolvedAvatar, initialMessage, threadReload]);
@@ -1385,6 +1393,7 @@ export function ChatDetailScreen({
                 </View>
               ) : null}
 
+              {liveStatus !== 'connected' ? <Text accessibilityLiveRegion="polite" style={{ padding: 12, color: '#71717A', fontSize: 12 }}>{liveStatus === 'unauthorized' ? 'Live updates unavailable. Please sign in again.' : 'Reconnecting live updates…'}</Text> : null}
               {threadLoading && !messages.length ? <ActivityIndicator style={{ marginTop: 32 }} color="#FFB380" /> : null}
               {threadError ? <View style={{ padding: 20 }}><Text>{threadError}</Text><Pressable onPress={() => setThreadReload(value => value + 1)}><Text style={{ marginTop: 8, color: '#EA580C' }}>Retry conversation</Text></Pressable></View> : null}
               {/* Messages */}

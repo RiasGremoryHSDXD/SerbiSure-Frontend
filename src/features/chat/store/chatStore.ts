@@ -117,24 +117,37 @@ class ChatStore {
   }
 
   private prefetchedAvatars = new Set<string>();
+  private sessionToken: string | null = null;
+  private sessionVersion = 0;
+  private inboxQueued = false;
   private loadInboxPromise: Promise<ChatConversation[]> | null = null;
 
-  async loadInbox(token?: string | null): Promise<ChatConversation[]> {
-    if (!token) {
-      return this.chats;
+  async loadInbox(token?: string | null, afterChange = false): Promise<ChatConversation[]> {
+    if (!token) return this.chats;
+    if (token !== this.sessionToken) {
+      this.clearCache(); this.sessionToken = token;
     }
     if (this.loadInboxPromise) {
+      if (afterChange) this.inboxQueued = true;
       return this.loadInboxPromise;
     }
-    this.loadInboxPromise = this._doLoadInbox(token).finally(() => {
-      this.loadInboxPromise = null;
-    });
-    return this.loadInboxPromise;
+    const version = this.sessionVersion;
+    const run = async () => {
+      do {
+        this.inboxQueued = false;
+        await this._doLoadInbox(token, version);
+      } while (version === this.sessionVersion && this.inboxQueued);
+      return this.chats;
+    };
+    const promise = run().finally(() => { if (this.loadInboxPromise === promise) this.loadInboxPromise = null; });
+    this.loadInboxPromise = promise;
+    return promise;
   }
 
-  private async _doLoadInbox(token: string): Promise<ChatConversation[]> {
+  private async _doLoadInbox(token: string, version: number): Promise<ChatConversation[]> {
     try {
       const partners = await fetchChatInbox(token);
+      if (version !== this.sessionVersion || token !== this.sessionToken) return this.chats;
       const partnerList: ConversationPartner[] = Array.isArray(partners) ? partners : [];
 
       this.chats = partnerList.map((p) => ({
@@ -237,6 +250,12 @@ class ChatStore {
   }
 
   clearCache(): void {
+    this.sessionVersion++;
+    this.sessionToken = null;
+    this.inboxQueued = false;
+    this.loadInboxPromise = null;
+    this.deletedMessageIds.clear();
+    this.prefetchedAvatars.clear();
     this.chats = [];
     this.isLoaded = false;
     this.notify();

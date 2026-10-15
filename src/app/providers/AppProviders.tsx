@@ -2,6 +2,7 @@ import React from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { UserProvider } from '../../features/auth/session/UserContext';
 import { LanguageProvider } from '../../shared/localization/LanguageContext';
+import { RealtimeProvider } from './RealtimeProvider';
 import { NotificationProvider } from '../../features/notifications/NotificationContext';
 
 export function AppProviders({ children, token }: { children: React.ReactNode; token: string | null }) {
@@ -9,7 +10,7 @@ export function AppProviders({ children, token }: { children: React.ReactNode; t
     <SafeAreaProvider>
       <UserProvider token={token}>
         <LanguageProvider>
-          <NotificationProvider>{children}</NotificationProvider>
+          <RealtimeProvider><NotificationProvider>{children}</NotificationProvider></RealtimeProvider>
         </LanguageProvider>
       </UserProvider>
     </SafeAreaProvider>

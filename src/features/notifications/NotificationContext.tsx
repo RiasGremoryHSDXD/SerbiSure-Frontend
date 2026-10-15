@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { StyleSheet, Text, View, Pressable } from 'react-native';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { realtime } from '../../shared/realtime';
+import { AppState, StyleSheet, Text, View, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '../auth/session/UserContext';
 import { fetchNotifications } from './api/notificationsApi';
@@ -24,6 +25,7 @@ const NotificationContext = createContext<NotificationContextValue>({
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
+  const tokenRef = useRef(user.token); tokenRef.current = user.token;
   const [unreadCount, setUnreadCount] = useState(0);
   const [isModalVisible, setIsModalVisible] = useState(false);
 
@@ -31,7 +33,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (!user?.token) return;
     try {
       const res = await fetchNotifications(user.token);
-      setUnreadCount(res?.unread_count ?? 0);
+      if (tokenRef.current === user.token) setUnreadCount(res?.unread_count ?? 0);
     } catch {
       // Gracefully ignore network / polling errors
     }
@@ -40,8 +42,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     if (user?.token) {
       refreshUnreadCount();
-      const interval = setInterval(refreshUnreadCount, 45000);
-      return () => clearInterval(interval);
+      let active = true;
+      const off = realtime.subscribe(event => { if (active && ['sync', 'notifications.changed'].includes(event.type)) void refreshUnreadCount(); });
+      const interval = setInterval(() => { if (realtime.status !== 'connected' && AppState.currentState === 'active') void refreshUnreadCount(); }, 30000);
+      return () => { active = false; off(); clearInterval(interval); };
     } else {
       setUnreadCount(0);
     }

@@ -1,3 +1,5 @@
+import { realtime } from '../../../shared/realtime';
+import { AppState } from 'react-native';
 import { workSetupLabel } from '../workSetup';
 import { useUser } from '../../auth/session/UserContext';
 import { ContractDownloadCard } from './ContractDownloadCard';
@@ -114,6 +116,17 @@ export function MyBookingsModal({
       loadData();
     }
   }, [visible, activeTab, accountType, token]);
+
+  useEffect(() => {
+    if (!visible || !token) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const off = realtime.subscribe(event => {
+      if (['sync', 'booking.changed'].includes(event.type) && AppState.currentState === 'active') {
+        clearTimeout(timer); timer = setTimeout(() => void loadData(true), 150);
+      }
+    });
+    return () => { off(); clearTimeout(timer); };
+  }, [visible, token, activeTab, accountType]);
 
   const handleStart = async (bookingId: string) => {
     if (!token || actionInProgress) return;

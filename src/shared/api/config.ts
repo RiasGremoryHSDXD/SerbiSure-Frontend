@@ -7,20 +7,13 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 // Set to false (or 'vercel', 2) -> Vercel cloud   (https://serbisure-backend-rho.vercel.app)
 // Or set directly to a custom URL string e.g. 'http://192.168.1.10:8000'
 //
-// When deploying to production APK, simply change this line to false (or 'vercel').
+// For Render, set EXPO_PUBLIC_API_URL to the HTTPS Render backend URL.
 // NOTE: Strictly NO automatic fallback between servers.
 // ============================================================================
 export const USE_LOCAL_BACKEND: boolean | string | number = false;
 
 export const LOCAL_API_URL = 'http://localhost:8000';
 export const VERCEL_API_URL = 'https://serbisure-backend-rho.vercel.app';
-
-export const HUGGINGFACE_SENTIMENT_SPACE_URL =
-  process.env.EXPO_PUBLIC_HUGGINGFACE_SENTIMENT_SPACE_URL ||
-  'https://riasgremory2-serbisure-sentiment-api.hf.space';
-
-export const HUGGINGFACE_API_TOKEN =
-  process.env.EXPO_PUBLIC_HUGGINGFACE_API_TOKEN || '';
 
 /**
  * Checks whether the application is running as an installed standalone APK / production binary.
@@ -82,6 +75,8 @@ export function resolveLocalUrl(): string {
  * Strictly NO automatic runtime fallback between servers.
  */
 export function resolveBaseUrl(): string {
+  const configured = process.env.EXPO_PUBLIC_API_URL;
+  if (configured && /^https?:\/\//.test(configured)) return configured.replace(/\/+$/, '');
   // If USE_LOCAL_BACKEND is a custom direct URL string
   if (typeof USE_LOCAL_BACKEND === 'string' && (USE_LOCAL_BACKEND.startsWith('http://') || USE_LOCAL_BACKEND.startsWith('https://'))) {
     return USE_LOCAL_BACKEND;

@@ -1,3 +1,5 @@
+import { realtime } from '../../../shared/realtime';
+import { AppState } from 'react-native';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StyleSheet, Text, View, Modal, Pressable, FlatList, ActivityIndicator, Platform, Animated, PanResponder, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -191,6 +193,13 @@ export function NotificationsModal({
     if (visible && token) {
       loadNotifications();
     }
+  }, [visible, token, loadNotifications]);
+
+  useEffect(() => {
+    if (!visible || !token) return;
+    return realtime.subscribe(event => {
+      if (['sync', 'notifications.changed'].includes(event.type) && AppState.currentState === 'active') void loadNotifications(true);
+    });
   }, [visible, token, loadNotifications]);
 
   const handleMarkOneRead = async (item: NotificationItem) => {
