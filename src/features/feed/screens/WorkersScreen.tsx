@@ -121,7 +121,6 @@ export function WorkersScreen({ avatarUri, onViewProfile, token }: { avatarUri?:
       avatar,
       time: 'Just now',
       message: 'Hi! I am interested in hiring you for a service.',
-      online: true,
     });
     setActiveChat({
       visible: true,
@@ -205,7 +204,6 @@ export function WorkersScreen({ avatarUri, onViewProfile, token }: { avatarUri?:
         avatar: currentWorker.avatar,
         time: 'Just now',
         message: 'Hi! I am interested in hiring you for a service.',
-        online: true,
       });
 
       const serviceRate = currentWorker.price || '';

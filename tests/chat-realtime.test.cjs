@@ -86,3 +86,23 @@ test('an empty authoritative inbox clears an earlier unread badge', async () => 
   await chats.loadInbox('token'); entries = []; await chats.loadInbox('token', true);
   assert.equal(chats.getTotalUnreadCount(), 0); assert.deepEqual(chats.getChats(), []);
 });
+
+test('support accounts sharing a display name keep separate conversations by account ID', () => {
+  const chats = store(async () => []);
+  chats.addOrUpdateChat({ partnerId: 'admin-one', name: 'SerbiSure Support', message: 'First inquiry' });
+  chats.addOrUpdateChat({ partnerId: 'admin-two', name: 'SerbiSure Support', message: 'Second inquiry' });
+  chats.addOrUpdateChat({ partnerId: 'admin-one', name: 'SerbiSure Support', message: 'Follow-up' });
+  assert.equal(chats.getChats().length, 2);
+  assert.equal(chats.getChats().find(chat => chat.partnerId === 'admin-one').message, 'Follow-up');
+  assert.equal(chats.getChats().find(chat => chat.partnerId === 'admin-two').message, 'Second inquiry');
+});
+
+test('loading or updating a conversation preview never invents an online presence', async () => {
+  const chats = store(async () => [entry('offline', 0)]);
+  await chats.loadInbox('token');
+  assert.notEqual(chats.getChats()[0].online, true);
+  chats.addOrUpdateChat({ partnerId: 'offline', name: 'Offline contact', message: 'Sent message' });
+  assert.notEqual(chats.getChats()[0].online, true);
+  chats.addOrUpdateChat({ partnerId: 'new-contact', name: 'New contact', message: 'New message' });
+  assert.notEqual(chats.getChats()[0].online, true);
+});

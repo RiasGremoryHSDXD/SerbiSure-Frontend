@@ -4,6 +4,32 @@ import { requestResponse } from '../../../shared/api/httpClient';
 
 const CHAT_BASE = `${API_BASE_URL}/api/v1/chat`;
 
+export interface SupportContact {
+  id: string;
+  name: string;
+  account_type: string;
+  barangay: string | null;
+  avatar: string | null;
+}
+
+export interface SupportContacts {
+  superadmins: SupportContact[];
+  barangay: { name: string; available: boolean; contacts: SupportContact[]; message: string };
+}
+
+export async function fetchSupportContacts(token: string): Promise<SupportContacts> {
+  const response = await requestResponse(`${CHAT_BASE}/support-contacts/`, {
+    method: 'GET', headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.detail || 'Support contacts could not be loaded. Please try again.');
+  if (!Array.isArray(data?.superadmins) || !Array.isArray(data?.barangay?.contacts) ||
+      typeof data.barangay.available !== 'boolean') {
+    throw new Error('Support contacts could not be loaded. Please try again.');
+  }
+  return data;
+}
+
 // RFC4122 v4 compliant UUID generator for React Native without native dependencies
 export function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -109,25 +135,27 @@ export async function fetchChatThreadDetails(token: string, partnerId: string): 
   const json = await res.json();
   let messages: ChatMessageItem[] = [];
   let partnerIsTyping = false;
-  let partnerIsOnline = false;
+  let partnerIsOnline: boolean | undefined;
 
   if (Array.isArray(json)) {
     messages = json;
   } else if (Array.isArray(json?.data)) {
     messages = json.data;
     partnerIsTyping = Boolean(json.partner_is_typing);
-    partnerIsOnline = Boolean(json.partner_is_online);
   } else if (Array.isArray(json?.results)) {
     messages = json.results;
     partnerIsTyping = Boolean(json.partner_is_typing);
-    partnerIsOnline = Boolean(json.partner_is_online);
   }
 
   if (!partnerIsTyping && res.headers.get('x-partner-is-typing') === 'true') {
     partnerIsTyping = true;
   }
-  if (!partnerIsOnline && res.headers.get('x-partner-is-online') === 'true') {
-    partnerIsOnline = true;
+  if (typeof json?.partner_is_online === 'boolean') {
+    partnerIsOnline = json.partner_is_online;
+  } else {
+    const onlineHeader = res.headers.get('x-partner-is-online');
+    if (onlineHeader === 'true') partnerIsOnline = true;
+    else if (onlineHeader === 'false') partnerIsOnline = false;
   }
 
   return { messages, partnerIsTyping, partnerIsOnline };

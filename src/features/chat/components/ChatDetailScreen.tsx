@@ -4,7 +4,7 @@ import { useRealtimeStatus } from '../../../shared/realtime/useRealtimeStatus';
 import { mapBookingCard, bookingSchedule, type BookingCardInfo } from '../bookingCards';
 import { sendBookingOffer, respondToBookingOffer } from '../api/bookingOffersApi';
 import type { BookingConfirmData } from '../../bookings/components/BookingModal';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { StyleSheet, Text, View, Image, TextInput, ScrollView, Pressable, Modal, KeyboardAvoidingView, Platform, Alert, Animated, ActivityIndicator, Dimensions, PanResponder, ToastAndroid, NativeModules, LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -200,7 +200,6 @@ interface ChatDetailScreenProps {
   contactName?: string;
   contactRole?: string;
   contactAvatar?: string;
-  isOnline?: boolean;
   initialMessage?: string;
   initialReplyTo?: {
     author: string;
@@ -363,7 +362,14 @@ function TypingDotsIndicator({ avatarUri }: { avatarUri: string }) {
   );
 }
 
-export function ChatDetailScreen({
+export function ChatDetailScreen(props: ChatDetailScreenProps) {
+  const { user } = useUser();
+  // Reset before the next render: an effect-based reset can still flash the old thread.
+  const sessionKey = JSON.stringify([user.id || user.email || '', props.partnerId || '', props.visible]);
+  return <ChatDetailSession key={sessionKey} {...props} />;
+}
+
+function ChatDetailSession({
   visible,
   onClose,
   partnerId,
@@ -371,7 +377,6 @@ export function ChatDetailScreen({
   contactName = 'User',
   contactRole = 'Member',
   contactAvatar,
-  isOnline = false,
   initialMessage,
   initialReplyTo,
   userRole = 'homeowner',
@@ -379,12 +384,15 @@ export function ChatDetailScreen({
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const effectiveToken = token || user.token;
+  const isSupportConversation = ['admin', 'superadmin', 'barangay'].includes(contactRole.toLowerCase());
+  const sessionActive = useRef(true);
+  useLayoutEffect(() => {
+    sessionActive.current = true;
+    return () => { sessionActive.current = false; };
+  }, []);
 
-  const [partnerOnline, setPartnerOnline] = useState<boolean>(isOnline);
-
-  useEffect(() => {
-    setPartnerOnline(isOnline);
-  }, [isOnline]);
+  // Presence stays neutral until this conversation receives a server-confirmed status.
+  const [partnerOnline, setPartnerOnline] = useState<boolean | null>(null);
 
   // Determine if the current active user is a Kasambahay or Homeowner
   const isKasambahay =
@@ -657,6 +665,7 @@ export function ChatDetailScreen({
       duration: 200,
       useNativeDriver: true,
     }).start(() => {
+      if (!sessionActive.current) return;
       setModalVisible(false);
       onClose();
     });
@@ -701,18 +710,23 @@ export function ChatDetailScreen({
     responseBusyRef.current = true; setResponseBusy(true); threadVersion.current++;
     try {
       await respondToBookingOffer(effectiveToken, card, action);
+      if (!sessionActive.current) return;
       setMessages(current => current.map(message => message.id === msgId && message.bookingInfo ? {
         ...message, bookingInfo: { ...message.bookingInfo, canRespond: false,
           isConfirmed: action === 'accept', isDeclined: action === 'reject',
           title: action === 'accept' ? 'BOOKING CONFIRMED' : 'BOOKING DECLINED' },
       } : message));
       if (action === 'accept') savedJobsStore.markJobClosed(card.bookingId);
-    } finally { responseBusyRef.current = false; setResponseBusy(false); refreshThreadRef.current?.(); }
+    } finally {
+      if (sessionActive.current) { responseBusyRef.current = false; setResponseBusy(false); refreshThreadRef.current?.(); }
+    }
   };
   const handleKasambahayConfirm = (id: string) => handleOfferResponse(id, 'accept');
   const handleKasambahayDecline = (id: string) => handleOfferResponse(id, 'reject');
   const confirmFromCard = (id: string, action: 'accept' | 'reject') => {
-    void handleOfferResponse(id, action).catch(error => Alert.alert('Cannot Confirm', error instanceof Error ? error.message : 'Please try again.'));
+    void handleOfferResponse(id, action).catch(error => {
+      if (sessionActive.current) Alert.alert('Cannot Confirm', error instanceof Error ? error.message : 'Please try again.');
+    });
   };
 
   const handleSendOffer = async (details: BookingConfirmData) => {
@@ -735,6 +749,7 @@ export function ChatDetailScreen({
     try {
       const version = ++threadVersion.current;
       const result = await sendBookingOffer(effectiveToken, payload, offerDraft.current.key);
+      if (!sessionActive.current) return;
       const info = mapBookingCard(result.chat_message.booking_offer);
       if (!info) throw new Error('The server did not return a saved offer. Refresh the conversation before retrying.');
       if (version !== threadVersion.current) return;
@@ -743,7 +758,9 @@ export function ChatDetailScreen({
         time: formatTimeOnly(result.chat_message.createdAt), createdAtRaw: result.chat_message.createdAt,
       }]);
       offerDraft.current = null;
-    } finally { responseBusyRef.current = false; setResponseBusy(false); refreshThreadRef.current?.(); }
+    } finally {
+      if (sessionActive.current) { responseBusyRef.current = false; setResponseBusy(false); refreshThreadRef.current?.(); }
+    }
   };
 
   React.useEffect(() => {
@@ -764,9 +781,7 @@ export function ChatDetailScreen({
           appliedPoll.current = poll;
           setThreadLoading(false); setThreadError(null);
           if (realtime.status !== 'connected') setIsOtherTyping(partnerIsTyping);
-          if (typeof partnerIsOnline === 'boolean') {
-            setPartnerOnline(partnerIsOnline);
-          }
+          setPartnerOnline(typeof partnerIsOnline === 'boolean' ? partnerIsOnline : null);
 
           if (items && items.length > 0) {
             const visibleItems = items.filter((m) => !chatStore.isMessageDeleted(m.chat_message_id));
@@ -922,6 +937,7 @@ export function ChatDetailScreen({
             // Persist the initial message to backend
             sendChatMessage(effectiveToken, partnerId, payload)
               .then((res) => {
+                if (!isMounted || !sessionActive.current) return;
                 if (res?.data?.chat_message_id && isMounted) {
                   setMessages((prev) =>
                     prev.map((msg) => (msg.id === tempId ? { ...msg, id: res.data.chat_message_id } : msg))
@@ -1046,6 +1062,7 @@ export function ChatDetailScreen({
     if (partnerId && effectiveToken) {
       sendChatMessage(effectiveToken, partnerId, payloadToSend)
         .then((res) => {
+          if (!sessionActive.current) return;
           if (res?.data?.chat_message_id) {
             setMessages((prev) =>
               prev.map((msg) => (msg.id === tempId ? { ...msg, id: res.data.chat_message_id } : msg))
@@ -1061,6 +1078,7 @@ export function ChatDetailScreen({
           });
         })
         .catch((err) => {
+          if (!sessionActive.current) return;
           console.warn('[ChatDetailScreen] send failed:', err);
           Alert.alert('Send Error', err.message || 'Could not send message. Please try again.');
         });
@@ -1070,6 +1088,7 @@ export function ChatDetailScreen({
   const handlePickImage = async () => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!sessionActive.current) return;
       if (!permission.granted) {
         Alert.alert('Permission Required', 'Gallery permission is required to choose photos.');
         return;
@@ -1080,6 +1099,8 @@ export function ChatDetailScreen({
         allowsEditing: false,
         quality: 0.8,
       });
+
+      if (!sessionActive.current) return;
 
       if (result.canceled || !result.assets?.[0]?.uri) return;
 
@@ -1121,6 +1142,7 @@ export function ChatDetailScreen({
       setIsUploadingImage(true);
       try {
         const res = await sendChatImage(effectiveToken, partnerId, imageUri);
+        if (!sessionActive.current) return;
         if (res?.data?.chat_message_id) {
           setMessages((prev) =>
             prev.map((msg) =>
@@ -1143,6 +1165,7 @@ export function ChatDetailScreen({
           time: 'Just now',
         });
       } catch (uploadErr: any) {
+        if (!sessionActive.current) return;
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
         const errMsg = uploadErr?.message || 'Could not send image. Please try again.';
         if (errMsg.toLowerCase().includes('too large') || errMsg.toLowerCase().includes('10 mb')) {
@@ -1155,9 +1178,10 @@ export function ChatDetailScreen({
           Alert.alert('Upload Failed', errMsg);
         }
       } finally {
-        setIsUploadingImage(false);
+        if (sessionActive.current) setIsUploadingImage(false);
       }
     } catch (err) {
+      if (!sessionActive.current) return;
       console.log('Error choosing image in chat:', err);
       Alert.alert('Gallery Error', 'Could not open photo gallery. Please try again.');
     }
@@ -1201,6 +1225,7 @@ export function ChatDetailScreen({
     if (effectiveToken && targetMsgId && !targetMsgId.startsWith('temp-')) {
       try {
         const res = await toggleChatReaction(effectiveToken, targetMsgId, normalizedEmoji);
+        if (!sessionActive.current) return;
         if (res?.data?.reaction_counts) {
           setMessages((prev) =>
             prev.map((msg) =>
@@ -1321,7 +1346,7 @@ export function ChatDetailScreen({
             <Pressable
               style={styles.headerInfo}
               onPress={() => {
-                if (partnerId) {
+                if (partnerId && !isSupportConversation) {
                   setProfileModalVisible(true);
                 }
               }}
@@ -1329,26 +1354,26 @@ export function ChatDetailScreen({
             >
               <View style={styles.avatarWrapper}>
                 <Image source={{ uri: resolvedAvatar }} style={styles.headerAvatar} />
-                {partnerOnline ? <View style={styles.onlineDot} /> : null}
+                {partnerOnline === true ? <View testID="chat-presence-online" style={styles.onlineDot} /> : null}
               </View>
               <View style={styles.headerTextCol}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Text style={styles.contactName}>{contactName}</Text>
-                  <Ionicons name="chevron-forward" size={13} color="#8E8E93" />
+                  {!isSupportConversation && <Ionicons name="chevron-forward" size={13} color="#8E8E93" />}
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                  <Text style={styles.contactSub}>
-                    {partnerOnline ? 'Active now' : 'Inactive'}
-                  </Text>
-                  <Text style={{ color: '#C4C4C4', fontSize: 10 }}>•</Text>
+                  {partnerOnline !== null && <>
+                    <Text style={styles.contactSub}>{partnerOnline ? 'Active now' : 'Inactive'}</Text>
+                    <Text style={{ color: '#C4C4C4', fontSize: 10 }}>•</Text>
+                  </>}
                   <View style={styles.headerRoleBadge}>
-                    <Text style={styles.headerRoleBadgeText}>{contactRole}</Text>
+                    <Text style={styles.headerRoleBadgeText}>{isSupportConversation && contactRole.toLowerCase() !== 'barangay' ? 'Support' : contactRole}</Text>
                   </View>
                 </View>
               </View>
             </Pressable>
 
-            {(user.accountType === 'Homeowner' || user.accountType === 'Kasambahay') ? (
+            {!isSupportConversation && (user.accountType === 'Homeowner' || user.accountType === 'Kasambahay') ? (
               <Pressable
                 style={styles.bookingHeaderBtn}
                 onPress={() => {
@@ -1389,7 +1414,7 @@ export function ChatDetailScreen({
                 <View style={{ padding: 32, alignItems: 'center' }}>
                   <Ionicons name="chatbubbles-outline" size={38} color="#9CA3AF" />
                   <Text style={{ marginTop: 12, fontWeight: '700' }}>No messages yet</Text>
-                  <Text style={{ marginTop: 6, color: '#6B7280', textAlign: 'center' }}>Send a message or use the calendar button to propose a booking.</Text>
+                  <Text style={{ marginTop: 6, color: '#6B7280', textAlign: 'center' }}>{isSupportConversation ? 'Tell us how we can help. Your message will be sent to this support desk.' : 'Send a message or use the calendar button to propose a booking.'}</Text>
                 </View>
               ) : null}
 
@@ -1450,6 +1475,13 @@ export function ChatDetailScreen({
                       ? contactName
                       : (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : contactName));
                   const formattedStartDate = formatBookingStartDate(item.bookingInfo.startDate);
+                  const bookingStatus = isAcquired
+                    ? 'Job filled'
+                    : isConfirmed
+                      ? 'Confirmed'
+                      : isDeclined
+                        ? 'Declined'
+                        : item.bookingInfo.canRespond ? 'Booking offer' : 'Waiting for reply';
 
                   return (
                     <React.Fragment key={`system-wrap-${item.id}`}>
@@ -1493,35 +1525,19 @@ export function ChatDetailScreen({
                             />
                           </View>
 
-                          {/* Title and Subtitle Info */}
                           <View style={styles.compactBookingInfoCol}>
-                            <View style={styles.compactBookingTitleRow}>
-                              <Text style={styles.compactBookingTitle} numberOfLines={1}>
-                                {bookedPersonName}
+                            <Text style={styles.compactBookingTitle} numberOfLines={1} ellipsizeMode="tail">
+                              {bookedPersonName}
+                            </Text>
+                            <Text style={styles.compactBookingSubText}>
+                              <Text style={[
+                                styles.compactBookingStatus,
+                                isConfirmed && styles.compactBookingStatusConfirmed,
+                                isDeclined && styles.compactBookingStatusDeclined,
+                              ]}>
+                                {bookingStatus}
                               </Text>
-                              {isAcquired ? (
-                                <View style={styles.acquiredMicroBadge}>
-                                  <Text style={styles.acquiredMicroBadgeText}>Acquired</Text>
-                                </View>
-                              ) : isConfirmed ? (
-                                <View style={styles.confirmedMicroBadge}>
-                                  <Text style={styles.confirmedMicroBadgeText}>Confirmed</Text>
-                                </View>
-                              ) : isDeclined ? (
-                                <View style={styles.declinedMicroBadge}>
-                                  <Text style={styles.declinedMicroBadgeText}>Declined</Text>
-                                </View>
-                              ) : null}
-                            </View>
-
-                            <Text style={styles.compactBookingSubText} numberOfLines={1}>
-                              {isAcquired
-                                ? `Start date: ${formattedStartDate} • Job position already acquired`
-                                : isDeclined
-                                  ? `Start date: ${formattedStartDate} • Offer Declined`
-                                  : isConfirmed
-                                    ? `Start date: ${formattedStartDate} • Booking Confirmed`
-                                    : `Start date: ${formattedStartDate} • Tap to review`}
+                              {` · Start: ${formattedStartDate}`}
                             </Text>
                           </View>
 
@@ -1531,53 +1547,36 @@ export function ChatDetailScreen({
                           </View>
                         </Pressable>
 
-                        {/* Action or Status Section */}
-                        {!isConfirmed && !isDeclined ? (
-                          isAcquired ? (
-                            <View style={styles.compactAcquiredBanner}>
-                              <Ionicons name="information-circle" size={14} color="#64748B" />
-                              <Text style={styles.compactAcquiredText}>
-                                This job position has already been acquired.
-                              </Text>
-                            </View>
-                          ) : item.bookingInfo.canRespond ? (
-                            <View style={styles.compactQuickActionRow}>
-                              <Pressable
-                                style={({ pressed }) => [
-                                  styles.compactQuickDeclineBtn,
-                                  pressed && { opacity: 0.8 },
-                                ]}
-                                disabled={responseBusy} onPress={(e) => {
-                                  e.stopPropagation();
-                                  confirmFromCard(item.id, 'reject');
-                                }}
-                              >
-                                <Ionicons name="close-circle-outline" size={16} color="#DC2626" style={{ marginRight: 4 }} />
-                                <Text style={styles.compactQuickDeclineText}>Decline</Text>
-                              </Pressable>
+                        {!isConfirmed && !isDeclined && !isAcquired && item.bookingInfo.canRespond ? (
+                          <View style={styles.compactQuickActionRow}>
+                            <Pressable
+                              style={({ pressed }) => [
+                                styles.compactQuickDeclineBtn,
+                                pressed && { opacity: 0.8 },
+                              ]}
+                              disabled={responseBusy} onPress={(e) => {
+                                e.stopPropagation();
+                                confirmFromCard(item.id, 'reject');
+                              }}
+                            >
+                              <Ionicons name="close-circle-outline" size={16} color="#DC2626" style={{ marginRight: 4 }} />
+                              <Text style={styles.compactQuickDeclineText}>Decline</Text>
+                            </Pressable>
 
-                              <Pressable
-                                style={({ pressed }) => [
-                                  styles.compactQuickAgreeBtn,
-                                  pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
-                                ]}
-                                disabled={responseBusy} onPress={(e) => {
-                                  e.stopPropagation();
-                                  confirmFromCard(item.id, 'accept');
-                                }}
-                              >
-                                <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                                <Text style={styles.compactQuickAgreeText}>Agree & Accept</Text>
-                              </Pressable>
-                            </View>
-                          ) : (
-                            <View style={styles.compactWaitingHomeownerBadge}>
-                              <Ionicons name="time-outline" size={14} color="#B45309" />
-                              <Text style={styles.compactWaitingHomeownerText}>
-                                Offer Sent • Waiting for Kasambahay response
-                              </Text>
-                            </View>
-                          )
+                            <Pressable
+                              style={({ pressed }) => [
+                                styles.compactQuickAgreeBtn,
+                                pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+                              ]}
+                              disabled={responseBusy} onPress={(e) => {
+                                e.stopPropagation();
+                                confirmFromCard(item.id, 'accept');
+                              }}
+                            >
+                              <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                              <Text style={styles.compactQuickAgreeText}>Agree & Accept</Text>
+                            </Pressable>
+                          </View>
                         ) : null}
                       </View>
                     </React.Fragment>
@@ -1639,7 +1638,7 @@ export function ChatDetailScreen({
                         <View style={[styles.leftMessageRow, rowSpacingStyle]}>
                           <Pressable
                             onPress={() => {
-                              if (partnerId) {
+                              if (partnerId && !isSupportConversation) {
                                 setProfileModalVisible(true);
                               }
                             }}
@@ -2486,16 +2485,11 @@ const styles = StyleSheet.create({
   },
   compactBookingCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    borderRadius: 16,
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1.5 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
     borderWidth: 1,
     borderColor: '#ECECEC',
   },
@@ -2517,9 +2511,10 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.985 }],
   },
   compactBookingIconBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    flexShrink: 0,
     backgroundColor: '#E67E22',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2535,63 +2530,36 @@ const styles = StyleSheet.create({
   },
   compactBookingInfoCol: {
     flex: 1,
-    marginLeft: 12,
+    minWidth: 0,
+    marginLeft: 10,
     marginRight: 6,
     justifyContent: 'center',
   },
-  compactBookingTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   compactBookingTitle: {
-    fontSize: 15.5,
-    fontWeight: '800',
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: '700',
     color: '#0F172A',
     letterSpacing: -0.2,
   },
-  confirmedMicroBadge: {
-    backgroundColor: '#DCFCE7',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 6,
+  compactBookingStatus: {
+    fontWeight: '600',
   },
-  confirmedMicroBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
+  compactBookingStatusConfirmed: {
     color: '#15803D',
   },
-  declinedMicroBadge: {
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 6,
-  },
-  declinedMicroBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#DC2626',
-  },
-  acquiredMicroBadge: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 6,
-  },
-  acquiredMicroBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#475569',
+  compactBookingStatusDeclined: {
+    color: '#B91C1C',
   },
   compactBookingSubText: {
     fontSize: 12.5,
+    lineHeight: 18,
     color: '#64748B',
     marginTop: 2,
     fontWeight: '500',
   },
   compactBookingArrowWrap: {
+    flexShrink: 0,
     paddingLeft: 4,
   },
   compactQuickActionRow: {
@@ -2636,42 +2604,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 13.5,
-  },
-  compactWaitingHomeownerBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFBEB',
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-    borderRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginTop: 8,
-  },
-  compactWaitingHomeownerText: {
-    color: '#B45309',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 6,
-  },
-  compactAcquiredBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginTop: 8,
-  },
-  compactAcquiredText: {
-    color: '#475569',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 6,
   },
   listingClosedCard: {
     backgroundColor: '#F8FAFC',

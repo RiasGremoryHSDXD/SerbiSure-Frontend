@@ -124,7 +124,6 @@ export function JobsScreen({ avatarUri, onViewProfile, token }: { avatarUri?: st
       avatar: job.avatar || (job as any).image,
       time: 'Just now',
       message: 'I am interested in this job position',
-      online: true,
     });
   };
 

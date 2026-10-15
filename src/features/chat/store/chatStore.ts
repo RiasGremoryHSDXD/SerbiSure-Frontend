@@ -9,7 +9,6 @@ export interface ChatConversation {
   avatar: string;
   time: string;
   message: string;
-  online: boolean;
   unreadCount?: number;
   sentCount?: number;
 }
@@ -160,7 +159,6 @@ class ChatStore {
           `https://ui-avatars.com/api/?name=${encodeURIComponent(p.partner_name || 'User')}&background=FFB43B&color=fff`,
         time: formatTimestamp(p.last_message_time),
         message: cleanMessagePreview(p.last_message) || 'Start a conversation',
-        online: true,
         unreadCount: p.unread_count || 0,
         sentCount: p.sent_count || 0,
       }));
@@ -198,7 +196,7 @@ class ChatStore {
     const existingIndex = this.chats.findIndex(
       (c) =>
         String(c.partnerId || c.id) === idKey ||
-        (chat.name && c.name.toLowerCase() === chat.name.toLowerCase())
+        (!chat.partnerId && chat.id == null && chat.name && c.name.toLowerCase() === chat.name.toLowerCase())
     );
 
     const updatedItem: ChatConversation = {
@@ -211,7 +209,6 @@ class ChatStore {
         `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.name || 'User')}&background=FFB43B&color=fff`,
       time: chat.time || 'Just now',
       message: cleanMessagePreview(chat.message) || '',
-      online: chat.online ?? true,
       unreadCount: chat.unreadCount ?? 0,
       sentCount: chat.sentCount ?? (existingIndex >= 0 ? this.chats[existingIndex]?.sentCount : 0) ?? 0,
     };

@@ -82,7 +82,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     topEmployers: 'Top Homeowners',
 
     chatsHeader: 'Messages',
-    searchChats: 'Search conversations...',
+    searchChats: 'Search messages',
   },
   Tagalog: {
     tabHome: 'Bahay',
@@ -120,7 +120,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     topEmployers: 'Mga Nangungunang Employer',
 
     chatsHeader: 'Mga Mensahe',
-    searchChats: 'Maghanap ng pag-uusap...',
+    searchChats: 'Maghanap ng mensahe',
   },
   Bisaya: {
     tabHome: 'Balay',
@@ -158,7 +158,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     topEmployers: 'Mga Pangunang Homeowner',
 
     chatsHeader: 'Mga Mensahe',
-    searchChats: 'Pangita og istorya...',
+    searchChats: 'Pangita og mensahe',
   },
   Cebuano: {
     tabHome: 'Balay',
@@ -196,7 +196,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     topEmployers: 'Mga Pangunang Homeowner',
 
     chatsHeader: 'Mga Mensahe',
-    searchChats: 'Pangita og istorya...',
+    searchChats: 'Pangita og mensahe',
   },
 };
 
