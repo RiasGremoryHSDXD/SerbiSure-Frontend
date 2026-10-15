@@ -1,169 +1,153 @@
 import { Platform } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 
+// ============================================================================
+// BACKEND TARGET TOGGLE
+// Set to true  (or 'local', 1)  -> Local backend  (resolved dynamically or via LOCAL_API_URL)
+// Set to false (or 'vercel', 2) -> Vercel cloud   (https://serbisure-backend-rho.vercel.app) [DEFAULT]
+// Or set directly to a custom URL string e.g. 'http://192.168.1.10:8000'
+//
+// For Render, set EXPO_PUBLIC_API_URL to the HTTPS Render backend URL.
+// NOTE: Strictly NO automatic fallback between servers.
+// ============================================================================
+export const USE_LOCAL_BACKEND: boolean | string | number = false;
+
+export const LOCAL_API_URL = 'http://localhost:8000';
 export const VERCEL_API_URL = 'https://serbisure-backend-rho.vercel.app';
-
-export const HUGGINGFACE_SENTIMENT_SPACE_URL =
-  process.env.EXPO_PUBLIC_HUGGINGFACE_SENTIMENT_SPACE_URL ||
-  'https://riasgremory2-serbisure-sentiment-api.hf.space';
-
-export const HUGGINGFACE_API_TOKEN =
-  process.env.EXPO_PUBLIC_HUGGINGFACE_API_TOKEN || '';
 
 /**
  * Checks whether the application is running as an installed standalone APK / production binary.
- * Priority order:
- * 1. Release builds (__DEV__ === false) → always APK.
- * 2. Metro hostUri present → definitively NOT an APK (covers Expo Go AND dev-client).
- * 3. executionEnvironment Standalone/Bare → APK.
- * 4. appOwnership not 'expo' with no Metro host → APK.
  */
 export function isRunningInApk(): boolean {
   if (!__DEV__) {
-    // Release builds are ALWAYS standalone APKs
     return true;
   }
-
-  // If Metro bundler host is present we ARE connected to a dev server.
-  // This covers both Expo Go AND expo-dev-client (--dev-client) sessions.
-  // Must be checked BEFORE appOwnership, because dev-client sets appOwnership
-  // to something other than 'expo' even while Metro is active.
   const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest2?.extra?.expoGo?.debuggerHost;
   if (hostUri) {
-    return false; // Connected to Metro → local dev mode, NOT an APK
+    return false;
   }
-
   if (
     Constants.executionEnvironment === ExecutionEnvironment.Standalone ||
     Constants.executionEnvironment === ExecutionEnvironment.Bare
   ) {
     return true;
   }
-
   if (Constants.appOwnership !== 'expo') {
-    // Standalone / bare build with no Metro connection
     return true;
   }
-
   return false;
 }
 
 /**
- * Automatically determines the Primary API Base URL:
- * 1. If process.env.EXPO_PUBLIC_API_URL is explicitly set, use it.
- * 2. If running as an APK / standalone build:
- *    Go DIRECTLY to VERCEL_API_URL! Does NOT wait for or probe local 127.0.0.1 or PC IP.
- * 3. If running inside local Expo development with Metro connected:
- *    Dynamically extracts host PC IP address from Expo Metro bundler.
- * 4. Fallback to VERCEL_API_URL if no active local server can be resolved.
+ * Resolves the active local backend URL:
+ * 1. If process.env.EXPO_PUBLIC_API_URL is set, honor it.
+ * 2. If connected to Expo Metro (physical device or emulator on LAN), uses the PC's Wi-Fi IP.
+ * 3. Android emulator fallback (10.0.2.2 or 127.0.0.1 for adb reverse).
+ * 4. Fallback to LOCAL_API_URL (http://localhost:8000).
  */
-function getApiBaseUrl(): string {
+export function resolveLocalUrl(): string {
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
   }
 
-  // Standalone APK: Skip local probing completely, target Vercel cloud backend directly
-  if (isRunningInApk()) {
-    console.log('[API] Running in APK / standalone mode. Targeting Vercel backend directly:', VERCEL_API_URL);
-    return VERCEL_API_URL;
-  }
-
-  // Step 1: In local dev (Expo Go or dev-client), grab the real WiFi IP from Metro's hostUri.
-  // This works without any .env file — Expo injects the host automatically.
+  // If Metro bundler hostUri is present, grab the PC's actual local IP address
   const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest2?.extra?.expoGo?.debuggerHost;
   if (hostUri) {
     const ip = hostUri.split(':')[0];
     if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
-      console.log(`[API] Dev mode detected via Metro (${hostUri}). Targeting local backend: http://${ip}:8000`);
       return `http://${ip}:8000`;
     }
   }
 
-  // Step 2: Emulator or ADB reverse USB connection during local dev
-  if (Platform.OS === 'android' && __DEV__) {
-    return 'http://127.0.0.1:8000';
+  // Android emulator or USB adb reverse
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:8000';
   }
 
-  // Step 3: Default fallback is Vercel cloud backend
+  return LOCAL_API_URL;
+}
+
+/**
+ * Resolves the active API base URL based on USE_LOCAL_BACKEND:
+ * - true  | 'local'  | 1  => Local backend (e.g. http://192.168.x.x:8000 or http://10.0.2.2:8000)
+ * - false | 'vercel' | 2  => https://serbisure-backend-rho.vercel.app
+ * - Direct URL string     => Used as-is
+ * Strictly NO automatic runtime fallback between servers.
+ */
+export function resolveBaseUrl(): string {
+  const configured = process.env.EXPO_PUBLIC_API_URL;
+  if (configured && /^https?:\/\//.test(configured)) return configured.replace(/\/+$/, '');
+  // If USE_LOCAL_BACKEND is a custom direct URL string
+  if (typeof USE_LOCAL_BACKEND === 'string' && (USE_LOCAL_BACKEND.startsWith('http://') || USE_LOCAL_BACKEND.startsWith('https://'))) {
+    return USE_LOCAL_BACKEND;
+  }
+
+  const isLocalChosen =
+    USE_LOCAL_BACKEND === true ||
+    USE_LOCAL_BACKEND === 'local' ||
+    USE_LOCAL_BACKEND === 'LOCAL' ||
+    USE_LOCAL_BACKEND === 1 ||
+    USE_LOCAL_BACKEND === '1';
+
+  if (isLocalChosen) {
+    const local = resolveLocalUrl();
+    console.log(`[API Config] Target: LOCAL BACKEND -> ${local}`);
+    return local;
+  }
+
+  console.log(`[API Config] Target: VERCEL CLOUD BACKEND -> ${VERCEL_API_URL}`);
   return VERCEL_API_URL;
 }
 
-export const API_BASE_URL = getApiBaseUrl();
+export const API_BASE_URL = resolveBaseUrl();
 export const DEFAULT_TIMEOUT_MS = 15000; // 15 seconds
 
-let localBackendOfflineUntil = 0;
+/**
+ * Helper to check if the current configuration is targeting the Vercel cloud backend.
+ */
+export function isCloudBackend(): boolean {
+  return API_BASE_URL.includes('vercel.app');
+}
 
 /**
- * Smart Fetch wrapper with automatic fallback:
- * 1. In APK mode: API_BASE_URL is VERCEL_API_URL. Requests go directly to Vercel with ZERO local waiting.
- * 2. In local dev mode: Tries the local backend first (fastest for local dev).
- * 3. If local server is unreachable during dev, falls back to Vercel and suppresses local probing
- *    for 5 minutes so subsequent screen transitions and queries do not stall.
+ * Normalizes and sanitizes endpoints to prevent malformed double slashes or missing leading slashes.
+ */
+export function buildApiUrl(endpoint: string): string {
+  if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
+    return endpoint;
+  }
+  const cleanBase = API_BASE_URL.replace(/\/+$/, '');
+  const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  return `${cleanBase}${cleanPath}`.replace(/([^:]\/)\/+/g, '$1');
+}
+
+/**
+ * Fetch wrapper with strict endpoint targeting (NO automatic fallback).
+ * If the chosen server is unreachable or times out, an explicit error is thrown,
+ * preventing silent data loss or unexpected cross-database contamination.
  */
 export async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
   timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<Response> {
-  const createTimer = (ms: number) => {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), ms);
-    return { controller, clear: () => clearTimeout(id) };
-  };
-
-  const isLocalUrl = url.startsWith(API_BASE_URL) && API_BASE_URL !== VERCEL_API_URL;
-
-  // If local backend was recently unreachable, skip straight to Vercel
-  if (isLocalUrl && Date.now() < localBackendOfflineUntil) {
-    const fallbackUrl = url.replace(API_BASE_URL, VERCEL_API_URL);
-    const timer = createTimer(timeoutMs);
-    try {
-      return await fetch(fallbackUrl, {
-        ...options,
-        signal: timer.controller.signal,
-      });
-    } finally {
-      timer.clear();
-    }
-  }
-
-  // Use a 5s timeout when probing the local backend — local Django may need a moment
-  // to process requests (migrations, first-query cold start, etc.).
-  // Do NOT clamp for file uploads (FormData) or explicit long-running requests (e.g. OCR).
-  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
-  const isLongOperation = isFormData || timeoutMs > DEFAULT_TIMEOUT_MS;
-  const effectiveTimeout = (isLocalUrl && !isLongOperation) ? Math.min(timeoutMs, 5000) : timeoutMs;
-  const primaryTimer = createTimer(effectiveTimeout);
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(url, {
       ...options,
-      signal: primaryTimer.controller.signal,
+      signal: controller.signal,
     });
-    // If local request succeeded, ensure offline flag is cleared
-    if (isLocalUrl) {
-      localBackendOfflineUntil = 0;
-    }
     return response;
-  } catch (primaryError) {
-    if (isLocalUrl) {
-      localBackendOfflineUntil = Date.now() + 300000; // 5-minute cooldown to prevent repetitive stalling
-      const fallbackUrl = url.replace(API_BASE_URL, VERCEL_API_URL);
-      console.log(`[API] Local backend unreachable (${url}). Automatically falling back to Vercel: ${fallbackUrl}`);
-      
-      const fallbackTimer = createTimer(timeoutMs);
-      try {
-        const fallbackResponse = await fetch(fallbackUrl, {
-          ...options,
-          signal: fallbackTimer.controller.signal,
-        });
-        return fallbackResponse;
-      } finally {
-        fallbackTimer.clear();
-      }
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      console.warn(`[API] Request timed out after ${timeoutMs}ms: ${url}`);
+      throw new Error(`Request timed out (${Math.round(timeoutMs / 1000)}s). Could not reach server at ${url}.`);
     }
-    throw primaryError;
+    console.warn(`[API] Request failed for ${url}:`, error?.message || error);
+    throw error;
   } finally {
-    primaryTimer.clear();
+    clearTimeout(id);
   }
 }

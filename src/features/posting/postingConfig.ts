@@ -1,0 +1,56 @@
+export type PostingMode = 'job' | 'service';
+
+export const POSTING_CONFIG = {
+  job: {
+    role: 'homeowner', title: 'Post a Job', submitLabel: 'Post Job', successTitle: 'Job posted!',
+    dailyDefault: '800', monthlyDefault: '8000', defaultService: 'Household Help',
+    roleWord: 'role', questionSuffix: 'do you need?', rateHeading: 'offer rate', postHeading: 'job post',
+    addressLabel: 'JOB ADDRESS', instructionsLabel: 'SPECIFIC INSTRUCTIONS ABOUT ROLE (OPTIONAL)',
+    instructionsPlaceholder: 'e.g. Must be comfortable with large dogs, gentle with infants, or experienced with laundry care.',
+    previewLabel: 'LISTING PREVIEW', summaryRoleLabel: 'Role', summaryTypeLabel: 'Type', rateLabel: 'Offer Rate', timeLabel: 'Time',
+    notice: 'Your listing will be visible to verified Kasambahays in your area immediately once posted.',
+    termsPrefix: 'I agree to the ', termsName: 'SerbiSure Terms of Service', termsSuffix: ' and confirm these household details are accurate.',
+    missingTerms: 'Please agree to the Terms of Service to post.',
+    missingEngagement: 'Please select an engagement type (Short-term or Long-term).',
+    missingSetup: 'Please select your work setup preference (Stay-out or Stay-in).', missingTime: 'Please select what time works best for you.',
+    invalidAmount: 'Please provide a valid offer amount.', dailyMinimumMessage: 'The rate cannot be below ₱600/day on a short-term basis.',
+    monthlyMinimumTitle: 'Minimum Monthly Salary', errorMessage: 'Failed to post job. Please check your entries.',
+  },
+  service: {
+    role: 'kasambahay', title: 'Post a Service', submitLabel: 'Post Service', successTitle: 'Service posted!',
+    dailyDefault: '600', monthlyDefault: '6500', defaultService: 'Household Service',
+    roleWord: 'service', questionSuffix: 'do you offer?', rateHeading: 'expected rate', postHeading: 'service post',
+    addressLabel: 'SERVICE ADDRESS', instructionsLabel: 'SPECIFIC INSTRUCTIONS / SKILLS (OPTIONAL)',
+    instructionsPlaceholder: 'e.g. 5+ years experience in housekeeping, gentle with kids, pet-friendly and trustworthy.',
+    previewLabel: 'SERVICE LISTING PREVIEW', summaryRoleLabel: 'Service', summaryTypeLabel: 'Work Type', rateLabel: 'Asking Rate', timeLabel: 'Available Time',
+    notice: 'Your service post will be visible to homeowners searching for household help in your area.',
+    termsPrefix: 'I confirm that my service details and availability are accurate and agree to the ', termsName: 'SerbiSure Terms', termsSuffix: '.',
+    missingTerms: 'Please confirm that your service details are accurate.',
+    missingEngagement: 'Please select what type of work you want (Short-term or Long-term).',
+    missingSetup: 'Please select where you will stay (Stay-out or Stay-in).', missingTime: 'Please select what time you are available.',
+    invalidAmount: 'Please provide a valid asking rate.', dailyMinimumMessage: 'The asking rate cannot be below ₱600/day on a short-term basis.',
+    monthlyMinimumTitle: 'Minimum Monthly Rate', errorMessage: 'Failed to post service. Please check your entries.',
+  },
+} as const;
+
+export function engagementRate(mode: PostingMode, currentRate: string, type: 'short' | 'long'): string {
+  const config = POSTING_CONFIG[mode];
+  const dailyDefaults = mode === 'job' ? ['800', '1500'] : ['500', '600', '800'];
+  const monthlyDefaults = mode === 'job' ? ['8000'] : ['6500', '8000'];
+  if (type === 'long' && dailyDefaults.includes(currentRate)) return config.monthlyDefault;
+  if (type === 'short' && monthlyDefaults.includes(currentRate)) return config.dailyDefault;
+  return currentRate;
+}
+
+export function buildPostDescription(mode: PostingMode, input: {
+  service: string; location: string; setup: string; time: string; shortTerm: boolean; instructions: string;
+}): string {
+  const { service, location, setup, time, shortTerm, instructions } = input;
+  let message = mode === 'job'
+    ? `I am looking for ${service} at ${location}, capable of working on ${shortTerm ? `${time} on a ` : 'a '}${setup} setup.`
+    : shortTerm
+      ? `I am offering ${service} service in ${location}, available ${time} on a ${setup} arrangement.`
+      : `I am looking for long-term ${service} work in ${location} on a ${setup} arrangement.`;
+  if (instructions.trim()) message += `\n\n${mode === 'job' ? 'Specific instructions' : 'About my experience'}:\n${instructions.trim()}`;
+  return message;
+}

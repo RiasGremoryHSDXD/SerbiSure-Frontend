@@ -1,0 +1,60 @@
+import React from 'react';
+import { Text, View } from 'react-native';
+
+import { Ionicons } from '@expo/vector-icons';
+
+import { profileStyles as styles } from '../styles';
+import type { ProfileController } from '../hooks/useProfile';
+
+export function ReputationSection({ profile }: { profile: ProfileController }) {
+  const {
+    analyticsData,
+    summary,
+    positivePercentage,
+  } = profile;
+  return (<>
+    {/* Reputation & Performance Section */}
+    <View style={styles.sectionCard}>
+      <View style={styles.sectionCardHeader}>
+        <View>
+          <Text style={styles.sectionCardTitle}>Reputation & Stats</Text>
+          <Text style={styles.sectionCardSubtitle}>Verified client history</Text>
+        </View>
+        <View style={profile.isVerified ? styles.statusBadgeSuccess : styles.statusBadgeNeutral}>
+          <Ionicons name={profile.isVerified ? "shield-checkmark" : "information-circle-outline"} size={13} color={profile.isVerified ? "#10B981" : "#6B7280"} />
+          <Text style={profile.isVerified ? styles.statusBadgeSuccessText : styles.statusBadgeNeutralText}>{profile.effectiveVerificationStatus}</Text>
+        </View>
+      </View>
+
+      <View style={styles.metricsGrid}>
+        <View style={styles.metricTile}>
+          <Text style={styles.metricVal}>
+            {analyticsData?.total_reviews ? analyticsData.average_rating.toFixed(1) : (summary?.total_reviews ? summary.average_rating.toFixed(1) : '—')}
+          </Text>
+          <View style={styles.metricLabelRow}>
+            <Ionicons name="star" size={12} color="#F59E0B" style={{ marginRight: 3 }} />
+            <Text style={styles.metricLabel}>Rating</Text>
+          </View>
+        </View>
+
+        <View style={styles.metricTile}>
+          <Text style={styles.metricVal}>
+            {analyticsData ? analyticsData.total_jobs_completed : '—'}
+          </Text>
+          <View style={styles.metricLabelRow}>
+            <Text style={styles.metricLabel}>Jobs Done</Text>
+          </View>
+        </View>
+
+        <View style={styles.metricTile}>
+          <Text style={styles.metricVal}>
+            {analyticsData?.total_reviews ? `${analyticsData.positive_percentage}%` : (positivePercentage !== null ? `${positivePercentage}%` : '—')}
+          </Text>
+          <View style={styles.metricLabelRow}>
+            <Text style={styles.metricLabel}>Positive</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  </>);
+}

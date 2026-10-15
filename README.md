@@ -26,6 +26,9 @@
 ---
 
 ## 📋 Table of Contents
+
+Frontend contributors: see [Frontend architecture and local testing](docs/frontend-architecture.md) for module ownership, role differences, and the manual test checklist.
+
 - [📖 Project Overview](#-project-overview)
 - [⚖️ Comparative Analysis of Existing Systems](#️-comparative-analysis-of-existing-systems)
 - [👨‍💻 Research Team & Institution](#-research-team--institution)

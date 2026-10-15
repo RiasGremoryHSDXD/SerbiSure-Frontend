@@ -4,6 +4,7 @@
   "private": true,
   "main": "expo/AppEntry.js",
   "scripts": {
+    "test:realtime": "node --test tests/chat-realtime.test.cjs",
     "start": "expo start --dev-client",
     "android": "expo run:android",
     "ios": "expo run:ios",
@@ -20,7 +21,8 @@
     "build:android:debug": "powershell -ExecutionPolicy Bypass -File ./scripts/android-build-debug.ps1",
     "android:build": "powershell -ExecutionPolicy Bypass -File ./scripts/android-build.ps1",
     "android:build:debug": "powershell -ExecutionPolicy Bypass -File ./scripts/android-build-debug.ps1",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:modules": "node --test tests/feature-modules.test.cjs"
   },
   "dependencies": {
     "@expo-google-fonts/nunito": "^0.4.2",
@@ -32,8 +34,11 @@
     "expo-dev-client": "^4.0.0",
     "expo-device": "~6.0.2",
     "expo-document-picker": "~12.0.2",
+    "expo-file-system": "~17.0.1",
     "expo-image-picker": "~15.1.0",
+    "expo-intent-launcher": "~11.0.1",
     "expo-notifications": "^0.28.19",
+    "expo-sharing": "~12.0.1",
     "expo-status-bar": "^1.12.1",
     "react": "18.2.0",
     "react-native": "0.74.5",
