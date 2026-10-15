@@ -3,8 +3,8 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 
 // ============================================================================
 // BACKEND TARGET TOGGLE
-// Set to true  (or 'local', 1)  -> Local backend  (resolved dynamically or via LOCAL_API_URL) [DEFAULT]
-// Set to false (or 'vercel', 2) -> Vercel cloud   (https://serbisure-backend-rho.vercel.app)
+// Set to true  (or 'local', 1)  -> Local backend  (resolved dynamically or via LOCAL_API_URL)
+// Set to false (or 'vercel', 2) -> Vercel cloud   (https://serbisure-backend-rho.vercel.app) [DEFAULT]
 // Or set directly to a custom URL string e.g. 'http://192.168.1.10:8000'
 //
 // For Render, set EXPO_PUBLIC_API_URL to the HTTPS Render backend URL.
