@@ -96,6 +96,7 @@ export interface PublicProfile {
   user_about: string;
   user_tags: string[];
   street?: string | null;
+  barangay?: string | null;
   city: string | null;
   province: string | null;
   date_joined: string;

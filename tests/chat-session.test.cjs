@@ -87,6 +87,7 @@ function screen(t) {
     '../bookingCards': { mapBookingCard: () => null }, '../api/bookingOffersApi': {},
     '../../bookings/components/BookingModal': { BookingModal: () => null },
     '../../profile/components/UserProfileView': { UserProfileView: () => null },
+    '../../profile/components/OfficialProfileModal': { OfficialProfileModal: () => null },
     '../hooks/useChatSafety': { useChatSafety: () => null },
     '../api/chatApi': api, '../threadRefreshQueue': { createThreadRefreshQueue },
     '../store/chatStore': { chatStore: { isMessageDeleted: () => false, loadInbox: async () => [], addOrUpdateChat: entry => previews.push(entry) } },

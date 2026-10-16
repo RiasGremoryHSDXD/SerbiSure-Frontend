@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { BookingModal } from '../../bookings/components/BookingModal';
 import { UserProfileView } from '../../profile/components/UserProfileView';
+import { OfficialProfileModal } from '../../profile/components/OfficialProfileModal';
 import { useChatSafety } from '../hooks/useChatSafety';
 
 import { useUser } from '../../auth/session/UserContext';
@@ -1362,7 +1363,7 @@ function ChatDetailSession({
             <Pressable
               style={styles.headerInfo}
               onPress={() => {
-                if (partnerId && !isSupportConversation) {
+                if (partnerId) {
                   setProfileModalVisible(true);
                 }
               }}
@@ -1375,7 +1376,7 @@ function ChatDetailSession({
               <View style={styles.headerTextCol}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Text style={styles.contactName}>{contactName}</Text>
-                  {!isSupportConversation && <Ionicons name="chevron-forward" size={13} color="#8E8E93" />}
+                  <Ionicons name="chevron-forward" size={13} color="#8E8E93" />
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                   {partnerOnline !== null && <>
@@ -1654,7 +1655,7 @@ function ChatDetailSession({
                         <View style={[styles.leftMessageRow, rowSpacingStyle]}>
                           <Pressable
                             onPress={() => {
-                              if (partnerId && !isSupportConversation) {
+                              if (partnerId) {
                                 setProfileModalVisible(true);
                               }
                             }}
@@ -1998,17 +1999,30 @@ function ChatDetailSession({
           }}
         />
 
-        {/* Counterparty Public Profile Modal */}
-        <UserProfileView
-          visible={profileModalVisible}
-          onClose={() => setProfileModalVisible(false)}
-          onMessage={() => setProfileModalVisible(false)}
-          userId={partnerId}
-          token={effectiveToken}
-          prefilledName={contactName}
-          prefilledAvatar={resolvedAvatar}
-          prefilledRole={contactRole}
-        />
+        {/* Counterparty profile. Official desks use a focused information view;
+            residents keep the existing public profile with posts and reviews. */}
+        {isSupportConversation ? (
+          <OfficialProfileModal
+            visible={profileModalVisible}
+            onClose={() => setProfileModalVisible(false)}
+            userId={partnerId}
+            token={effectiveToken}
+            prefilledName={contactName}
+            prefilledAvatar={resolvedAvatar}
+            prefilledRole={contactRole}
+          />
+        ) : (
+          <UserProfileView
+            visible={profileModalVisible}
+            onClose={() => setProfileModalVisible(false)}
+            onMessage={() => setProfileModalVisible(false)}
+            userId={partnerId}
+            token={effectiveToken}
+            prefilledName={contactName}
+            prefilledAvatar={resolvedAvatar}
+            prefilledRole={contactRole}
+          />
+        )}
 
         {/* Blurred Long-Press Action Menu & Reaction Overlay (Position-aware & Animated) */}
         {activeActionMenuMsg ? (() => {
