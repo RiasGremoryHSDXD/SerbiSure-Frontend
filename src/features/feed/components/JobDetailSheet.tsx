@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, Image, Pressable, Modal, Animated, PanResponder, Dimensions, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -57,6 +58,7 @@ export function JobDetailSheet({
   ctaNotice,
   token,
 }: JobDetailSheetProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const effectiveToken = token || user?.token;
@@ -380,7 +382,7 @@ export function JobDetailSheet({
             <View style={styles.aboutCard}>
               <View style={styles.aboutHeader}>
                 <Ionicons name="briefcase-outline" size={14} color="#F97316" />
-                <Text style={styles.aboutTitle}>ABOUT THIS ROLE</Text>
+                <Text style={styles.aboutTitle}>{uiText("ABOUT THIS ROLE")}</Text>
               </View>
               <Text style={styles.aboutBody}>{about}</Text>
             </View>
@@ -402,7 +404,7 @@ export function JobDetailSheet({
               return (
                 <View style={styles.feedbackSection}>
                   <View style={styles.feedbackHeaderRow}>
-                    <Text style={styles.feedbackSectionTitle}>Feedback Summary</Text>
+                    <Text style={styles.feedbackSectionTitle}>{uiText("Feedback Summary")}</Text>
                     <View style={styles.feedbackPillBadge}>
                       <Ionicons name="star" size={12} color="#F59E0B" />
                       <Text style={styles.feedbackPillBadgeText}>{ratingBadgeText}</Text>
@@ -412,21 +414,20 @@ export function JobDetailSheet({
                   {isSummaryLoading ? (
                     <View style={styles.feedbackLoadingBox}>
                       <ActivityIndicator size="small" color="#FFB43B" />
-                      <Text style={styles.feedbackLoadingText}>Loading feedback metrics...</Text>
+                      <Text style={styles.feedbackLoadingText}>{uiText("Loading feedback metrics...")}</Text>
                     </View>
                   ) : summaryError ? (
                     <View style={styles.feedbackEmptyCard}>
                       <Ionicons name="alert-circle-outline" size={22} color="#94A3B8" style={{ marginBottom: 4 }} />
-                      <Text style={styles.feedbackEmptyTitle}>Feedback data unavailable</Text>
-                      <Text style={styles.feedbackEmptySubtitle}>Could not load review summary at this time.</Text>
+                      <Text style={styles.feedbackEmptyTitle}>{uiText("Feedback data unavailable")}</Text>
+                      <Text style={styles.feedbackEmptySubtitle}>{uiText("Could not load review summary at this time.")}</Text>
                     </View>
                   ) : totalReviews === 0 ? (
                     <View style={styles.feedbackEmptyCard}>
                       <Ionicons name="chatbubbles-outline" size={24} color="#CBD5E1" style={{ marginBottom: 6 }} />
-                      <Text style={styles.feedbackEmptyTitle}>No reviews yet</Text>
+                      <Text style={styles.feedbackEmptyTitle}>{uiText("No reviews yet")}</Text>
                       <Text style={styles.feedbackEmptySubtitle}>
-                        This member has no completed service reviews yet. Feedback will appear here after bookings.
-                      </Text>
+                        {uiText("This member has no completed service reviews yet. Feedback will appear here after bookings.")}</Text>
                     </View>
                   ) : (
                     <React.Fragment>
@@ -485,12 +486,12 @@ export function JobDetailSheet({
               {isClosed ? (
                 <View style={styles.applyBtnInner}>
                   <Ionicons name="lock-closed" size={18} color="#64748B" style={{ marginRight: 6 }} />
-                  <Text style={[styles.applyBtnText, { color: '#64748B' }]}>Listing Closed (Position Filled)</Text>
+                  <Text style={[styles.applyBtnText, { color: '#64748B' }]}>{uiText("Listing Closed (Position Filled)")}</Text>
                 </View>
               ) : isApplied ? (
                 <View style={styles.applyBtnInner}>
                   <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
-                  <Text style={styles.applyBtnText}>Application Submitted</Text>
+                  <Text style={styles.applyBtnText}>{uiText("Application Submitted")}</Text>
                 </View>
               ) : (
                 <Text style={styles.applyBtnText}>{ctaText || 'Apply Now'}</Text>

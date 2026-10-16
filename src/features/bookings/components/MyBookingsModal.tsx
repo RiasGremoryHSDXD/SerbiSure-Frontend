@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { realtime } from '../../../shared/realtime';
 import { AppState } from 'react-native';
 import { workSetupLabel } from '../workSetup';
@@ -36,6 +37,7 @@ export function MyBookingsModal({
   accountType = 'Homeowner',
   initialTab = 'active',
 }: MyBookingsModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const { user } = useUser();
 
@@ -345,7 +347,7 @@ export function MyBookingsModal({
             <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
           </Pressable>
           <Text style={styles.headerTitle}>
-            {accountType === 'Kasambahay' ? 'My Jobs & Contracts' : 'My Bookings'}
+            {accountType === 'Kasambahay' ? uiText("My Jobs & Contracts") : 'My Bookings'}
           </Text>
           <View style={{ width: 40 }} />
         </View>
@@ -372,10 +374,9 @@ export function MyBookingsModal({
                 <Ionicons name="chatbubbles" size={18} color="#D97706" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.mandatoryFeedbackTitle}>Mandatory Service Feedback</Text>
+                <Text style={styles.mandatoryFeedbackTitle}>{uiText("Mandatory Service Feedback")}</Text>
                 <Text style={styles.mandatoryFeedbackSub} numberOfLines={2}>
-                  You have a completed booking with {targetName} awaiting required review. Tap to complete.
-                </Text>
+                  {uiText("You have a completed booking with")}{targetName} {uiText("awaiting required review. Tap to complete.")}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color="#D97706" />
             </Pressable>
@@ -421,14 +422,14 @@ export function MyBookingsModal({
           ) : errorMessage ? (
             <View style={styles.emptyCard}>
               <Ionicons name="cloud-offline-outline" size={44} color="#EF4444" />
-              <Text style={styles.emptyTitle}>Unable to Load Bookings</Text>
+              <Text style={styles.emptyTitle}>{uiText("Unable to Load Bookings")}</Text>
               <Text style={styles.emptySubtitle}>{errorMessage}</Text>
               <Pressable
                 style={styles.retryBtn}
                 onPress={() => loadData()}
               >
                 <Ionicons name="refresh" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.retryBtnText}>Retry</Text>
+                <Text style={styles.retryBtnText}>{uiText("Retry")}</Text>
               </Pressable>
             </View>
           ) : bookings.length > 0 ? (
@@ -468,11 +469,11 @@ export function MyBookingsModal({
                   <View style={styles.rateRow}>
                     <Text style={styles.rateValue}>₱{booking.rate_amount}</Text>
                     <Text style={styles.rateUnit}>
-                      / {booking.rate_period} · {booking.booking_type === 'long_term' ? 'Long-term' : 'Short-term'} · {workSetupLabel(booking.work_setup)}
+                      / {booking.rate_period} · {booking.booking_type === 'long_term' ? uiText("Long-term") : uiText("Short-term")} · {workSetupLabel(booking.work_setup)}
                     </Text>
                   </View>
 
-                  {booking.rate_needs_review ? <Text style={{ color: '#B45309', marginBottom: 8 }}>Legacy rate: the monthly amount needs confirmation.</Text> : null}
+                  {booking.rate_needs_review ? <Text style={{ color: '#B45309', marginBottom: 8 }}>{uiText("Legacy rate: the monthly amount needs confirmation.")}</Text> : null}
                   {booking.contract_summary ? <ContractDownloadCard summary={booking.contract_summary} /> : null}
 
                   {/* Address */}
@@ -487,7 +488,7 @@ export function MyBookingsModal({
                   <View style={styles.infoRow}>
                     <Ionicons name="time-outline" size={14} color="#6B7280" />
                     <Text style={styles.infoText}>
-                      Start: {new Date(booking.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {uiText("Start:")}{new Date(booking.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </Text>
                   </View>
 
@@ -531,8 +532,7 @@ export function MyBookingsModal({
                     <View style={styles.waitingAssignmentBox}>
                       <Ionicons name="hourglass-outline" size={16} color="#D97706" />
                       <Text style={styles.waitingAssignmentText}>
-                        Waiting for worker assignment / acceptance
-                      </Text>
+                        {uiText("Waiting for worker assignment / acceptance")}</Text>
                     </View>
                   )}
 
@@ -542,26 +542,25 @@ export function MyBookingsModal({
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
                         <Ionicons name="alert-circle" size={18} color="#DC2626" style={{ marginRight: 6 }} />
                         <Text style={styles.cancelRequestTitle}>
-                          Cancellation Requested by {booking.cancel_requested_by?.name || counterparty?.name || 'Partner'}
+                          {uiText("Cancellation Requested by")}{booking.cancel_requested_by?.name || counterparty?.name || 'Partner'}
                         </Text>
                       </View>
                       <Text style={styles.cancelRequestSub}>
-                        Both parties must confirm cancellation within the 2-hour window. If you decline, this booking remains active.
-                      </Text>
+                        {uiText("Both parties must confirm cancellation within the 2-hour window. If you decline, this booking remains active.")}</Text>
                       <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
                         <Pressable
                           style={[styles.cancelBannerBtn, { backgroundColor: '#EF4444' }]}
                           disabled={actionInProgress}
                           onPress={() => handleConfirmCancellation(booking.booking_id)}
                         >
-                          <Text style={styles.cancelBannerBtnText}>Confirm Cancel</Text>
+                          <Text style={styles.cancelBannerBtnText}>{uiText("Confirm Cancel")}</Text>
                         </Pressable>
                         <Pressable
                           style={[styles.cancelBannerBtn, { backgroundColor: '#4B5563' }]}
                           disabled={actionInProgress}
                           onPress={() => handleDeclineCancellation(booking.booking_id)}
                         >
-                          <Text style={styles.cancelBannerBtnText}>Decline & Keep</Text>
+                          <Text style={styles.cancelBannerBtnText}>{uiText("Decline & Keep")}</Text>
                         </Pressable>
                       </View>
                     </View>
@@ -572,17 +571,16 @@ export function MyBookingsModal({
                     <View style={styles.cancelPendingMyBanner}>
                       <Ionicons name="time" size={16} color="#D97706" style={{ marginRight: 6 }} />
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.cancelPendingMyTitle}>Cancellation Pending Approval</Text>
+                        <Text style={styles.cancelPendingMyTitle}>{uiText("Cancellation Pending Approval")}</Text>
                         <Text style={styles.cancelPendingMySub}>
-                          Waiting for {counterparty?.name || 'Partner'} to confirm or decline.
-                        </Text>
+                          {uiText("Waiting for")}{counterparty?.name || 'Partner'} {uiText("to confirm or decline.")}</Text>
                       </View>
                       <Pressable
                         style={styles.cancelWithdrawBtn}
                         disabled={actionInProgress}
                         onPress={() => handleDeclineCancellation(booking.booking_id, true)}
                       >
-                        <Text style={styles.cancelWithdrawBtnText}>Withdraw</Text>
+                        <Text style={styles.cancelWithdrawBtnText}>{uiText("Withdraw")}</Text>
                       </Pressable>
                     </View>
                   )}
@@ -604,7 +602,7 @@ export function MyBookingsModal({
                     >
                       <Ionicons name="pricetag-outline" size={14} color="#4B5563" style={{ marginRight: 4 }} />
                       <Text style={styles.actionBtnOutlineText}>
-                        Offers {booking.proposals_count ? `(${booking.proposals_count})` : ''}
+                        {uiText("Offers")}{booking.proposals_count ? `(${booking.proposals_count})` : ''}
                       </Text>
                     </Pressable>
 
@@ -615,7 +613,7 @@ export function MyBookingsModal({
                         disabled={actionInProgress}
                         onPress={() => handleStart(booking.booking_id)}
                       >
-                        <Text style={styles.actionBtnPrimaryText}>Start Job</Text>
+                        <Text style={styles.actionBtnPrimaryText}>{uiText("Start Job")}</Text>
                       </Pressable>
                     )}
 
@@ -625,7 +623,7 @@ export function MyBookingsModal({
                         disabled={actionInProgress}
                         onPress={() => handleComplete(booking.booking_id)}
                       >
-                        <Text style={styles.actionBtnPrimaryText}>Complete</Text>
+                        <Text style={styles.actionBtnPrimaryText}>{uiText("Complete")}</Text>
                       </Pressable>
                     )}
 
@@ -669,7 +667,7 @@ export function MyBookingsModal({
                           onPress={() => handleCancel(booking.booking_id)}
                         >
                           <Ionicons name="lock-closed" size={12} color="#9CA3AF" style={{ marginRight: 3 }} />
-                          <Text style={[styles.actionBtnDangerText, { color: '#9CA3AF' }]}>Locked (2h Expired)</Text>
+                          <Text style={[styles.actionBtnDangerText, { color: '#9CA3AF' }]}>{uiText("Locked (2h Expired)")}</Text>
                         </Pressable>
                       ) : (
                         <Pressable
@@ -677,7 +675,7 @@ export function MyBookingsModal({
                           disabled={actionInProgress}
                           onPress={() => handleCancel(booking.booking_id)}
                         >
-                          <Text style={styles.actionBtnDangerText}>Cancel</Text>
+                          <Text style={styles.actionBtnDangerText}>{uiText("Cancel")}</Text>
                         </Pressable>
                       )
                     )}

@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -14,6 +15,7 @@ interface HomeFeedFiltersProps {
 }
 
 export function HomeFeedFilters({ placeholder, searchQuery, selectedCategory, onSearchChange, onCategoryChange }: HomeFeedFiltersProps) {
+  const { tr: uiText } = useUiLanguage();
   const hasActiveFilters = !!selectedCategory || !!searchQuery.trim();
 
   return (
@@ -32,7 +34,7 @@ export function HomeFeedFilters({ placeholder, searchQuery, selectedCategory, on
           autoCorrect={false}
         />
         {!!searchQuery && (
-          <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => onSearchChange('')} hitSlop={10}>
+          <Pressable accessibilityRole="button" accessibilityLabel={uiText("Clear search")} onPress={() => onSearchChange('')} hitSlop={10}>
             <Ionicons name="close-circle" size={20} color={THEME.colors.textMuted} />
           </Pressable>
         )}
@@ -45,13 +47,13 @@ export function HomeFeedFilters({ placeholder, searchQuery, selectedCategory, on
             <Pressable
               key={category.label}
               accessibilityRole="button"
-              accessibilityLabel={`Filter: ${category.label}`}
+              accessibilityLabel={uiText('Filter: {category}', { category: uiText(category.label) })}
               accessibilityState={{ selected: isSelected }}
               onPress={() => onCategoryChange(isSelected ? null : category.key)}
               style={[styles.chip, isSelected && styles.chipSelected]}
             >
               <MaterialCommunityIcons name={category.icon} size={18} color={THEME.colors.ink} />
-              <Text style={[styles.chipLabel, isSelected && styles.chipLabelSelected]}>{category.label}</Text>
+              <Text style={[styles.chipLabel, isSelected && styles.chipLabelSelected]}>{uiText(category.label)}</Text>
             </Pressable>
           );
         })}
@@ -60,15 +62,15 @@ export function HomeFeedFilters({ placeholder, searchQuery, selectedCategory, on
       {hasActiveFilters && (
         <View style={styles.filterSummary}>
           <Text style={styles.filterSummaryText} numberOfLines={1}>
-            {[selectedCategory, searchQuery.trim() ? `“${searchQuery.trim()}”` : null].filter(Boolean).join(' · ')}
+            {[selectedCategory ? uiText(selectedCategory) : null, searchQuery.trim() ? `“${searchQuery.trim()}”` : null].filter(Boolean).join(' · ')}
           </Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Clear all filters"
+            accessibilityLabel={uiText("Clear all filters")}
             hitSlop={10}
             onPress={() => { onCategoryChange(null); onSearchChange(''); }}
           >
-            <Text style={styles.clearText}>Clear</Text>
+            <Text style={styles.clearText}>{uiText("Clear")}</Text>
           </Pressable>
         </View>
       )}
@@ -77,10 +79,11 @@ export function HomeFeedFilters({ placeholder, searchQuery, selectedCategory, on
 }
 
 export function HomeFeedHeader({ onViewAll }: { onViewAll?: () => void }) {
+  const { tr: uiText } = useUiLanguage();
   const { t } = useLanguage();
   return (
     <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle} numberOfLines={1} adjustsFontSizeToFit>Recent Posts</Text>
+      <Text style={styles.sectionTitle} numberOfLines={1} adjustsFontSizeToFit>{uiText("Recent Posts")}</Text>
       {onViewAll && (
         <Pressable accessibilityRole="button" onPress={onViewAll} hitSlop={10}>
           <Text style={styles.viewAll}>{t.viewAll}</Text>
@@ -91,10 +94,11 @@ export function HomeFeedHeader({ onViewAll }: { onViewAll?: () => void }) {
 }
 
 export function HomeFeedLoadingState() {
+  const { tr: uiText } = useUiLanguage();
   return (
     <View style={styles.loading}>
       <ActivityIndicator size="large" color={THEME.colors.brandDark} />
-      <Text style={styles.loadingText}>Loading recent posts...</Text>
+      <Text style={styles.loadingText}>{uiText("Loading recent posts...")}</Text>
     </View>
   );
 }
@@ -104,6 +108,7 @@ export function HomeFeedEmptyState({ role, hasActiveFilters, onResetFilters }: {
   hasActiveFilters: boolean;
   onResetFilters: () => void;
 }) {
+  const { tr: uiText } = useUiLanguage();
   const description = hasActiveFilters
     ? role === 'homeowner'
       ? 'No workers match your search or category. Try another search or clear your filters.'
@@ -115,11 +120,11 @@ export function HomeFeedEmptyState({ role, hasActiveFilters, onResetFilters }: {
   return (
     <View style={styles.emptyState}>
       <Ionicons name={hasActiveFilters ? 'search-outline' : 'newspaper-outline'} size={36} color="#CBD5E1" style={{ marginBottom: 8 }} />
-      <Text style={styles.emptyTitle}>{hasActiveFilters ? 'No posts found' : 'No Recent Posts'}</Text>
-      <Text style={styles.emptySubtitle}>{description}</Text>
+      <Text style={styles.emptyTitle}>{hasActiveFilters ? uiText("No posts found") : uiText("No Recent Posts")}</Text>
+      <Text style={styles.emptySubtitle}>{uiText(description)}</Text>
       {hasActiveFilters && (
         <Pressable accessibilityRole="button" onPress={onResetFilters} style={styles.resetButton}>
-          <Text style={styles.resetText}>Reset Filters</Text>
+          <Text style={styles.resetText}>{uiText("Reset Filters")}</Text>
         </Pressable>
       )}
     </View>

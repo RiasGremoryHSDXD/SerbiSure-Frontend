@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { Text, View, Image, Pressable, Modal, KeyboardAvoidingView, Platform, Animated, StatusBar, ScrollView } from 'react-native';
 
@@ -17,6 +18,7 @@ import { PostStep3 } from '../components/PostStep3';
 import { PostStep4 } from '../components/PostStep4';
 
 export function PostScreen(props: PostScreenProps) {
+  const { tr: uiText } = useUiLanguage();
   const form = usePostForm(props);
   const {
     visible,
@@ -64,35 +66,35 @@ export function PostScreen(props: PostScreenProps) {
             <Pressable style={styles.backCircleButton} onPress={handleBack}>
               <Ionicons name="arrow-back" size={20} color="#0D0D11" />
             </Pressable>
-            <Text style={styles.headerTitle}>{config.title}</Text>
+            <Text style={styles.headerTitle}>{uiText(config.title)}</Text>
             <Image source={logoSource} style={styles.logo} resizeMode="contain" />
           </View>
 
           {/* Step Pill Counter */}
           <View style={styles.stepBadge}>
-            <Text style={styles.stepBadgeText}>Step {step} of 4</Text>
+            <Text style={styles.stepBadgeText}>{uiText("Step")}{step} {uiText("of 4")}</Text>
           </View>
 
           {/* Step Main Title */}
           <View style={styles.titleBlock}>
             {step === 1 && (
               <Text style={styles.mainTitle}>
-                What <Text style={styles.titleHighlight}>{config.roleWord}</Text> {config.questionSuffix}
+                {uiText("What")}<Text style={styles.titleHighlight}>{uiText(config.roleWord)}</Text> {uiText(config.questionSuffix)}
               </Text>
             )}
             {step === 2 && (
               <Text style={styles.mainTitle}>
-                Job type & <Text style={styles.titleHighlight}>setup</Text>
+                {uiText("Job type &")}<Text style={styles.titleHighlight}>{uiText("setup")}</Text>
               </Text>
             )}
             {step === 3 && (
               <Text style={styles.mainTitle}>
-                Location & <Text style={styles.titleHighlight}>{config.rateHeading}</Text>
+                {uiText("Location &")}<Text style={styles.titleHighlight}>{uiText(config.rateHeading)}</Text>
               </Text>
             )}
             {step === 4 && (
               <Text style={styles.mainTitle}>
-                Review your <Text style={styles.titleHighlight}>{config.postHeading}</Text>
+                {uiText("Review your")}<Text style={styles.titleHighlight}>{uiText(config.postHeading)}</Text>
               </Text>
             )}
           </View>
@@ -118,7 +120,7 @@ export function PostScreen(props: PostScreenProps) {
               onPress={handleBack}
               disabled={isPosting}
             >
-              <Text style={styles.backButtonText}>{step === 1 ? 'Cancel' : 'Back'}</Text>
+              <Text style={styles.backButtonText}>{step === 1 ? uiText("Cancel") : uiText("Back")}</Text>
             </Pressable>
 
             <Pressable
@@ -127,7 +129,7 @@ export function PostScreen(props: PostScreenProps) {
               disabled={isPosting}
             >
               <Text style={styles.nextButtonText}>
-                {isPosting ? 'Posting...' : step === 4 ? config.submitLabel : 'Next'}
+                {isPosting ? uiText("Posting...") : step === 4 ? uiText(config.submitLabel) : uiText("Next")}
               </Text>
             </Pressable>
           </View>
@@ -143,7 +145,7 @@ export function PostScreen(props: PostScreenProps) {
                   <Image source={logoSource} style={styles.successLogoImage} resizeMode="contain" />
                 </View>
               </View>
-              <Text style={styles.successTitleText}>{config.successTitle}</Text>
+              <Text style={styles.successTitleText}>{uiText(config.successTitle)}</Text>
             </Animated.View>
           </View>
         )}

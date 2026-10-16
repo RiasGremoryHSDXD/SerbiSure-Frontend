@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -5,6 +6,7 @@ import THEME from '../../../shared/theme/theme';
 import type { FeedPost } from '../types';
 
 export function WorkerPostCard({ post, saved, onViewProfile, onDetails, onToggleSave }: { post: FeedPost; saved: boolean; onViewProfile: () => void; onDetails: () => void; onToggleSave: () => void }) {
+  const { tr: uiText } = useUiLanguage();
   return (
     <View style={styles.workerCard}>
       {/* Header: Avatar, Name, Role Tag, Time & Bookmark */}
@@ -21,9 +23,9 @@ export function WorkerPostCard({ post, saved, onViewProfile, onDetails, onToggle
             </View>
             <View style={styles.roleRow}>
               <View style={styles.roleBadge}>
-                <Text style={styles.roleBadgeText}>{post.roleTag}</Text>
+                <Text style={styles.roleBadgeText}>{uiText(post.roleTag)}</Text>
               </View>
-              <Text style={styles.workerTime}>{post.time}</Text>
+              <Text style={styles.workerTime}>{uiText(post.time)}</Text>
             </View>
           </View>
         </Pressable>
@@ -50,11 +52,11 @@ export function WorkerPostCard({ post, saved, onViewProfile, onDetails, onToggle
         </View>
         <View style={styles.metaBadge}>
           <Ionicons name="briefcase-outline" size={12} color="#6B7280" style={{ marginRight: 3 }} />
-          <Text style={styles.metaBadgeText}>{post.termTag}</Text>
+          <Text style={styles.metaBadgeText}>{uiText(post.termTag)}</Text>
         </View>
         <View style={styles.rateBadge}>
           <Text style={styles.rateBadgeAmount}>{post.price}</Text>
-          <Text style={styles.rateBadgeUnit}> {post.unit}</Text>
+          <Text style={styles.rateBadgeUnit}> {uiText(post.unit)}</Text>
         </View>
       </View>
 
@@ -71,13 +73,13 @@ export function WorkerPostCard({ post, saved, onViewProfile, onDetails, onToggle
           style={styles.viewProfileBtn}
           onPress={onViewProfile}
         >
-          <Text style={styles.viewProfileText}>View Profile</Text>
+          <Text style={styles.viewProfileText}>{uiText("View Profile")}</Text>
         </Pressable>
         <Pressable
           style={styles.seeDetailsBtn}
           onPress={onDetails}
         >
-          <Text style={styles.seeDetailsBtnText}>See Details</Text>
+          <Text style={styles.seeDetailsBtnText}>{uiText("See Details")}</Text>
         </Pressable>
       </View>
     </View>

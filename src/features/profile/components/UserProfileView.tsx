@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, Image, ScrollView, Pressable, Modal, ActivityIndicator, Linking, Alert, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,7 +11,7 @@ import { ProfileAvatar } from '../../../shared/ui/ProfileAvatar';
 import { useUser } from '../../auth/session/UserContext';
 import { NotificationBell } from '../../notifications/NotificationContext';
 import { useLanguage } from '../../../shared/localization/LanguageContext';
-import { PROFILE_COPY } from '../profileConfig';
+import { localizeProfileCopy } from '../profileConfig';
 import { ReviewsSection } from './ReviewsSection';
 import { WorkerCvModal } from '../worker/WorkerCvModal';
 
@@ -49,6 +50,7 @@ export function UserProfileView({
   onMessage,
   children,
 }: UserProfileViewProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
 
   const { user } = useUser();
@@ -77,7 +79,7 @@ export function UserProfileView({
       <View style={profileStyles.container}>
         {/* Top Header */}
         <View style={[profileStyles.headerTop, { paddingTop: insets.top + 8 }]}>
-          <View style={profileStyles.headerSide}><Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onClose} style={profileStyles.backCircleButton} hitSlop={12}>
+          <View style={profileStyles.headerSide}><Pressable accessibilityRole="button" accessibilityLabel={uiText("Back")} onPress={onClose} style={profileStyles.backCircleButton} hitSlop={12}>
             <Ionicons name="arrow-back" size={20} color="#0D0D11" />
           </Pressable></View>
           <Image source={require('../../../../assets/serbisure-logo.png')} style={profileStyles.logo} resizeMode="contain" />
@@ -104,7 +106,7 @@ export function UserProfileView({
               )}
             </View>
 
-            <Text style={profileStyles.heroSubRoleText}>{displayRole}</Text>
+            <Text style={profileStyles.heroSubRoleText}>{uiText(displayRole)}</Text>
 
             <View style={profileStyles.locationRow}>
               <Ionicons name="location-outline" size={14} color="#6B7280" />
@@ -129,7 +131,7 @@ export function UserProfileView({
             {/* Worker / Client Sentiment Track */}
             <View style={profileStyles.sentimentCard}>
               <Text style={profileStyles.sentimentCardLabel}>
-                {displayRole.toLowerCase().includes('kasambahay') ? 'Client Sentiment' : 'Worker Sentiment'}
+                {displayRole.toLowerCase().includes('kasambahay') ? t.clientSentiment : t.workerSentiment}
               </Text>
               <View style={profileStyles.sentimentTrack}>
                 <View
@@ -143,7 +145,7 @@ export function UserProfileView({
                 />
               </View>
               <Text style={[profileStyles.sentimentCardScore, totalReviews === 0 && { color: '#9CA3AF' }]}>
-                {totalReviews > 0 ? `${positivePercentage}% Positive` : 'No reviews yet'}
+                {totalReviews > 0 ? uiText('{count}% Positive', { count: positivePercentage }) : uiText("No reviews yet")}
               </Text>
             </View>
 
@@ -163,8 +165,8 @@ export function UserProfileView({
           {/* About / Bio Section */}
           <View style={profileStyles.sectionCard}>
             <View style={profileStyles.sectionCardHeader}><View>
-              <Text style={profileStyles.sectionCardTitle}>About {displayRole}</Text>
-              <Text style={profileStyles.sectionCardSubtitle}>{isWorker ? 'Experience and background' : 'Household and expectations'}</Text>
+              <Text style={profileStyles.sectionCardTitle}>{uiText(isWorker ? 'About Kasambahay' : 'About Homeowner')}</Text>
+              <Text style={profileStyles.sectionCardSubtitle}>{isWorker ? uiText("Experience and background") : uiText("Household and expectations")}</Text>
             </View></View>
             {loading && !profile ? (
               <ActivityIndicator size="small" color="#FFB43B" style={{ alignSelf: 'flex-start', marginVertical: 8 }} />
@@ -173,16 +175,16 @@ export function UserProfileView({
             ) : (
               <View style={styles.emptyBioRow}>
                 <Ionicons name="information-circle-outline" size={18} color="#9E9E9E" />
-                <Text style={styles.emptyBioText}>No bio provided yet.</Text>
+                <Text style={styles.emptyBioText}>{uiText("No bio provided yet.")}</Text>
               </View>
             )}
           </View>
 
           {isWorker && profile?.id && (
             <View style={profileStyles.sectionCard}>
-              <Text style={styles.sectionHeading}>SerbiSure CV</Text>
-              <Text style={profileStyles.sectionCardSubtitle}>Services, experience and work preferences</Text>
-              <Pressable style={styles.viewResumeBtn} onPress={() => setShowCv(true)}><Text style={styles.viewResumeBtnText}>View CV</Text></Pressable>
+              <Text style={styles.sectionHeading}>{uiText("SerbiSure CV")}</Text>
+              <Text style={profileStyles.sectionCardSubtitle}>{uiText("Services, experience and work preferences")}</Text>
+              <Pressable style={styles.viewResumeBtn} onPress={() => setShowCv(true)}><Text style={styles.viewResumeBtnText}>{uiText("View CV")}</Text></Pressable>
               {effectiveToken && <WorkerCvModal visible={showCv} onClose={() => setShowCv(false)} userId={profile.id} token={effectiveToken} />}
             </View>
           )}
@@ -193,7 +195,7 @@ export function UserProfileView({
             <View style={profileStyles.sectionCard}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
                 <Ionicons name="share-social-outline" size={17} color="#FFB43B" style={{ marginRight: 6 }} />
-                <Text style={[styles.sectionHeading, { marginBottom: 0 }]}>Social Links & Contacts</Text>
+                <Text style={[styles.sectionHeading, { marginBottom: 0 }]}>{uiText("Social Links & Contacts")}</Text>
               </View>
               <View style={styles.socialLinksList}>
                 {profile.social_links.map((link, idx) => {
@@ -243,7 +245,7 @@ export function UserProfileView({
 
           <ProfileTabs activeTab={activeTab} onChange={setActiveTab} postsCount={posts.length} reviewsCount={totalReviews} />
           {activeTab === 'posts' ? <PublicPostsSection key={userId} posts={posts} loading={postsLoading} error={postsError} token={effectiveToken} ownerId={userId} ownerRole={displayRole} onRefresh={refreshPosts} onSubmitted={markSubmitted} /> : (
-            <ReviewsSection profile={{ t, copy: PROFILE_COPY[isWorker ? 'kasambahay' : 'homeowner'], reviews, totalReviews, isReviewsExpanded, setIsReviewsExpanded }} />
+            <ReviewsSection profile={{ t, copy: localizeProfileCopy(isWorker ? 'kasambahay' : 'homeowner', uiText), reviews, isReviewsExpanded, setIsReviewsExpanded }} />
           )}
 
           {/* Open a conversation with this profile. */}
@@ -256,7 +258,7 @@ export function UserProfileView({
               });
             }}>
               <Ionicons name="chatbubble-ellipses" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-              <Text style={styles.messageBtnText}>Message {displayName.split(' ')[0]}</Text>
+              <Text style={styles.messageBtnText}>{uiText('Message')} {displayName.split(' ')[0]}</Text>
             </Pressable>
           </View>
         </ScrollView>

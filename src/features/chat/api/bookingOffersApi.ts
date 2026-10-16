@@ -22,7 +22,7 @@ async function result<T>(path: string, token: string, method: string, body: unkn
   return data as T;
 }
 
-export async function sendBookingOffer(token: string, payload: ChatOfferPayload, key: string): Promise<{ booking: BookingItem; chat_message: ChatMessageItem }> {
+export async function sendBookingOffer(token: string, payload: ChatOfferPayload, key: string): Promise<{ booking: BookingItem; chat_message: ChatMessageItem; language_warning?: string | null }> {
   return result('/api/v1/booking/chat-offers/', token, 'POST', payload, key);
 }
 

@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { ErrorNotice } from '../../../shared/ui/ErrorNotice';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -35,6 +36,7 @@ interface ActiveChat {
 }
 
 export function HomeScreen({ role: requestedRole, avatarUri, onAvatarPress, onViewAll, token }: HomeScreenProps) {
+  const { tr: uiText } = useUiLanguage();
   const { user, getFirstNameOnly } = useUser();
   const { t } = useLanguage();
   const role = requestedRole || resolveRole(user.accountType);
@@ -112,8 +114,8 @@ export function HomeScreen({ role: requestedRole, avatarUri, onAvatarPress, onVi
         isClosed={selectedPost ? isClosed(selectedPost.id) || isClosed(selectedPost.partnerId) || (selectedPost.kind === 'job' && isClosed(selectedPost.employerName)) : false}
         onToggleSave={() => { if (selectedPost) void toggleSave(selectedPost, authToken); }}
         onViewProfile={() => selectedPost && setProfilePost(selectedPost)}
-        ctaText={role === 'homeowner' ? 'Message Kasambahay' : undefined}
-        ctaNotice={role === 'homeowner' ? 'Start a direct chat with this kasambahay' : undefined}
+        ctaText={role === 'homeowner' ? uiText("Message Kasambahay") : undefined}
+        ctaNotice={role === 'homeowner' ? uiText("Start a direct chat with this kasambahay") : undefined}
         token={authToken}
       />
       {activeChat && <ChatDetailScreen visible onClose={() => setActiveChat(null)} partnerId={activeChat.post.partnerId} token={authToken} contactName={activeChat.post.employerName} contactRole={activeChat.post.kind === 'job' ? 'Homeowner' : activeChat.post.roleTag} contactAvatar={activeChat.post.avatar} initialMessage={activeChat.initialMessage} initialReplyTo={activeChat.initialReplyTo} userRole={role} />}

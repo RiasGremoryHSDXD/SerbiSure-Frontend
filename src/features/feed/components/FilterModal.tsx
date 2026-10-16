@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import THEME from '../../../shared/theme/theme';
 import type { WorkSetup } from '../../bookings/workSetup';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -58,6 +59,7 @@ export function FilterModal({
   initialFilters,
   mode,
 }: FilterModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
 
   const [categories, setCategories] = useState<string[]>(initialFilters.categories || []);
@@ -257,7 +259,7 @@ export function FilterModal({
               <View style={styles.header}>
                 <View style={styles.headerLeft}>
                   <Ionicons name="funnel" size={20} color={THEME.colors.brandDark} style={{ marginRight: 8 }} />
-                  <Text style={styles.title}>Filter & Sort</Text>
+                  <Text style={styles.title}>{uiText("Filter & Sort")}</Text>
                   {activeFilterCount > 0 && (
                     <View style={styles.badge}>
                       <Text style={styles.badgeText}>{activeFilterCount}</Text>
@@ -305,10 +307,10 @@ export function FilterModal({
               {/* SECTION: Service Category */}
               <View style={styles.section}>
                 <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>SERVICE CATEGORY</Text>
+                  <Text style={styles.sectionTitle}>{uiText("SERVICE CATEGORY")}</Text>
                   {categories.length > 0 && (
                     <Pressable onPress={() => setCategories([])}>
-                      <Text style={styles.clearSectionText}>Clear</Text>
+                      <Text style={styles.clearSectionText}>{uiText("Clear")}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -328,7 +330,7 @@ export function FilterModal({
                           style={{ marginRight: 4 }}
                         />
                         <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                          {cat}
+                          {uiText(cat)}
                         </Text>
                       </Pressable>
                     );
@@ -338,7 +340,7 @@ export function FilterModal({
 
               {/* SECTION: Booking Type */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>BOOKING TYPE</Text>
+                <Text style={styles.sectionTitle}>{uiText("BOOKING TYPE")}</Text>
                 <View style={styles.toggleRow}>
                   {BOOKING_TYPES.map((bt) => {
                     const isSelected = bookingType === bt.value;
@@ -351,7 +353,7 @@ export function FilterModal({
                         <Text
                           style={[styles.toggleBtnText, isSelected && styles.toggleBtnTextActive]}
                         >
-                          {bt.label}
+                          {uiText(bt.label)}
                         </Text>
                       </Pressable>
                     );
@@ -360,13 +362,13 @@ export function FilterModal({
               </View>
 
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>WORK SETUP</Text>
+                <Text style={styles.sectionTitle}>{uiText("WORK SETUP")}</Text>
                 <View style={styles.toggleRow}>
                   {([{ label: 'Any Setup', value: null }, { label: 'Stay-in', value: 'stay_in' }, { label: 'Stay-out', value: 'stay_out' }] as const).map(option => (
                     <Pressable key={String(option.value)} accessibilityRole="button"
                       style={[styles.toggleBtn, workSetup === option.value && styles.toggleBtnActive]}
                       onPress={() => setWorkSetup(option.value)}>
-                      <Text style={[styles.toggleBtnText, workSetup === option.value && styles.toggleBtnTextActive]}>{option.label}</Text>
+                      <Text style={[styles.toggleBtnText, workSetup === option.value && styles.toggleBtnTextActive]}>{uiText(option.label)}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -375,7 +377,7 @@ export function FilterModal({
               {/* SECTION: Maximum Rate */}
               <View style={styles.section}>
                 <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>MAXIMUM RATE (PER {bookingType === 'long_term' ? 'MONTH' : bookingType === 'short_term' ? 'DAY' : ratePeriod.toUpperCase()})</Text>
+                  <Text style={styles.sectionTitle}>{uiText('Maximum rate per {period}', { period: uiText(bookingType === 'long_term' ? 'month' : bookingType === 'short_term' ? 'day' : ratePeriod) }).toUpperCase()}</Text>
                   {maxRate !== null && (
                     <Pressable
                       onPress={() => {
@@ -383,7 +385,7 @@ export function FilterModal({
                         setCustomRateText('');
                       }}
                     >
-                      <Text style={styles.clearSectionText}>Any Rate</Text>
+                      <Text style={styles.clearSectionText}>{uiText("Any Rate")}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -392,7 +394,7 @@ export function FilterModal({
                   {(['day', 'month'] as const).map(period => <Pressable key={period}
                     style={[styles.rateChip, ratePeriod === period && styles.rateChipActive]}
                     onPress={() => { setRatePeriod(period); setMaxRate(null); setCustomRateText(''); }}>
-                    <Text style={styles.rateChipText}>{period === 'day' ? 'Daily budget' : 'Monthly budget'}</Text>
+                    <Text style={styles.rateChipText}>{period === 'day' ? uiText("Daily budget") : uiText("Monthly budget")}</Text>
                   </Pressable>)}
                 </View> : null}
                 {/* Quick Presets */}
@@ -418,7 +420,7 @@ export function FilterModal({
                   <Text style={styles.currencyPrefix}>₱</Text>
                   <TextInput
                     style={styles.rateInput}
-                    placeholder="Enter custom max budget"
+                    placeholder={uiText("Enter custom max budget")}
                     placeholderTextColor="#999"
                     keyboardType="numeric"
                     value={customRateText}
@@ -440,10 +442,10 @@ export function FilterModal({
               {/* SECTION: Location Search */}
               <View style={styles.section}>
                 <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>LOCATION / BARANGAY</Text>
+                  <Text style={styles.sectionTitle}>{uiText("LOCATION / BARANGAY")}</Text>
                   {location.trim() !== '' && (
                     <Pressable onPress={() => setLocation('')}>
-                      <Text style={styles.clearSectionText}>Clear</Text>
+                      <Text style={styles.clearSectionText}>{uiText("Clear")}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -467,7 +469,7 @@ export function FilterModal({
 
               {/* SECTION: Sort By */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>SORT RESULTS BY</Text>
+                <Text style={styles.sectionTitle}>{uiText("SORT RESULTS BY")}</Text>
                 <View style={styles.sortContainer}>
                   {SORT_OPTIONS.map((opt) => {
                     const isSelected = sortBy === opt.value;
@@ -485,7 +487,7 @@ export function FilterModal({
                             style={{ marginRight: 10 }}
                           />
                           <Text style={[styles.sortLabel, isSelected && styles.sortLabelActive]}>
-                            {opt.label}
+                            {uiText(opt.label)}
                           </Text>
                         </View>
                         <Ionicons
@@ -504,12 +506,12 @@ export function FilterModal({
             <View style={styles.footer}>
               <Pressable style={styles.resetButton} onPress={handleReset}>
                 <Ionicons name="refresh-outline" size={16} color={THEME.colors.textSecondary} style={{ marginRight: 6 }} />
-                <Text style={styles.resetButtonText}>Reset All</Text>
+                <Text style={styles.resetButtonText}>{uiText("Reset All")}</Text>
               </Pressable>
 
               <Pressable style={styles.applyButton} onPress={handleApply}>
                 <Text style={styles.applyButtonText}>
-                  Apply Filters {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}
+                  {uiText("Apply Filters")}{activeFilterCount > 0 ? `(${activeFilterCount})` : ''}
                 </Text>
               </Pressable>
             </View>

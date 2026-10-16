@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,24 +17,25 @@ interface ActivityProps {
 }
 
 export function BrowseActivityCard({ post, applied, closed, onProfile, onDetails, onUnsave, onMessage }: ActivityProps) {
+  const { tr: uiText } = useUiLanguage();
   const tags = [post.roleTag, post.termTag].filter((tag): tag is string => !!tag);
   return (
     <View style={styles.card}>
       <View style={styles.identityRow}>
         <Pressable accessibilityRole="button" accessibilityLabel={`View ${post.employerName}'s profile`} onPress={onProfile}><ProfileAvatar uri={post.avatar} name={post.employerName} size={48} /></Pressable>
-        <Pressable onPress={onProfile} style={styles.identity}><Text style={styles.name} numberOfLines={2}>{post.employerName}</Text><Text style={styles.location} numberOfLines={1}>{post.location || 'Location not provided'}</Text></Pressable>
-        {onUnsave && <Pressable accessibilityRole="button" accessibilityLabel="Unsave post" onPress={onUnsave} style={styles.bookmark}><Ionicons name="bookmark" size={22} color={THEME.colors.brandDark} /></Pressable>}
+        <Pressable onPress={onProfile} style={styles.identity}><Text style={styles.name} numberOfLines={2}>{post.employerName}</Text><Text style={styles.location} numberOfLines={1}>{post.location || uiText("Location not provided")}</Text></Pressable>
+        {onUnsave && <Pressable accessibilityRole="button" accessibilityLabel={uiText("Unsave post")} onPress={onUnsave} style={styles.bookmark}><Ionicons name="bookmark" size={22} color={THEME.colors.brandDark} /></Pressable>}
       </View>
       <Pressable onPress={onDetails} accessibilityRole="button">
-        <Text style={styles.subject} numberOfLines={2}>{post.title || post.roleTag || 'Household Service'}</Text>
+        <Text style={styles.subject} numberOfLines={2}>{post.title || post.roleTag || uiText("Household Service")}</Text>
       </Pressable>
-      <View style={styles.tags}>{tags.map((tag) => <View key={tag} style={styles.tag}><Text style={styles.tagText}>{tag}</Text></View>)}</View>
-      {applied && <Text style={[styles.status, closed && styles.closed]}>{closed ? 'Position filled' : 'Application sent'}</Text>}
+      <View style={styles.tags}>{tags.map((tag) => <View key={tag} style={styles.tag}><Text style={styles.tagText}>{uiText(tag)}</Text></View>)}</View>
+      {applied && <Text style={[styles.status, closed && styles.closed]}>{closed ? uiText("Position filled") : uiText("Application sent")}</Text>}
       <View style={styles.footer}>
-        <View style={styles.rate}><Text style={styles.price}>{post.price}</Text><Text style={styles.unit}>{post.unit}</Text></View>
+        <View style={styles.rate}><Text style={styles.price}>{post.price}</Text><Text style={styles.unit}>{uiText(post.unit)}</Text></View>
         <View style={styles.actions}>
           {onMessage && <Pressable accessibilityRole="button" accessibilityLabel={`Message ${post.employerName}`} onPress={onMessage} style={styles.message}><Ionicons name="chatbubble-ellipses-outline" size={19} color={THEME.colors.ink} /></Pressable>}
-          <Pressable accessibilityRole="button" onPress={onDetails} style={styles.details}><Text style={styles.detailsLabel}>See Details</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={onDetails} style={styles.details}><Text style={styles.detailsLabel}>{uiText("See Details")}</Text></Pressable>
         </View>
       </View>
     </View>

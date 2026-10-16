@@ -6,7 +6,7 @@ export type LivenessStep = 'face' | 'turnLeft' | 'turnRight' | 'still' | 'verifi
 export type LivenessResult = {
   verified: true;
   completedAt: number;
-  selfiePath?: string;
+  selfiePath: string;
 };
 
 export type LivenessState = {

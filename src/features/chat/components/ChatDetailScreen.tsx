@@ -1,16 +1,19 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { AppState } from 'react-native';
 import { realtime } from '../../../shared/realtime';
 import { useRealtimeStatus } from '../../../shared/realtime/useRealtimeStatus';
 import { mapBookingCard, bookingSchedule, type BookingCardInfo } from '../bookingCards';
 import { sendBookingOffer, respondToBookingOffer } from '../api/bookingOffersApi';
 import type { BookingConfirmData } from '../../bookings/components/BookingModal';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { StyleSheet, Text, View, Image, TextInput, ScrollView, Pressable, Modal, KeyboardAvoidingView, Platform, Alert, Animated, ActivityIndicator, Dimensions, PanResponder, ToastAndroid, NativeModules, LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { BookingModal } from '../../bookings/components/BookingModal';
 import { UserProfileView } from '../../profile/components/UserProfileView';
+import { OfficialProfileModal } from '../../profile/components/OfficialProfileModal';
+import { useChatSafety } from '../hooks/useChatSafety';
 
 import { useUser } from '../../auth/session/UserContext';
 import THEME from '../../../shared/theme/theme';
@@ -200,7 +203,6 @@ interface ChatDetailScreenProps {
   contactName?: string;
   contactRole?: string;
   contactAvatar?: string;
-  isOnline?: boolean;
   initialMessage?: string;
   initialReplyTo?: {
     author: string;
@@ -363,7 +365,14 @@ function TypingDotsIndicator({ avatarUri }: { avatarUri: string }) {
   );
 }
 
-export function ChatDetailScreen({
+export function ChatDetailScreen(props: ChatDetailScreenProps) {
+  const { user } = useUser();
+  // Reset before the next render: an effect-based reset can still flash the old thread.
+  const sessionKey = JSON.stringify([user.id || user.email || '', props.partnerId || '', props.visible]);
+  return <ChatDetailSession key={sessionKey} {...props} />;
+}
+
+function ChatDetailSession({
   visible,
   onClose,
   partnerId,
@@ -371,20 +380,25 @@ export function ChatDetailScreen({
   contactName = 'User',
   contactRole = 'Member',
   contactAvatar,
-  isOnline = false,
   initialMessage,
   initialReplyTo,
   userRole = 'homeowner',
 }: ChatDetailScreenProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const effectiveToken = token || user.token;
+  const safety = useChatSafety(effectiveToken, visible);
+  const isSupportConversation = ['admin', 'superadmin', 'barangay'].includes(contactRole.toLowerCase());
+  const chatPaused = !!safety?.restricted_until && !isSupportConversation;
+  const sessionActive = useRef(true);
+  useLayoutEffect(() => {
+    sessionActive.current = true;
+    return () => { sessionActive.current = false; };
+  }, []);
 
-  const [partnerOnline, setPartnerOnline] = useState<boolean>(isOnline);
-
-  useEffect(() => {
-    setPartnerOnline(isOnline);
-  }, [isOnline]);
+  // Presence stays neutral until this conversation receives a server-confirmed status.
+  const [partnerOnline, setPartnerOnline] = useState<boolean | null>(null);
 
   // Determine if the current active user is a Kasambahay or Homeowner
   const isKasambahay =
@@ -440,6 +454,8 @@ export function ChatDetailScreen({
     `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || 'User')}&background=FFB43B&color=fff`;
 
   const [inputMessage, setInputMessage] = useState('');
+  const sendingText = useRef(false);
+  const [isSendingText, setIsSendingText] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -657,6 +673,7 @@ export function ChatDetailScreen({
       duration: 200,
       useNativeDriver: true,
     }).start(() => {
+      if (!sessionActive.current) return;
       setModalVisible(false);
       onClose();
     });
@@ -701,18 +718,23 @@ export function ChatDetailScreen({
     responseBusyRef.current = true; setResponseBusy(true); threadVersion.current++;
     try {
       await respondToBookingOffer(effectiveToken, card, action);
+      if (!sessionActive.current) return;
       setMessages(current => current.map(message => message.id === msgId && message.bookingInfo ? {
         ...message, bookingInfo: { ...message.bookingInfo, canRespond: false,
           isConfirmed: action === 'accept', isDeclined: action === 'reject',
           title: action === 'accept' ? 'BOOKING CONFIRMED' : 'BOOKING DECLINED' },
       } : message));
       if (action === 'accept') savedJobsStore.markJobClosed(card.bookingId);
-    } finally { responseBusyRef.current = false; setResponseBusy(false); refreshThreadRef.current?.(); }
+    } finally {
+      if (sessionActive.current) { responseBusyRef.current = false; setResponseBusy(false); refreshThreadRef.current?.(); }
+    }
   };
   const handleKasambahayConfirm = (id: string) => handleOfferResponse(id, 'accept');
   const handleKasambahayDecline = (id: string) => handleOfferResponse(id, 'reject');
   const confirmFromCard = (id: string, action: 'accept' | 'reject') => {
-    void handleOfferResponse(id, action).catch(error => Alert.alert('Cannot Confirm', error instanceof Error ? error.message : 'Please try again.'));
+    void handleOfferResponse(id, action).catch(error => {
+      if (sessionActive.current) Alert.alert('Cannot Confirm', error instanceof Error ? error.message : 'Please try again.');
+    });
   };
 
   const handleSendOffer = async (details: BookingConfirmData) => {
@@ -735,6 +757,8 @@ export function ChatDetailScreen({
     try {
       const version = ++threadVersion.current;
       const result = await sendBookingOffer(effectiveToken, payload, offerDraft.current.key);
+      if (sessionActive.current && result.language_warning) Alert.alert('Notice', result.language_warning);
+      if (!sessionActive.current) return;
       const info = mapBookingCard(result.chat_message.booking_offer);
       if (!info) throw new Error('The server did not return a saved offer. Refresh the conversation before retrying.');
       if (version !== threadVersion.current) return;
@@ -743,7 +767,9 @@ export function ChatDetailScreen({
         time: formatTimeOnly(result.chat_message.createdAt), createdAtRaw: result.chat_message.createdAt,
       }]);
       offerDraft.current = null;
-    } finally { responseBusyRef.current = false; setResponseBusy(false); refreshThreadRef.current?.(); }
+    } finally {
+      if (sessionActive.current) { responseBusyRef.current = false; setResponseBusy(false); refreshThreadRef.current?.(); }
+    }
   };
 
   React.useEffect(() => {
@@ -764,9 +790,7 @@ export function ChatDetailScreen({
           appliedPoll.current = poll;
           setThreadLoading(false); setThreadError(null);
           if (realtime.status !== 'connected') setIsOtherTyping(partnerIsTyping);
-          if (typeof partnerIsOnline === 'boolean') {
-            setPartnerOnline(partnerIsOnline);
-          }
+          setPartnerOnline(typeof partnerIsOnline === 'boolean' ? partnerIsOnline : null);
 
           if (items && items.length > 0) {
             const visibleItems = items.filter((m) => !chatStore.isMessageDeleted(m.chat_message_id));
@@ -922,23 +946,24 @@ export function ChatDetailScreen({
             // Persist the initial message to backend
             sendChatMessage(effectiveToken, partnerId, payload)
               .then((res) => {
+                if (!isMounted || !sessionActive.current) return;
                 if (res?.data?.chat_message_id && isMounted) {
                   setMessages((prev) =>
-                    prev.map((msg) => (msg.id === tempId ? { ...msg, id: res.data.chat_message_id } : msg))
+                    prev.map((msg) => (msg.id === tempId ? { ...msg, id: res.data.chat_message_id, text: (res.data.message_payload || '').replace(/^> \[[^\n]*\]: [^\n]*\n\n/, '') } : msg))
                   );
                 }
+                if (res.language_warning) Alert.alert('Notice', res.language_warning);
                 chatStore.addOrUpdateChat({
                   partnerId,
                   name: contactName,
                   badge: contactRole,
                   avatar: resolvedAvatar,
-                  message: initialMessage,
+                  message: (res.data.message_payload || '').replace(/^> \[[^\n]*\]: [^\n]*\n\n/, ''),
                   time: 'Just now',
                 });
               })
               .catch((err) => {
-                if (isMounted) { setMessages(current => current.filter(message => message.id !== tempId)); setThreadError('Could not send the initial message. Please retry.'); }
-                console.warn('[ChatDetailScreen] Failed to auto-send initial message:', err);
+                if (isMounted) { setMessages(current => current.filter(message => message.id !== tempId)); setInputMessage(initialMessage || ''); setThreadError(err instanceof Error ? err.message : 'Could not send the initial message. Please retry.'); }
               });
           } else {
             setMessages([]);
@@ -982,7 +1007,10 @@ export function ChatDetailScreen({
 
   const handleSend = () => {
     const trimmed = inputMessage.trim();
-    if (!trimmed) return;
+    if (!trimmed || sendingText.current || chatPaused) return;
+    if (!partnerId || !effectiveToken) { Alert.alert('Sign in required', 'Please sign in before sending messages.'); return; }
+    sendingText.current = true;
+    setIsSendingText(true);
 
     if (partnerId && effectiveToken) {
       sendChatTyping(effectiveToken, partnerId, false);
@@ -1046,30 +1074,40 @@ export function ChatDetailScreen({
     if (partnerId && effectiveToken) {
       sendChatMessage(effectiveToken, partnerId, payloadToSend)
         .then((res) => {
+          if (!sessionActive.current) return;
           if (res?.data?.chat_message_id) {
             setMessages((prev) =>
-              prev.map((msg) => (msg.id === tempId ? { ...msg, id: res.data.chat_message_id } : msg))
+              prev.map((msg) => (msg.id === tempId ? { ...msg, id: res.data.chat_message_id, text: (res.data.message_payload || '').replace(/^> \[[^\n]*\]: [^\n]*\n\n/, '') } : msg))
             );
           }
+          if (res.language_warning) Alert.alert('Notice', res.language_warning);
           chatStore.addOrUpdateChat({
             partnerId,
             name: contactName,
             badge: contactRole,
             avatar: contactAvatar,
-            message: trimmed,
+            message: (res.data.message_payload || '').replace(/^> \[[^\n]*\]: [^\n]*\n\n/, ''),
             time: 'Just now',
           });
         })
         .catch((err) => {
-          console.warn('[ChatDetailScreen] send failed:', err);
-          Alert.alert('Send Error', err.message || 'Could not send message. Please try again.');
+          if (!sessionActive.current) return;
+          setMessages(current => current.filter(message => message.id !== tempId));
+          setInputMessage(current => current || trimmed);
+          setReplyingTo(current => current || currentReply);
+          Alert.alert('Message not sent', err.message || 'Could not send message. Please try again.');
+        }).finally(() => {
+          sendingText.current = false;
+          if (sessionActive.current) setIsSendingText(false);
         });
     }
   };
 
   const handlePickImage = async () => {
+    if (chatPaused) return;
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!sessionActive.current) return;
       if (!permission.granted) {
         Alert.alert('Permission Required', 'Gallery permission is required to choose photos.');
         return;
@@ -1080,6 +1118,8 @@ export function ChatDetailScreen({
         allowsEditing: false,
         quality: 0.8,
       });
+
+      if (!sessionActive.current) return;
 
       if (result.canceled || !result.assets?.[0]?.uri) return;
 
@@ -1121,6 +1161,7 @@ export function ChatDetailScreen({
       setIsUploadingImage(true);
       try {
         const res = await sendChatImage(effectiveToken, partnerId, imageUri);
+        if (!sessionActive.current) return;
         if (res?.data?.chat_message_id) {
           setMessages((prev) =>
             prev.map((msg) =>
@@ -1143,6 +1184,7 @@ export function ChatDetailScreen({
           time: 'Just now',
         });
       } catch (uploadErr: any) {
+        if (!sessionActive.current) return;
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
         const errMsg = uploadErr?.message || 'Could not send image. Please try again.';
         if (errMsg.toLowerCase().includes('too large') || errMsg.toLowerCase().includes('10 mb')) {
@@ -1155,9 +1197,10 @@ export function ChatDetailScreen({
           Alert.alert('Upload Failed', errMsg);
         }
       } finally {
-        setIsUploadingImage(false);
+        if (sessionActive.current) setIsUploadingImage(false);
       }
     } catch (err) {
+      if (!sessionActive.current) return;
       console.log('Error choosing image in chat:', err);
       Alert.alert('Gallery Error', 'Could not open photo gallery. Please try again.');
     }
@@ -1201,6 +1244,7 @@ export function ChatDetailScreen({
     if (effectiveToken && targetMsgId && !targetMsgId.startsWith('temp-')) {
       try {
         const res = await toggleChatReaction(effectiveToken, targetMsgId, normalizedEmoji);
+        if (!sessionActive.current) return;
         if (res?.data?.reaction_counts) {
           setMessages((prev) =>
             prev.map((msg) =>
@@ -1329,7 +1373,7 @@ export function ChatDetailScreen({
             >
               <View style={styles.avatarWrapper}>
                 <Image source={{ uri: resolvedAvatar }} style={styles.headerAvatar} />
-                {partnerOnline ? <View style={styles.onlineDot} /> : null}
+                {partnerOnline === true ? <View testID="chat-presence-online" style={styles.onlineDot} /> : null}
               </View>
               <View style={styles.headerTextCol}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -1337,18 +1381,18 @@ export function ChatDetailScreen({
                   <Ionicons name="chevron-forward" size={13} color="#8E8E93" />
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                  <Text style={styles.contactSub}>
-                    {partnerOnline ? 'Active now' : 'Inactive'}
-                  </Text>
-                  <Text style={{ color: '#C4C4C4', fontSize: 10 }}>•</Text>
+                  {partnerOnline !== null && <>
+                    <Text style={styles.contactSub}>{partnerOnline ? 'Active now' : 'Inactive'}</Text>
+                    <Text style={{ color: '#C4C4C4', fontSize: 10 }}>•</Text>
+                  </>}
                   <View style={styles.headerRoleBadge}>
-                    <Text style={styles.headerRoleBadgeText}>{contactRole}</Text>
+                    <Text style={styles.headerRoleBadgeText}>{isSupportConversation && contactRole.toLowerCase() !== 'barangay' ? 'Support' : contactRole}</Text>
                   </View>
                 </View>
               </View>
             </Pressable>
 
-            {(user.accountType === 'Homeowner' || user.accountType === 'Kasambahay') ? (
+            {!isSupportConversation && (user.accountType === 'Homeowner' || user.accountType === 'Kasambahay') ? (
               <Pressable
                 style={styles.bookingHeaderBtn}
                 onPress={() => {
@@ -1388,14 +1432,14 @@ export function ChatDetailScreen({
               {messages.length === 0 && !threadLoading && !threadError ? (
                 <View style={{ padding: 32, alignItems: 'center' }}>
                   <Ionicons name="chatbubbles-outline" size={38} color="#9CA3AF" />
-                  <Text style={{ marginTop: 12, fontWeight: '700' }}>No messages yet</Text>
-                  <Text style={{ marginTop: 6, color: '#6B7280', textAlign: 'center' }}>Send a message or use the calendar button to propose a booking.</Text>
+                  <Text style={{ marginTop: 12, fontWeight: '700' }}>{uiText("No messages yet")}</Text>
+                  <Text style={{ marginTop: 6, color: '#6B7280', textAlign: 'center' }}>{isSupportConversation ? 'Tell us how we can help. Your message will be sent to this support desk.' : 'Send a message or use the calendar button to propose a booking.'}</Text>
                 </View>
               ) : null}
 
               {liveStatus !== 'connected' ? <Text accessibilityLiveRegion="polite" style={{ padding: 12, color: '#71717A', fontSize: 12 }}>{liveStatus === 'unauthorized' ? 'Live updates unavailable. Please sign in again.' : 'Reconnecting live updates…'}</Text> : null}
               {threadLoading && !messages.length ? <ActivityIndicator style={{ marginTop: 32 }} color="#FFB380" /> : null}
-              {threadError ? <View style={{ padding: 20 }}><Text>{threadError}</Text><Pressable onPress={() => setThreadReload(value => value + 1)}><Text style={{ marginTop: 8, color: '#EA580C' }}>Retry conversation</Text></Pressable></View> : null}
+              {threadError ? <View style={{ padding: 20 }}><Text>{threadError}</Text><Pressable onPress={() => setThreadReload(value => value + 1)}><Text style={{ marginTop: 8, color: '#EA580C' }}>{uiText("Retry conversation")}</Text></Pressable></View> : null}
               {/* Messages */}
               {messages.map((item, index) => {
                 const prevMsg = index > 0 ? messages[index - 1] : null;
@@ -1428,9 +1472,9 @@ export function ChatDetailScreen({
                         </View>
                         <View style={{ flex: 1 }}>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Text style={styles.listingClosedTitle}>Job Position Acquired</Text>
+                            <Text style={styles.listingClosedTitle}>{uiText("Job Position Acquired")}</Text>
                             <View style={styles.closedTagMicro}>
-                              <Text style={styles.closedTagMicroText}>ACQUIRED</Text>
+                              <Text style={styles.closedTagMicroText}>{uiText("ACQUIRED")}</Text>
                             </View>
                           </View>
                           <Text style={styles.listingClosedSub}>{cleanMsg}</Text>
@@ -1450,6 +1494,13 @@ export function ChatDetailScreen({
                       ? contactName
                       : (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : contactName));
                   const formattedStartDate = formatBookingStartDate(item.bookingInfo.startDate);
+                  const bookingStatus = isAcquired
+                    ? 'Job filled'
+                    : isConfirmed
+                      ? 'Confirmed'
+                      : isDeclined
+                        ? 'Declined'
+                        : item.bookingInfo.canRespond ? 'Booking offer' : 'Waiting for reply';
 
                   return (
                     <React.Fragment key={`system-wrap-${item.id}`}>
@@ -1493,35 +1544,19 @@ export function ChatDetailScreen({
                             />
                           </View>
 
-                          {/* Title and Subtitle Info */}
                           <View style={styles.compactBookingInfoCol}>
-                            <View style={styles.compactBookingTitleRow}>
-                              <Text style={styles.compactBookingTitle} numberOfLines={1}>
-                                {bookedPersonName}
+                            <Text style={styles.compactBookingTitle} numberOfLines={1} ellipsizeMode="tail">
+                              {bookedPersonName}
+                            </Text>
+                            <Text style={styles.compactBookingSubText}>
+                              <Text style={[
+                                styles.compactBookingStatus,
+                                isConfirmed && styles.compactBookingStatusConfirmed,
+                                isDeclined && styles.compactBookingStatusDeclined,
+                              ]}>
+                                {bookingStatus}
                               </Text>
-                              {isAcquired ? (
-                                <View style={styles.acquiredMicroBadge}>
-                                  <Text style={styles.acquiredMicroBadgeText}>Acquired</Text>
-                                </View>
-                              ) : isConfirmed ? (
-                                <View style={styles.confirmedMicroBadge}>
-                                  <Text style={styles.confirmedMicroBadgeText}>Confirmed</Text>
-                                </View>
-                              ) : isDeclined ? (
-                                <View style={styles.declinedMicroBadge}>
-                                  <Text style={styles.declinedMicroBadgeText}>Declined</Text>
-                                </View>
-                              ) : null}
-                            </View>
-
-                            <Text style={styles.compactBookingSubText} numberOfLines={1}>
-                              {isAcquired
-                                ? `Start date: ${formattedStartDate} • Job position already acquired`
-                                : isDeclined
-                                  ? `Start date: ${formattedStartDate} • Offer Declined`
-                                  : isConfirmed
-                                    ? `Start date: ${formattedStartDate} • Booking Confirmed`
-                                    : `Start date: ${formattedStartDate} • Tap to review`}
+                              {` · Start: ${formattedStartDate}`}
                             </Text>
                           </View>
 
@@ -1531,53 +1566,36 @@ export function ChatDetailScreen({
                           </View>
                         </Pressable>
 
-                        {/* Action or Status Section */}
-                        {!isConfirmed && !isDeclined ? (
-                          isAcquired ? (
-                            <View style={styles.compactAcquiredBanner}>
-                              <Ionicons name="information-circle" size={14} color="#64748B" />
-                              <Text style={styles.compactAcquiredText}>
-                                This job position has already been acquired.
-                              </Text>
-                            </View>
-                          ) : item.bookingInfo.canRespond ? (
-                            <View style={styles.compactQuickActionRow}>
-                              <Pressable
-                                style={({ pressed }) => [
-                                  styles.compactQuickDeclineBtn,
-                                  pressed && { opacity: 0.8 },
-                                ]}
-                                disabled={responseBusy} onPress={(e) => {
-                                  e.stopPropagation();
-                                  confirmFromCard(item.id, 'reject');
-                                }}
-                              >
-                                <Ionicons name="close-circle-outline" size={16} color="#DC2626" style={{ marginRight: 4 }} />
-                                <Text style={styles.compactQuickDeclineText}>Decline</Text>
-                              </Pressable>
+                        {!isConfirmed && !isDeclined && !isAcquired && item.bookingInfo.canRespond ? (
+                          <View style={styles.compactQuickActionRow}>
+                            <Pressable
+                              style={({ pressed }) => [
+                                styles.compactQuickDeclineBtn,
+                                pressed && { opacity: 0.8 },
+                              ]}
+                              disabled={responseBusy} onPress={(e) => {
+                                e.stopPropagation();
+                                confirmFromCard(item.id, 'reject');
+                              }}
+                            >
+                              <Ionicons name="close-circle-outline" size={16} color="#DC2626" style={{ marginRight: 4 }} />
+                              <Text style={styles.compactQuickDeclineText}>{uiText("Decline")}</Text>
+                            </Pressable>
 
-                              <Pressable
-                                style={({ pressed }) => [
-                                  styles.compactQuickAgreeBtn,
-                                  pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
-                                ]}
-                                disabled={responseBusy} onPress={(e) => {
-                                  e.stopPropagation();
-                                  confirmFromCard(item.id, 'accept');
-                                }}
-                              >
-                                <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                                <Text style={styles.compactQuickAgreeText}>Agree & Accept</Text>
-                              </Pressable>
-                            </View>
-                          ) : (
-                            <View style={styles.compactWaitingHomeownerBadge}>
-                              <Ionicons name="time-outline" size={14} color="#B45309" />
-                              <Text style={styles.compactWaitingHomeownerText}>
-                                Offer Sent • Waiting for Kasambahay response
-                              </Text>
-                            </View>
-                          )
+                            <Pressable
+                              style={({ pressed }) => [
+                                styles.compactQuickAgreeBtn,
+                                pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+                              ]}
+                              disabled={responseBusy} onPress={(e) => {
+                                e.stopPropagation();
+                                confirmFromCard(item.id, 'accept');
+                              }}
+                            >
+                              <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                              <Text style={styles.compactQuickAgreeText}>{uiText("Agree & Accept")}</Text>
+                            </Pressable>
+                          </View>
                         ) : null}
                       </View>
                     </React.Fragment>
@@ -1862,7 +1880,7 @@ export function ChatDetailScreen({
                   <View style={styles.replyBannerHeaderLeft}>
                     <Ionicons name="arrow-undo" size={13} color="#8E8E93" style={{ marginRight: 5 }} />
                     <Text style={styles.replyBannerAuthor}>
-                      Replying to <Text style={styles.replyBannerAuthorName}>{replyingTo.author}</Text>
+                      {uiText("Replying to")}<Text style={styles.replyBannerAuthorName}>{replyingTo.author}</Text>
                     </Text>
                   </View>
                   <Pressable
@@ -1882,26 +1900,30 @@ export function ChatDetailScreen({
           ) : null}
 
           {/* Messenger Style Input Footer */}
+          {!!safety?.restricted_until && !isSupportConversation && <View style={{ paddingHorizontal: 20, paddingVertical: 12 }}>
+            <Text style={{ color: '#6B7280', fontSize: 13 }}>{uiText("Messaging paused until")}{new Date(safety.restricted_until).toLocaleString()}{uiText(". Contact your Barangay desk or SerbiSure Support for help.")}</Text>
+          </View>}
           {isUploadingImage && (
             <View style={styles.uploadingBar}>
               <ActivityIndicator size="small" color="#FFB43B" />
-              <Text style={styles.uploadingText}>Sending photo...</Text>
+              <Text style={styles.uploadingText}>{uiText("Sending photo...")}</Text>
             </View>
           )}
           <View style={[styles.inputFooter, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-            <Pressable style={styles.attachBtn} onPress={handlePickImage}>
+            <Pressable style={styles.attachBtn} disabled={chatPaused} onPress={handlePickImage}>
               <Ionicons name="add-circle" size={32} color="#FFB43B" />
             </Pressable>
-            <Pressable style={styles.imageBtn} onPress={handlePickImage}>
+            <Pressable style={styles.imageBtn} disabled={chatPaused} onPress={handlePickImage}>
               <Ionicons name="image-outline" size={22} color="#888" />
             </Pressable>
 
             <TextInput
               ref={inputRef}
               style={styles.textInput}
-              placeholder="Type a message..."
+              placeholder={uiText("Type a message...")}
               placeholderTextColor="#888"
               value={inputMessage}
+              editable={!isSendingText && !chatPaused}
               onChangeText={(text) => {
                 setInputMessage(text);
                 handleTyping();
@@ -1912,13 +1934,13 @@ export function ChatDetailScreen({
             <Pressable
               style={({ pressed }) => [
                 styles.sendBtn,
-                !inputMessage.trim() && styles.sendBtnDisabled,
+                (!inputMessage.trim() || chatPaused) && styles.sendBtnDisabled,
                 pressed && { opacity: 0.8 },
               ]}
               onPress={handleSend}
-              disabled={!inputMessage.trim()}
+              disabled={!inputMessage.trim() || isSendingText || chatPaused}
             >
-              <Ionicons name="send" size={16} color="#FFFFFF" style={{ marginLeft: 2 }} />
+              {isSendingText ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name="send" size={16} color="#FFFFFF" style={{ marginLeft: 2 }} />}
             </Pressable>
           </View>
         </KeyboardAvoidingView>
@@ -1979,23 +2001,36 @@ export function ChatDetailScreen({
           }}
         />
 
-        {/* Counterparty Public Profile Modal */}
-        <UserProfileView
-          visible={profileModalVisible}
-          onClose={() => setProfileModalVisible(false)}
-          onMessage={() => setProfileModalVisible(false)}
-          userId={partnerId}
-          token={effectiveToken}
-          prefilledName={contactName}
-          prefilledAvatar={resolvedAvatar}
-          prefilledRole={contactRole}
-        />
+        {/* Counterparty profile. Official desks use a focused information view;
+            residents keep the existing public profile with posts and reviews. */}
+        {isSupportConversation ? (
+          <OfficialProfileModal
+            visible={profileModalVisible}
+            onClose={() => setProfileModalVisible(false)}
+            userId={partnerId}
+            token={effectiveToken}
+            prefilledName={contactName}
+            prefilledAvatar={resolvedAvatar}
+            prefilledRole={contactRole}
+          />
+        ) : (
+          <UserProfileView
+            visible={profileModalVisible}
+            onClose={() => setProfileModalVisible(false)}
+            onMessage={() => setProfileModalVisible(false)}
+            userId={partnerId}
+            token={effectiveToken}
+            prefilledName={contactName}
+            prefilledAvatar={resolvedAvatar}
+            prefilledRole={contactRole}
+          />
+        )}
 
         {/* Blurred Long-Press Action Menu & Reaction Overlay (Position-aware & Animated) */}
         {activeActionMenuMsg ? (() => {
           const isSender = activeActionMenuMsg.sender === 'me';
           const pillHeight = 44;
-          const menuHeight = activeActionMenuMsg.text ? 138 : 94;
+          const menuHeight = (activeActionMenuMsg.text ? 138 : 94) + (activeActionMenuMsg.sender === 'other' && !activeActionMenuMsg.bookingInfo ? 48 : 0);
           const bubbleHeight = activeMenuLayout?.height || 48;
           const bubbleWidth = activeMenuLayout?.width;
 
@@ -2130,7 +2165,7 @@ export function ChatDetailScreen({
                   }}
                 >
                   <Ionicons name="arrow-undo-outline" size={19} color="#1A1A1A" style={styles.actionMenuIcon} />
-                  <Text style={styles.actionMenuText}>Reply</Text>
+                  <Text style={styles.actionMenuText}>{uiText("Reply")}</Text>
                 </Pressable>
 
                 {/* Copy */}
@@ -2147,9 +2182,10 @@ export function ChatDetailScreen({
                     }}
                   >
                     <Ionicons name="copy-outline" size={19} color="#1A1A1A" style={styles.actionMenuIcon} />
-                    <Text style={styles.actionMenuText}>Copy</Text>
+                    <Text style={styles.actionMenuText}>{uiText("Copy")}</Text>
                   </Pressable>
                 ) : null}
+
 
                 {/* Unsend (if message sender is 'me') */}
                 {isSender ? (
@@ -2162,7 +2198,7 @@ export function ChatDetailScreen({
                     onPress={() => handleDeleteOrUnsend(activeActionMenuMsg, 'unsend')}
                   >
                     <Ionicons name="trash-outline" size={19} color="#EF4444" style={styles.actionMenuIcon} />
-                    <Text style={[styles.actionMenuText, { color: '#EF4444' }]}>Unsend</Text>
+                    <Text style={[styles.actionMenuText, { color: '#EF4444' }]}>{uiText("Unsend")}</Text>
                   </Pressable>
                 ) : null}
 
@@ -2177,7 +2213,7 @@ export function ChatDetailScreen({
                     onPress={() => handleDeleteOrUnsend(activeActionMenuMsg, 'delete_for_me')}
                   >
                     <Ionicons name="trash-outline" size={19} color="#EF4444" style={styles.actionMenuIcon} />
-                    <Text style={[styles.actionMenuText, { color: '#EF4444' }]}>Delete for me</Text>
+                    <Text style={[styles.actionMenuText, { color: '#EF4444' }]}>{uiText("Delete for me")}</Text>
                   </Pressable>
                 ) : null}
               </Animated.View>
@@ -2486,16 +2522,11 @@ const styles = StyleSheet.create({
   },
   compactBookingCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    borderRadius: 16,
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1.5 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
     borderWidth: 1,
     borderColor: '#ECECEC',
   },
@@ -2517,9 +2548,10 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.985 }],
   },
   compactBookingIconBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    flexShrink: 0,
     backgroundColor: '#E67E22',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2535,63 +2567,36 @@ const styles = StyleSheet.create({
   },
   compactBookingInfoCol: {
     flex: 1,
-    marginLeft: 12,
+    minWidth: 0,
+    marginLeft: 10,
     marginRight: 6,
     justifyContent: 'center',
   },
-  compactBookingTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   compactBookingTitle: {
-    fontSize: 15.5,
-    fontWeight: '800',
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: '700',
     color: '#0F172A',
     letterSpacing: -0.2,
   },
-  confirmedMicroBadge: {
-    backgroundColor: '#DCFCE7',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 6,
+  compactBookingStatus: {
+    fontWeight: '600',
   },
-  confirmedMicroBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
+  compactBookingStatusConfirmed: {
     color: '#15803D',
   },
-  declinedMicroBadge: {
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 6,
-  },
-  declinedMicroBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#DC2626',
-  },
-  acquiredMicroBadge: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 6,
-  },
-  acquiredMicroBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#475569',
+  compactBookingStatusDeclined: {
+    color: '#B91C1C',
   },
   compactBookingSubText: {
     fontSize: 12.5,
+    lineHeight: 18,
     color: '#64748B',
     marginTop: 2,
     fontWeight: '500',
   },
   compactBookingArrowWrap: {
+    flexShrink: 0,
     paddingLeft: 4,
   },
   compactQuickActionRow: {
@@ -2636,42 +2641,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 13.5,
-  },
-  compactWaitingHomeownerBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFBEB',
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-    borderRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginTop: 8,
-  },
-  compactWaitingHomeownerText: {
-    color: '#B45309',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 6,
-  },
-  compactAcquiredBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginTop: 8,
-  },
-  compactAcquiredText: {
-    color: '#475569',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 6,
   },
   listingClosedCard: {
     backgroundColor: '#F8FAFC',

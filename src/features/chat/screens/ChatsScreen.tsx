@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { StyleSheet, Text, View, Image, ScrollView, TextInput, Pressable, RefreshControl, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,12 +10,15 @@ import THEME from '../../../shared/theme/theme';
 import { NotificationBell } from '../../notifications/NotificationContext';
 
 import { ChatDetailScreen } from '../components/ChatDetailScreen';
+import { SupportContactsCard } from '../components/SupportContactsCard';
 import { chatStore, ChatConversation, cleanMessagePreview } from '../store/chatStore';
 import { useRealtimeStatus } from '../../../shared/realtime/useRealtimeStatus';
+import { useChatPresence } from '../../../shared/realtime/useChatPresence';
 
 const logoSource = require('../../../../assets/serbisure_new_clean.png');
 
 export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const { t } = useLanguage();
   const { user } = useUser();
@@ -25,13 +29,13 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
   const [isLoading, setIsLoading] = useState<boolean>(!chatStore.getIsLoaded());
   const [searchQuery, setSearchQuery] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [supportRefresh, setSupportRefresh] = useState(0);
   const [activeChat, setActiveChat] = useState<{
     visible: boolean;
     name: string;
     role: string;
     avatar: string;
     partnerId?: string;
-    isOnline?: boolean;
     initialReplyTo?: { author: string; text: string };
   }>({
     visible: false,
@@ -88,6 +92,7 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
+    setSupportRefresh(value => value + 1);
     await loadInboxData();
     setIsRefreshing(false);
   };
@@ -97,16 +102,19 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
     role: string,
     avatar: string,
     partnerId?: string,
-    isOnline?: boolean,
     initialReplyTo?: { author: string; text: string }
   ) => {
-    setActiveChat({ visible: true, name, role, avatar, partnerId, isOnline, initialReplyTo });
+    setActiveChat({ visible: true, name, role, avatar, partnerId, initialReplyTo });
   };
 
   const filteredChats = chatList.filter((c) =>
     c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.badge.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.message.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  const presence = useChatPresence(
+    user.token ? user.id || user.token : null,
+    filteredChats.flatMap(chat => chat.partnerId ? [chat.partnerId] : []),
   );
 
   return (
@@ -139,14 +147,13 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
 
         {/* Clean Header Area: Title & Pill Search */}
         <View style={styles.headerArea}>
-          <Text style={styles.headerTitle}>{t.chatsHeader || 'Messages'}</Text>
-          <Text accessibilityLiveRegion="polite" style={{ marginTop: 4, marginBottom: 8, fontSize: 12, color: liveStatus === 'connected' ? '#15803D' : '#71717A' }}>
-            {liveStatus === 'connected' ? '● Live updates' : liveStatus === 'unauthorized' ? 'Sign in again to restore live updates' : liveStatus === 'connecting' || liveStatus === 'idle' ? 'Connecting to live updates…' : 'Reconnecting… Messages will sync when connected.'}
-          </Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+            <Text style={styles.headerTitle}>{t.chatsHeader || 'Messages'}</Text>
+          </View>
           <View style={styles.searchContainer}>
             <Ionicons name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
             <TextInput
-              placeholder={t.searchChats || 'Search conversations...'}
+              placeholder={t.searchChats || 'Search messages'}
               placeholderTextColor="#9CA3AF"
               style={styles.searchInput}
               value={searchQuery}
@@ -158,9 +165,25 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
               </Pressable>
             )}
           </View>
+          {(liveStatus === 'unauthorized' || liveStatus === 'reconnecting') && (
+            <Text accessibilityLiveRegion="polite" style={styles.connectionNotice}>
+              {liveStatus === 'unauthorized' ? uiText("Please sign in again to receive new messages.") : uiText("Reconnecting…")}
+            </Text>
+          )}
         </View>
 
-        <Text style={styles.sectionHeader}>RECENT</Text>
+        <SupportContactsCard
+          key={user.id}
+          token={user.token}
+          profileKey={[user.barangay, user.city, user.province].join('|')}
+          refreshKey={supportRefresh}
+          onContact={contact => openChat(
+            contact.account_type === 'Barangay' ? `${contact.barangay} Barangay` : 'SerbiSure Support',
+            contact.account_type, contact.avatar || '', contact.id,
+          )}
+        />
+
+        <Text style={styles.sectionHeader}>{uiText("Recent messages")}</Text>
 
         <View style={styles.chatList}>
           {isLoading ? (
@@ -183,25 +206,33 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
               <View style={styles.emptyIconCircle}>
                 <Ionicons name="chatbubbles" size={32} color={THEME.colors.ink} />
               </View>
-              <Text style={styles.emptyTitle}>No conversations yet</Text>
+              <Text style={styles.emptyTitle}>{searchQuery.trim() ? uiText("No messages found") : uiText("No messages yet")}</Text>
               <Text style={styles.emptySub}>
-                {role === 'homeowner' ? 'When you connect with helpers, your chats will appear here.' : 'When you connect with homeowners, your chats will appear here.'}
+                {searchQuery.trim() ? uiText("Try another name or word.") : uiText("Your conversations will appear here.")}
               </Text>
             </View>
           ) : (
             filteredChats.map((chat) => {
               const hasUnread = (chat.unreadCount || 0) > 0;
+              const online = presence(chat.partnerId);
               return (
                 <Pressable
                   key={chat.id}
                   style={({ pressed }) => [styles.chatCard, pressed && styles.chatCardPressed]}
-                  onPress={() => openChat(chat.name, chat.badge, chat.avatar, chat.partnerId, chat.online)}
+                  onPress={() => openChat(chat.name, chat.badge, chat.avatar, chat.partnerId)}
                 >
                   <View style={styles.avatarContainer}>
                     <View style={styles.avatarPlaceholder}>
                       <Ionicons name="person" size={22} color="#9CA3AF" />
                     </View>
                     <Image source={{ uri: chat.avatar }} style={styles.avatar} fadeDuration={0} />
+                    {online !== undefined && (
+                      <View
+                        accessible
+                        accessibilityLabel={online ? uiText("Online") : uiText("Offline")}
+                        style={[styles.onlineDot, !online && styles.offlineDot]}
+                      />
+                    )}
                   </View>
 
                   <View style={styles.chatContent}>
@@ -209,9 +240,6 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
                       <Text style={[styles.name, hasUnread && styles.nameUnread]} numberOfLines={1}>
                         {chat.name}
                       </Text>
-                      <View style={styles.badge}>
-                        <Text style={styles.badgeText}>{chat.badge}</Text>
-                      </View>
                     </View>
 
                     <Text
@@ -221,7 +249,7 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
                       {cleanMessagePreview(chat.message)}
                       {chat.time ? (
                         <Text style={styles.messageTime}>
-                          {` · ${chat.time.replace(' ago', '')}`}
+                          {` · ${uiText(chat.time).replace(' ago', '')}`}
                         </Text>
                       ) : null}
                     </Text>
@@ -255,7 +283,6 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
         contactName={activeChat.name}
         contactRole={activeChat.role}
         contactAvatar={activeChat.avatar}
-        isOnline={activeChat.isOnline}
         initialReplyTo={activeChat.initialReplyTo}
         userRole={role}
       />
@@ -304,6 +331,7 @@ const styles = StyleSheet.create({
     color: THEME.colors.ink,
     marginBottom: 12,
   },
+  connectionNotice: { marginTop: 8, fontSize: 12, lineHeight: 18, color: '#71717A' },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -325,39 +353,38 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   sectionHeader: {
-    fontSize: 11,
+    fontSize: 12,
     fontFamily: THEME.typography.fontFamily.display,
     color: '#71717A',
-    letterSpacing: 1,
     paddingHorizontal: 20,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   chatList: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 0,
   },
   chatCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F0ED',
   },
   chatCardPressed: {
     backgroundColor: '#FAF9F6',
-    transform: [{ scale: 0.99 }],
   },
   avatarContainer: {
     position: 'relative',
-    marginRight: 14,
+    marginRight: 12,
     width: 50,
     height: 50,
     borderRadius: 25,
     backgroundColor: '#F3F4F6',
-    overflow: 'hidden',
   },
   avatarPlaceholder: {
     ...StyleSheet.absoluteFillObject,
+    borderRadius: 25,
     backgroundColor: '#E5E7EB',
     alignItems: 'center',
     justifyContent: 'center',
@@ -378,6 +405,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#FFFFFF',
   },
+  offlineDot: {
+    backgroundColor: '#D1D5DB',
+  },
   chatContent: {
     flex: 1,
   },
@@ -390,25 +420,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: THEME.typography.fontFamily.display,
     color: THEME.colors.ink,
-    marginRight: 6,
-    flexShrink: 1,
+    flex: 1,
   },
   nameUnread: {
     fontWeight: '800',
     color: '#000000',
-  },
-  badge: {
-    backgroundColor: '#FFB380',
-    paddingHorizontal: 7,
-    paddingVertical: 1.5,
-    borderRadius: 9999,
-    alignSelf: 'center',
-  },
-  badgeText: {
-    fontSize: 10,
-    fontFamily: THEME.typography.fontFamily.display,
-    color: '#0D0D11',
-    fontWeight: '800',
   },
   message: {
     fontSize: 13,
@@ -474,17 +490,18 @@ const styles = StyleSheet.create({
   skeletonChatCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F0ED',
   },
   skeletonAvatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
     backgroundColor: '#E2E8F0',
-    marginRight: 14,
+    marginRight: 12,
   },
   skeletonTextContainer: {
     flex: 1,

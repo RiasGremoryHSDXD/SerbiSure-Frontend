@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -5,6 +6,7 @@ import { SearchablePickerModal } from '../../../shared/ui/SearchablePickerModal'
 import type { WorkLocationForm } from '../workLocation';
 
 export function WorkLocationFields({ form, disabled = false, regionOnly = false }: { form: WorkLocationForm; disabled?: boolean; regionOnly?: boolean }) {
+  const { tr: uiText } = useUiLanguage();
   const pickers = [
     { key: 'region' as const, label: 'Region', selected: form.selectedRegion, list: form.regionsList, enabled: true, open: form.handleOpenRegionPicker, select: form.handleSelectRegion },
     { key: 'province' as const, label: 'Province', selected: form.selectedProvince, list: form.provincesList, enabled: !!form.selectedRegion, open: form.handleOpenProvincePicker, select: form.handleSelectProvince },
@@ -12,7 +14,7 @@ export function WorkLocationFields({ form, disabled = false, regionOnly = false 
     { key: 'barangay' as const, label: 'Barangay', selected: form.selectedBarangay, list: form.barangaysList, enabled: !!form.selectedCity, open: form.handleOpenBarangayPicker, select: form.handleSelectBarangay },
   ];
   return <View>
-    <Text style={styles.hint}>Select the actual work address. The region determines the applicable wage policy.</Text>
+    <Text style={styles.hint}>{uiText("Select the actual work address. The region determines the applicable wage policy.")}</Text>
     {pickers.filter(picker => !regionOnly || picker.key === 'region').map(picker => <View key={picker.key}>
       <Pressable accessibilityRole="button" accessibilityLabel={`Select work ${picker.label}`} style={[styles.field, (!picker.enabled || disabled) && styles.disabled]}
         disabled={!picker.enabled || disabled} onPress={picker.open}>

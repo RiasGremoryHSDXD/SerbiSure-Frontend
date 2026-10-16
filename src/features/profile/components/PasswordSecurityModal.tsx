@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, Modal, Pressable, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +15,7 @@ export function PasswordSecurityModal({
   onClose,
   token,
 }: PasswordSecurityModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -121,8 +123,8 @@ export function PasswordSecurityModal({
                 <Ionicons name="lock-closed" size={20} color="#FFB43B" />
               </View>
               <View style={{ marginLeft: 12 }}>
-                <Text style={styles.modalTitle}>Password & Security</Text>
-                <Text style={styles.modalSubtitle}>Manage your account credentials</Text>
+                <Text style={styles.modalTitle}>{uiText("Password & Security")}</Text>
+                <Text style={styles.modalSubtitle}>{uiText("Manage your account credentials")}</Text>
               </View>
             </View>
             <Pressable
@@ -149,7 +151,7 @@ export function PasswordSecurityModal({
 
             {/* Current Password */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Current Password</Text>
+              <Text style={styles.inputLabel}>{uiText("Current Password")}</Text>
               <View style={styles.passwordInputContainer}>
                 <TextInput
                   style={styles.passwordInput}
@@ -179,7 +181,7 @@ export function PasswordSecurityModal({
 
             {/* New Password */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>New Password</Text>
+              <Text style={styles.inputLabel}>{uiText("New Password")}</Text>
               <View style={styles.passwordInputContainer}>
                 <TextInput
                   style={styles.passwordInput}
@@ -209,7 +211,7 @@ export function PasswordSecurityModal({
 
             {/* Confirm New Password */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Confirm New Password</Text>
+              <Text style={styles.inputLabel}>{uiText("Confirm New Password")}</Text>
               <View style={styles.passwordInputContainer}>
                 <TextInput
                   style={styles.passwordInput}
@@ -246,8 +248,7 @@ export function PasswordSecurityModal({
                   color={isMinLength ? '#27AE60' : '#A0AEC0'}
                 />
                 <Text style={[styles.requirementText, isMinLength && styles.requirementTextActive]}>
-                  At least 8 characters long
-                </Text>
+                  {uiText("At least 8 characters long")}</Text>
               </View>
               <View style={styles.requirementRow}>
                 <Ionicons
@@ -256,8 +257,7 @@ export function PasswordSecurityModal({
                   color={isMatching ? '#27AE60' : '#A0AEC0'}
                 />
                 <Text style={[styles.requirementText, isMatching && styles.requirementTextActive]}>
-                  Passwords match
-                </Text>
+                  {uiText("Passwords match")}</Text>
               </View>
             </View>
 
@@ -265,16 +265,15 @@ export function PasswordSecurityModal({
             <View style={styles.tipCard}>
               <Ionicons name="shield-checkmark-outline" size={18} color="#D68910" style={{ marginRight: 8, marginTop: 1 }} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.tipTitle}>Security Tip</Text>
+                <Text style={styles.tipTitle}>{uiText("Security Tip")}</Text>
                 <Text style={styles.tipText}>
-                  Use a strong, unique password with a mix of letters, numbers, and symbols to protect your Serbisure account.
-                </Text>
+                  {uiText("Use a strong, unique password with a mix of letters, numbers, and symbols to protect your Serbisure account.")}</Text>
               </View>
             </View>
 
             {/* Data Privacy & Account Deletion Controls (Tier 3-5) */}
             <View style={styles.privacySection}>
-              <Text style={styles.privacySectionTitle}>DATA & PRIVACY</Text>
+              <Text style={styles.privacySectionTitle}>{uiText("DATA & PRIVACY")}</Text>
 
               {/* Export Data Button */}
               <Pressable
@@ -300,8 +299,8 @@ export function PasswordSecurityModal({
                   <Ionicons name="download-outline" size={18} color="#4B5563" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.privacyBtnText}>Download Personal Data Archive</Text>
-                  <Text style={styles.privacyBtnSubtext}>Export profile, bookings history, and reviews</Text>
+                  <Text style={styles.privacyBtnText}>{uiText("Download Personal Data Archive")}</Text>
+                  <Text style={styles.privacyBtnSubtext}>{uiText("Export profile, bookings history, and reviews")}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
               </Pressable>
@@ -371,8 +370,8 @@ export function PasswordSecurityModal({
                   <Ionicons name="trash-outline" size={18} color="#DC2626" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.privacyBtnText, { color: '#DC2626' }]}>Deactivate & Delete Account</Text>
-                  <Text style={styles.privacyBtnSubtext}>Anonymize data and deactivate profile</Text>
+                  <Text style={[styles.privacyBtnText, { color: '#DC2626' }]}>{uiText("Deactivate & Delete Account")}</Text>
+                  <Text style={styles.privacyBtnSubtext}>{uiText("Anonymize data and deactivate profile")}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#DC2626" />
               </Pressable>
@@ -387,7 +386,7 @@ export function PasswordSecurityModal({
               disabled={isSubmitting}
               onPress={handleClose}
             >
-              <Text style={styles.cancelModalBtnText}>Cancel</Text>
+              <Text style={styles.cancelModalBtnText}>{uiText("Cancel")}</Text>
             </Pressable>
 
             <Pressable
@@ -401,7 +400,7 @@ export function PasswordSecurityModal({
               {isSubmitting ? (
                 <ActivityIndicator size="small" color="#FFF" />
               ) : (
-                <Text style={styles.saveModalBtnText}>Update Password</Text>
+                <Text style={styles.saveModalBtnText}>{uiText("Update Password")}</Text>
               )}
             </Pressable>
           </View>

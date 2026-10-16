@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { Modal, Pressable, StyleSheet, Text, View, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -53,6 +54,7 @@ function IDCardWrong() {
 }
 
 export function IDPhotoModal({ visible, onClose, onPickedImage }: IDPhotoModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const handleTakePhoto = async () => {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -105,8 +107,8 @@ export function IDPhotoModal({ visible, onClose, onPickedImage }: IDPhotoModalPr
     >
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={styles.modal} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.title}>How to take an ID photo</Text>
-          <Text style={styles.subtitle}>Make sure the ID is right side up.</Text>
+          <Text style={styles.title}>{uiText("How to take an ID photo")}</Text>
+          <Text style={styles.subtitle}>{uiText("Make sure the ID is right side up.")}</Text>
 
           <View style={styles.examplesRow}>
             <View style={styles.example}>
@@ -130,14 +132,14 @@ export function IDPhotoModal({ visible, onClose, onPickedImage }: IDPhotoModalPr
               style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}
               onPress={handleTakePhoto}
             >
-              <Text style={styles.primaryBtnText}>Take Photo</Text>
+              <Text style={styles.primaryBtnText}>{uiText("Take Photo")}</Text>
             </Pressable>
 
             <Pressable
               style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
               onPress={handleUploadPhoto}
             >
-              <Text style={styles.secondaryBtnText}>Upload Photo</Text>
+              <Text style={styles.secondaryBtnText}>{uiText("Upload Photo")}</Text>
             </Pressable>
           </View>
         </Pressable>

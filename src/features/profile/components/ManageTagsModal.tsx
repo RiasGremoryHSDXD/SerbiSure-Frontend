@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, Pressable, Modal, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,6 +34,7 @@ export function ManageTagsModal({
   onSave,
   accountType,
 }: ManageTagsModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const [tags, setTags] = useState<string[]>([]);
   const [inputVal, setInputVal] = useState('');
@@ -105,9 +107,9 @@ export function ManageTagsModal({
           {/* Header */}
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>Profile Tags</Text>
+              <Text style={styles.headerTitle}>{uiText("Profile Tags")}</Text>
               <Text style={styles.headerSubtitle}>
-                Add tags to showcase your lifestyle, preferences, or skills ({tags.length}/10)
+                {uiText("Add tags to showcase your lifestyle, preferences, or skills (")}{tags.length}/10)
               </Text>
             </View>
             <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={8}>
@@ -150,7 +152,7 @@ export function ManageTagsModal({
                 disabled={!inputVal.trim() || tags.length >= 10}
               >
                 <Ionicons name="add" size={18} color="#FFF" />
-                <Text style={styles.addBtnText}>Add</Text>
+                <Text style={styles.addBtnText}>{uiText("Add")}</Text>
               </Pressable>
             </View>
 
@@ -165,17 +167,16 @@ export function ManageTagsModal({
             {/* Current Tags */}
             <View style={styles.sectionBlock}>
               <View style={styles.sectionHeadingRow}>
-                <Text style={styles.sectionHeading}>Your Current Tags</Text>
-                <Text style={styles.tagCounterText}>{tags.length} of 10 max</Text>
+                <Text style={styles.sectionHeading}>{uiText("Your Current Tags")}</Text>
+                <Text style={styles.tagCounterText}>{tags.length} {uiText("of 10 max")}</Text>
               </View>
 
               {tags.length === 0 ? (
                 <View style={styles.emptyTagsBox}>
                   <Ionicons name="pricetags-outline" size={28} color="#D1D5DB" />
-                  <Text style={styles.emptyTagsText}>No tags added yet.</Text>
+                  <Text style={styles.emptyTagsText}>{uiText("No tags added yet.")}</Text>
                   <Text style={styles.emptyTagsSub}>
-                    Create custom tags above or select from quick suggestions below.
-                  </Text>
+                    {uiText("Create custom tags above or select from quick suggestions below.")}</Text>
                 </View>
               ) : (
                 <View style={styles.tagsChipContainer}>
@@ -197,8 +198,8 @@ export function ManageTagsModal({
 
             {/* Suggested Tags */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionHeading}>Quick Suggestions</Text>
-              <Text style={styles.suggestionsSub}>Tap to quickly add to your profile:</Text>
+              <Text style={styles.sectionHeading}>{uiText("Quick Suggestions")}</Text>
+              <Text style={styles.suggestionsSub}>{uiText("Tap to quickly add to your profile:")}</Text>
 
               <View style={styles.suggestionsContainer}>
                 {SUGGESTIONS.map((sug) => {
@@ -244,7 +245,7 @@ export function ManageTagsModal({
           {/* Action Buttons */}
           <View style={styles.actionsFooter}>
             <Pressable style={styles.cancelBtn} onPress={onClose} disabled={saving}>
-              <Text style={styles.cancelBtnText}>Cancel</Text>
+              <Text style={styles.cancelBtnText}>{uiText("Cancel")}</Text>
             </Pressable>
 
             <Pressable
@@ -257,7 +258,7 @@ export function ManageTagsModal({
               ) : (
                 <>
                   <Ionicons name="checkmark-sharp" size={18} color="#FFF" style={{ marginRight: 6 }} />
-                  <Text style={styles.saveBtnText}>Save Tags</Text>
+                  <Text style={styles.saveBtnText}>{uiText("Save Tags")}</Text>
                 </>
               )}
             </Pressable>

@@ -44,6 +44,8 @@ const browse = load('src/features/feed/browsePresentation.ts');
 const bookingApi = load('src/features/bookings/api/bookingApi.ts');
 const bookingCards = load('src/features/chat/bookingCards.ts');
 const offersApi = load('src/features/chat/api/bookingOffersApi.ts');
+const chatApi = load('src/features/chat/api/chatApi.ts');
+const safetyApi = load('src/features/chat/api/chatSafetyApi.ts');
 const emptyFilters = { categories: [], bookingType: null, maxRate: null, location: '', sortBy: 'newest' };
 const dto = {
   booking_id: 'post-1', poster_id: 'author-1', poster_verification_status: 'Verified', name: 'Test User', profile_link: 'https://test.local/avatar.png',
@@ -56,6 +58,76 @@ async function withFetch(fetch, run) {
   global.fetch = fetch;
   try { return await run(); } finally { global.fetch = original; cache.clearExploreFeedCache(); }
 }
+
+test('support discovery authenticates the request without accepting a client-selected barangay', async () => {
+  const data = { superadmins: [{ id: 'admin', account_type: 'Admin', name: 'Support', avatar: null, barangay: null }],
+    barangay: { name: 'Pagatpat', available: false, contacts: [], message: 'Contact SerbiSure Support for help.' } };
+  await withFetch(async (url, options) => {
+    assert.equal(url, 'http://test.local/api/v1/chat/support-contacts/');
+    assert.equal(new Headers(options.headers).get('Authorization'), 'Bearer resident-token');
+    return response(data);
+  }, async () => assert.deepEqual(await chatApi.fetchSupportContacts('resident-token'), data));
+});
+
+test('chat sends preserve manual restriction errors and never retry denied requests', async () => {
+  let calls = 0;
+  await withFetch(async () => { calls++; return response({ code: 'messaging_restricted', detail: 'Please edit this message.', policy_version: 'v1' }, 403); }, async () => {
+    await assert.rejects(chatApi.sendChatMessage('token', 'recipient', 'unsuitable text'), error => {
+      assert.ok(error instanceof http.ApiError);
+      assert.equal(error.status, 403);
+      assert.equal(error.details.code, 'messaging_restricted');
+      assert.equal(error.message, 'Please edit this message.');
+      return true;
+    });
+  });
+  assert.equal(calls, 1);
+});
+
+test('manual suspension status remains authenticated without a report-case flow', async () => {
+  await withFetch(async (url, options) => {
+    assert.match(url, /safety\/status\/$/);
+    assert.equal(new Headers(options.headers).get('Authorization'), 'Bearer token');
+    return response({ restricted_until: null, support_available: true });
+  }, async () => {
+    assert.deepEqual(await safetyApi.fetchSafetyStatus('token'), { restricted_until: null, support_available: true });
+  });
+});
+
+test('successful masked sends preserve sanitized content and sender notice', async () => {
+  await withFetch(async () => response({ data: { chat_message_id: 'saved', message_payload: 'g*go' }, language_warning: 'Please communicate respectfully.' }, 201), async () => {
+    const result = await chatApi.sendChatMessage('token', 'recipient', 'gago');
+    assert.equal(result.data.message_payload, 'g*go');
+    assert.equal(result.language_warning, 'Please communicate respectfully.');
+  });
+});
+
+test('support discovery reports server and malformed-response errors instead of inventing contacts', async () => {
+  await withFetch(async () => response({ detail: 'Please sign in again.' }, 401), async () => {
+    await assert.rejects(chatApi.fetchSupportContacts('expired-token'), /Please sign in again/);
+  });
+  await withFetch(async () => response({ superadmins: [] }), async () => {
+    await assert.rejects(chatApi.fetchSupportContacts('token'), /could not be loaded/);
+  });
+});
+
+test('chat presence requires an explicit boolean or recognized header; missing and truthy strings stay unknown', async () => {
+  for (const [body, header, expected] of [
+    [{ data: [], partner_is_online: false }, 'true', false],
+    [{ data: [], partner_is_online: true }, null, true],
+    [{ results: [] }, 'true', true],
+    [[], 'false', false],
+    [{ data: [] }, null, undefined],
+    [{ data: [], partner_is_online: 'false' }, null, undefined],
+    [{ data: [], partner_is_online: 'true' }, null, undefined],
+    [{ data: [], partner_is_online: 1 }, null, undefined],
+  ]) {
+    await withFetch(async () => new Response(JSON.stringify(body), { status: 200,
+      headers: { 'Content-Type': 'application/json', ...(header ? { 'X-Partner-Is-Online': header } : {}) },
+    }), async () => {
+      assert.equal((await chatApi.fetchChatThreadDetails('token', 'contact')).partnerIsOnline, expected);
+    });
+  }
+});
 
 test('account roles select the correct posting mode and verification documents', () => {
   assert.equal(roles.resolveRole('Kasambahay'), 'kasambahay');

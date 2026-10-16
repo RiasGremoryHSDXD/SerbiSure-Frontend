@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, Pressable, Modal, ScrollView, ActivityIndicator, Alert, Switch, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,6 +38,7 @@ export function ManageSocialLinksModal({
   token,
   onSaved,
 }: ManageSocialLinksModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -173,9 +175,9 @@ export function ManageSocialLinksModal({
           {/* Header */}
           <View style={styles.sheetHeader}>
             <View>
-              <Text style={styles.sheetTitle}>Social Links & Contacts</Text>
+              <Text style={styles.sheetTitle}>{uiText("Social Links & Contacts")}</Text>
               <Text style={styles.sheetSubtitle}>
-                Add external accounts so clients can connect ({links.length}/5)
+                {uiText("Add external accounts so clients can connect (")}{links.length}/5)
               </Text>
             </View>
             <Pressable
@@ -191,7 +193,7 @@ export function ManageSocialLinksModal({
           {loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#FFB43B" />
-              <Text style={styles.loadingText}>Loading social accounts...</Text>
+              <Text style={styles.loadingText}>{uiText("Loading social accounts...")}</Text>
             </View>
           ) : (
             <ScrollView
@@ -210,10 +212,9 @@ export function ManageSocialLinksModal({
               {/* Public Visibility Toggle */}
               <View style={styles.toggleRow}>
                 <View style={{ flex: 1, marginRight: 12 }}>
-                  <Text style={styles.toggleLabel}>Display on Public Profile</Text>
+                  <Text style={styles.toggleLabel}>{uiText("Display on Public Profile")}</Text>
                   <Text style={styles.toggleSubtext}>
-                    When enabled, clients viewing your profile can see these links.
-                  </Text>
+                    {uiText("When enabled, clients viewing your profile can see these links.")}</Text>
                 </View>
                 <Switch
                   value={showPublic}
@@ -224,14 +225,13 @@ export function ManageSocialLinksModal({
               </View>
 
               {/* Existing Links List */}
-              <Text style={styles.sectionLabel}>YOUR LINKED ACCOUNTS</Text>
+              <Text style={styles.sectionLabel}>{uiText("YOUR LINKED ACCOUNTS")}</Text>
               {links.length === 0 ? (
                 <View style={styles.emptyCard}>
                   <Ionicons name="link-outline" size={26} color="#BDBDBD" />
-                  <Text style={styles.emptyText}>No social accounts added yet.</Text>
+                  <Text style={styles.emptyText}>{uiText("No social accounts added yet.")}</Text>
                   <Text style={styles.emptySubtext}>
-                    Add your Facebook, WhatsApp, or Instagram below.
-                  </Text>
+                    {uiText("Add your Facebook, WhatsApp, or Instagram below.")}</Text>
                 </View>
               ) : (
                 <View style={styles.linksList}>
@@ -275,7 +275,7 @@ export function ManageSocialLinksModal({
               {/* Add New Link Section */}
               {links.length < 5 && (
                 <View style={styles.addSection}>
-                  <Text style={styles.sectionLabel}>ADD A NEW ACCOUNT</Text>
+                  <Text style={styles.sectionLabel}>{uiText("ADD A NEW ACCOUNT")}</Text>
 
                   {/* Horizontal Platform Picker */}
                   <ScrollView
@@ -346,7 +346,7 @@ export function ManageSocialLinksModal({
                       disabled={!inputUrl.trim()}
                     >
                       <Ionicons name="add" size={20} color="#FFFFFF" />
-                      <Text style={styles.addBtnText}>Add</Text>
+                      <Text style={styles.addBtnText}>{uiText("Add")}</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -369,7 +369,7 @@ export function ManageSocialLinksModal({
                         color="#FFFFFF"
                         style={{ marginRight: 6 }}
                       />
-                      <Text style={styles.saveBtnText}>Save Changes</Text>
+                      <Text style={styles.saveBtnText}>{uiText("Save Changes")}</Text>
                     </>
                   )}
                 </Pressable>

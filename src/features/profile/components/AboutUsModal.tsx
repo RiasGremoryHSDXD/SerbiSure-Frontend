@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { StyleSheet, Text, View, Modal, Pressable, ScrollView, Image, Linking, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +11,7 @@ interface AboutUsModalProps {
 }
 
 export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const handleOpenEmail = () => {
     Linking.openURL('mailto:support@serbisure.ph?subject=Serbisure Support Inquiry').catch(() => { });
   };
@@ -34,8 +36,8 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
                 <Ionicons name="information-circle" size={22} color="#FFB43B" />
               </View>
               <View style={{ marginLeft: 12 }}>
-                <Text style={styles.modalTitle}>About Us</Text>
-                <Text style={styles.modalSubtitle}>Learn more about Serbisure</Text>
+                <Text style={styles.modalTitle}>{uiText("About Us")}</Text>
+                <Text style={styles.modalSubtitle}>{uiText("USTP CDO Capstone Research Project")}</Text>
               </View>
             </View>
             <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn}>
@@ -52,10 +54,9 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
               <Image source={logoSource} style={styles.logo} resizeMode="contain" />
               <Text style={styles.appName}>SerbiSure</Text>
               <Text style={styles.appTagline}>
-                Connecting Trusted Kasambahay & Filipino Homes
-              </Text>
+                {uiText("A capstone research project for safer, fairer household work")}</Text>
               <View style={styles.versionBadge}>
-                <Text style={styles.versionText}>Version 1.0.0 (Beta)</Text>
+                <Text style={styles.versionText}>{uiText("USTP CDO • 2026")}</Text>
               </View>
             </View>
 
@@ -63,20 +64,17 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="heart-outline" size={18} color="#FFB43B" style={{ marginRight: 8 }} />
-                <Text style={styles.sectionTitle}>Our Mission</Text>
+                <Text style={styles.sectionTitle}>{uiText("Our Mission")}</Text>
               </View>
               <Text style={styles.sectionParagraph}>
-                Serbisure was created to bridge the gap between hardworking Filipino domestic workers
-                and households seeking reliable, honest care. We empower Kasambahays through fair representation
-                and provide Homeowners with the peace of mind they deserve through verified identification.
-              </Text>
+                {uiText("SerbiSure is a capstone research project of the Department of Information Technology, College of Information and Computing, University of Science and Technology of Southern Philippines (USTP), Cagayan de Oro City. It responds to the informal domestic-work economy by helping Homeowners and Kasambahays connect, document engagements, and access safer, more accountable household work under Republic Act No. 10361, the Batas Kasambahay.")}</Text>
             </View>
 
             {/* Core Pillars */}
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="sparkles-outline" size={18} color="#FFB43B" style={{ marginRight: 8 }} />
-                <Text style={styles.sectionTitle}>Why Choose Serbisure?</Text>
+                <Text style={styles.sectionTitle}>{uiText("Research Pillars")}</Text>
               </View>
 
               <View style={styles.pillarItem}>
@@ -84,22 +82,20 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
                   <Ionicons name="shield-checkmark" size={18} color="#27AE60" />
                 </View>
                 <View style={styles.pillarTextCol}>
-                  <Text style={styles.pillarTitle}>Verified Credentials</Text>
+                  <Text style={styles.pillarTitle}>{uiText("Batas Kasambahay Compliance")}</Text>
                   <Text style={styles.pillarDesc}>
-                    National ID screening, NBI & Police Clearances reviewed with state-of-the-art OCR & official verification.
-                  </Text>
+                    {uiText("The platform is designed around RA 10361 and supports clearer engagements, documented work arrangements, and labor-protection safeguards for domestic workers.")}</Text>
                 </View>
               </View>
 
               <View style={styles.pillarItem}>
                 <View style={styles.pillarIconBox}>
-                  <Ionicons name="star" size={18} color="#F39C12" />
+                  <Ionicons name="git-branch-outline" size={18} color="#F39C12" />
                 </View>
                 <View style={styles.pillarTextCol}>
-                  <Text style={styles.pillarTitle}>Transparent Feedback</Text>
+                  <Text style={styles.pillarTitle}>{uiText("Dual-Tier Engagement Protection")}</Text>
                   <Text style={styles.pillarDesc}>
-                    AI sentiment-analyzed ratings and reviews ensure honest community insights for every booking.
-                  </Text>
+                    {uiText("Long-term contracts and short-term household tasks are supported with a three-booking monthly cap and a regional wage-floor safeguard to discourage misclassification.")}</Text>
                 </View>
               </View>
 
@@ -108,10 +104,20 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
                   <Ionicons name="people" size={18} color="#8E44AD" />
                 </View>
                 <View style={styles.pillarTextCol}>
-                  <Text style={styles.pillarTitle}>Community Centered</Text>
+                  <Text style={styles.pillarTitle}>{uiText("Barangay LGU Workforce Analytics")}</Text>
                   <Text style={styles.pillarDesc}>
-                    Built with local Philippine communities in mind, starting right here in Cagayan de Oro City.
-                  </Text>
+                    {uiText("Authorized Barangay officials and System Administrators can use aggregated, anonymized workforce metrics while worker identities remain protected from public exposure.")}</Text>
+                </View>
+              </View>
+
+              <View style={[styles.pillarItem, { marginBottom: 0 }]}>
+                <View style={styles.pillarIconBox}>
+                  <Ionicons name="language-outline" size={18} color="#3498DB" />
+                </View>
+                <View style={styles.pillarTextCol}>
+                  <Text style={styles.pillarTitle}>{uiText("Multilingual Local NLP")}</Text>
+                  <Text style={styles.pillarDesc}>
+                    {uiText("Feedback can be written in English, Filipino, Bisaya or Taglish and evaluated for transparent sentiment labels using a model suited to the local context.")}</Text>
                 </View>
               </View>
             </View>
@@ -120,7 +126,7 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="chatbubble-ellipses-outline" size={18} color="#FFB43B" style={{ marginRight: 8 }} />
-                <Text style={styles.sectionTitle}>Get in Touch</Text>
+                <Text style={styles.sectionTitle}>{uiText("Get in Touch")}</Text>
               </View>
 
               <Pressable style={styles.contactRow} onPress={handleOpenEmail}>
@@ -128,7 +134,7 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
                   <Ionicons name="mail-outline" size={18} color="#FFB43B" />
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.contactLabel}>Email Support</Text>
+                  <Text style={styles.contactLabel}>{uiText("Email Support")}</Text>
                   <Text style={styles.contactValue}>support@serbisure.ph</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#BDBDBD" />
@@ -139,7 +145,7 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
                   <Ionicons name="globe-outline" size={18} color="#FFB43B" />
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.contactLabel}>Official Website</Text>
+                  <Text style={styles.contactLabel}>{uiText("Official Website")}</Text>
                   <Text style={styles.contactValue}>https://serbisure.ph</Text>
                 </View>
                 <Ionicons name="open-outline" size={16} color="#BDBDBD" />
@@ -150,7 +156,7 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
                   <Ionicons name="location-outline" size={18} color="#FFB43B" />
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.contactLabel}>Headquarters</Text>
+                  <Text style={styles.contactLabel}>{uiText("Headquarters")}</Text>
                   <Text style={styles.contactValue}>Cagayan de Oro, Misamis Oriental, PH</Text>
                 </View>
               </View>
@@ -159,8 +165,8 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
             {/* Footer */}
             <View style={styles.footer}>
               <Text style={styles.footerText}>
-                © {new Date().getFullYear()} SerbiSure Technologies Inc. All rights reserved.
-              </Text>
+                {uiText("A capstone research project by USTP Cagayan de Oro City")}</Text>
+              <Text style={styles.footerText}>{uiText("Developed by the Department of Information Technology, College of Information and Computing.")}</Text>
             </View>
           </ScrollView>
         </View>

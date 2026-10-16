@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { Text, View, Pressable, Switch } from 'react-native';
 
@@ -10,6 +11,7 @@ import type { ProfileController } from '../hooks/useProfile';
 import { SettingsRow } from '../components/SettingsRow';
 
 export function SettingsSection({ profile }: { profile: ProfileController }) {
+  const { tr: uiText } = useUiLanguage();
   const {
     language,
     setLanguage,
@@ -22,6 +24,7 @@ export function SettingsSection({ profile }: { profile: ProfileController }) {
     setIsPasswordModalVisible,
     setIsAboutUsModalVisible,
     setIsPrivacyPolicyModalVisible,
+    setIsTermsModalVisible,
     setIsManageSocialLinksModalVisible,
     showContactNumber,
     isUpdatingPrivacy,
@@ -31,7 +34,7 @@ export function SettingsSection({ profile }: { profile: ProfileController }) {
   } = profile;
   return (<>
     {/* Group 1: ACCOUNT */}
-    <Text style={styles.groupHeaderLabel}>ACCOUNT</Text>
+    <Text style={styles.groupHeaderLabel}>{uiText("ACCOUNT")}</Text>
     <View style={styles.groupCard}>
       <SettingsRow
         icon="person"
@@ -60,12 +63,12 @@ export function SettingsSection({ profile }: { profile: ProfileController }) {
               ]}
             >
               {effectiveVerificationStatus === 'Pending'
-                ? 'Under Review'
+                ? uiText("Under Review")
                 : effectiveVerificationStatus === 'Verified'
-                  ? 'Verified'
+                  ? uiText("Verified")
                   : effectiveVerificationStatus === 'Rejected'
-                    ? 'Action Needed'
-                    : 'Get Verified'}
+                    ? uiText("Action Needed")
+                    : uiText("Get Verified")}
             </Text>
           </View>
         }
@@ -80,23 +83,23 @@ export function SettingsSection({ profile }: { profile: ProfileController }) {
       <View style={styles.rowDivider} />
       <SettingsRow
         icon={copy.bookingIcon}
-        title={copy.bookingTitle}
+        title={uiText(copy.bookingTitle)}
         onPress={() => openMyBookings('active')}
       />
       <View style={styles.rowDivider} />
       <SettingsRow
         icon="share-social"
-        title="Social Links & Contacts"
+        title={uiText("Social Links & Contacts")}
         onPress={() => setIsManageSocialLinksModalVisible(true)}
       />
     </View>
 
     {/* Group 2: PREFERENCES */}
-    <Text style={styles.groupHeaderLabel}>PREFERENCES</Text>
+    <Text style={styles.groupHeaderLabel}>{uiText("PREFERENCES")}</Text>
     <View style={[styles.groupCard, isLanguageExpanded ? { zIndex: 9999, elevation: 9999 } : { zIndex: 2, elevation: 0 }]}>
       <SettingsRow
         icon={showContactNumber ? 'eye' : 'eye-off'}
-        title="Show Contact Number"
+        title={uiText("Show Contact Number")}
         rightComponent={
           <Switch
             value={showContactNumber}
@@ -156,7 +159,7 @@ export function SettingsSection({ profile }: { profile: ProfileController }) {
     </View>
 
     {/* Group 3: SUPPORT & LEGAL */}
-    <Text style={styles.groupHeaderLabel}>SUPPORT & LEGAL</Text>
+    <Text style={styles.groupHeaderLabel}>{uiText("SUPPORT & LEGAL")}</Text>
     <View style={[styles.groupCard, { zIndex: 1, elevation: 0 }]}>
       <SettingsRow
         icon="information-circle"
@@ -168,6 +171,12 @@ export function SettingsSection({ profile }: { profile: ProfileController }) {
         icon="document-text"
         title={t.privacyPolicy}
         onPress={() => setIsPrivacyPolicyModalVisible(true)}
+      />
+      <View style={styles.rowDivider} />
+      <SettingsRow
+        icon="document-text-outline"
+        title={uiText("Terms and Conditions")}
+        onPress={() => setIsTermsModalVisible(true)}
       />
     </View>
   </>);

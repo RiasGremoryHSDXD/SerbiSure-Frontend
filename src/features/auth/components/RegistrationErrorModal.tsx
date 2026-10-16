@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useMemo } from 'react';
 import { Modal, View, Text, Pressable, ScrollView, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,7 @@ export interface ParsedRegistrationError {
   items: ParsedErrorItem[];
   hasAccountConflict: boolean;
   isNetworkError: boolean;
+  isRateLimited: boolean;
   suggestedStep: 1 | 2 | 3;
 }
 
@@ -33,12 +35,43 @@ export function parseRegistrationErrors(errorData: any): ParsedRegistrationError
       items: [],
       hasAccountConflict: false,
       isNetworkError: false,
+      isRateLimited: false,
       suggestedStep: 1,
     };
   }
 
   // Edge Case 2: Network / Timeout / Offline Error
   const rawStr = typeof errorData === 'string' ? errorData : errorData.message || errorData.detail || '';
+  if (errorData.code === 'registration_unconfirmed') {
+    return {
+      title: 'Registration Not Confirmed',
+      subtitle: 'We could not confirm whether your account was created. Please try signing in before submitting again.',
+      items: [],
+      hasAccountConflict: false,
+      isNetworkError: true,
+      isRateLimited: false,
+      suggestedStep: 3,
+    };
+  }
+  if (errorData.code === 'registration_throttled' || /too many (registration )?attempts|request was throttled/i.test(rawStr)) {
+    const retryAfter = Number(errorData.retry_after);
+    const minutes = Math.ceil((Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 300) / 60);
+    return {
+      title: 'Please Wait Before Trying Again',
+      subtitle: 'This attempt did not create an account. Your registration details are still here.',
+      items: [{
+        fieldKey: 'rate_limit',
+        label: 'Temporary Limit',
+        message: `Too many registration attempts. Please try again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`,
+        iconName: 'time-outline',
+        step: 3,
+      }],
+      hasAccountConflict: false,
+      isNetworkError: false,
+      isRateLimited: true,
+      suggestedStep: 3,
+    };
+  }
   const isNetwork =
     errorData instanceof Error ||
     /network|timeout|aborted|failed to fetch|econnrefused|unable to connect/i.test(rawStr);
@@ -58,6 +91,7 @@ export function parseRegistrationErrors(errorData: any): ParsedRegistrationError
       ],
       hasAccountConflict: false,
       isNetworkError: true,
+      isRateLimited: false,
       suggestedStep: 3,
     };
   }
@@ -70,6 +104,7 @@ export function parseRegistrationErrors(errorData: any): ParsedRegistrationError
       items: [],
       hasAccountConflict: false,
       isNetworkError: true,
+      isRateLimited: false,
       suggestedStep: 3,
     };
   }
@@ -145,7 +180,7 @@ export function parseRegistrationErrors(errorData: any): ParsedRegistrationError
   const items: ParsedErrorItem[] = [];
   let hasEmailConflict = false;
   let hasPhoneConflict = false;
-  let suggestedStep: 1 | 2 | 3 = 1;
+  let suggestedStep: 1 | 2 | 3 = 3;
 
   if (typeof errorData === 'object') {
     for (const [key, value] of Object.entries(errorData)) {
@@ -194,19 +229,20 @@ export function parseRegistrationErrors(errorData: any): ParsedRegistrationError
   const hasAccountConflict = hasEmailConflict || hasPhoneConflict;
 
   let title = 'Registration Issue';
-  let subtitle = 'Please review the highlighted details below to complete your registration.';
+  let subtitle = 'Your account has not been created. Please correct the details below and try again.';
 
   if (hasAccountConflict) {
-    title = 'Account Already Exists';
+    title = 'Email or Contact Number Already in Use';
     subtitle = hasEmailConflict && hasPhoneConflict
       ? 'Both this email and contact number are already associated with an existing account.'
       : hasEmailConflict
         ? 'This email address is already associated with an existing account.'
         : 'This contact number is already associated with an existing account.';
+    subtitle = `No new account was created. ${subtitle}`;
     suggestedStep = 1;
   } else if (items.length === 1 && items[0]?.fieldKey === 'password') {
     title = 'Password Requirement';
-    subtitle = 'Please adjust your password to meet the security requirements.';
+    subtitle = 'Your account has not been created. Please adjust your password to meet the security requirements.';
     suggestedStep = 1;
   }
 
@@ -216,6 +252,7 @@ export function parseRegistrationErrors(errorData: any): ParsedRegistrationError
     items,
     hasAccountConflict,
     isNetworkError: false,
+    isRateLimited: false,
     suggestedStep,
   };
 }
@@ -235,6 +272,7 @@ export function RegistrationErrorModal({
   onGoToStep,
   onNavigateToLogin,
 }: RegistrationErrorModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const parsed = useMemo(() => parseRegistrationErrors(errorData), [errorData]);
 
   if (!visible) return null;
@@ -300,7 +338,7 @@ export function RegistrationErrorModal({
               onPress={onClose}
               hitSlop={12}
               style={styles.closeIconButton}
-              accessibilityLabel="Close"
+              accessibilityLabel={uiText("Close")}
             >
               <Ionicons name="close" size={20} color={THEME.colors.textSecondary} />
             </Pressable>
@@ -315,8 +353,7 @@ export function RegistrationErrorModal({
             <View style={styles.conflictBanner}>
               <Ionicons name="information-circle" size={18} color="#E28B50" style={{ marginRight: 8, marginTop: 1 }} />
               <Text style={styles.conflictBannerText}>
-                If you already have an account, you can sign in directly. Or you can update your entries to use a different email or phone.
-              </Text>
+                {uiText("If you already have an account, you can sign in directly. Or you can update your entries to use a different email or phone.")}</Text>
             </View>
           )}
 
@@ -334,7 +371,7 @@ export function RegistrationErrorModal({
                     <Ionicons name={item.iconName} size={18} color="#EF4444" />
                   </View>
                   <View style={styles.errorItemContent}>
-                    <Text style={styles.errorItemLabel}>{item.label}</Text>
+                    <Text style={styles.errorItemLabel}>{uiText(item.label)}</Text>
                     <Text style={styles.errorItemMessage}>{item.message}</Text>
                   </View>
                 </View>
@@ -357,7 +394,7 @@ export function RegistrationErrorModal({
                     onPress={handleGoToLogin}
                   >
                     <Ionicons name="log-in-outline" size={20} color="#0D0D11" style={{ marginRight: 6 }} />
-                    <Text style={styles.brandButtonText}>Sign In to Account</Text>
+                    <Text style={styles.brandButtonText}>{uiText("Sign In to Account")}</Text>
                   </Pressable>
                 )}
 
@@ -369,10 +406,10 @@ export function RegistrationErrorModal({
                   ]}
                   onPress={handleFixDetails}
                 >
-                  <Text style={styles.secondaryButtonText}>Change Details in Step 1</Text>
+                  <Text style={styles.secondaryButtonText}>{uiText("Change Details in Step 1")}</Text>
                 </Pressable>
               </>
-            ) : parsed.isNetworkError ? (
+            ) : parsed.isNetworkError || parsed.isRateLimited ? (
               <>
                 <Pressable
                   style={({ pressed }) => [
@@ -382,7 +419,7 @@ export function RegistrationErrorModal({
                   ]}
                   onPress={onClose}
                 >
-                  <Text style={styles.darkButtonText}>Try Again</Text>
+                  <Text style={styles.darkButtonText}>{uiText(parsed.isRateLimited ? 'Back to Registration' : 'Try Again')}</Text>
                 </Pressable>
               </>
             ) : (
@@ -396,7 +433,7 @@ export function RegistrationErrorModal({
                   onPress={handleFixDetails}
                 >
                   <Text style={styles.darkButtonText}>
-                    Review & Fix (Step {parsed.suggestedStep})
+                    {uiText("Review & Fix (Step")}{parsed.suggestedStep})
                   </Text>
                 </Pressable>
 
@@ -407,7 +444,7 @@ export function RegistrationErrorModal({
                   ]}
                   onPress={onClose}
                 >
-                  <Text style={styles.secondaryButtonText}>Dismiss</Text>
+                  <Text style={styles.secondaryButtonText}>{uiText("Dismiss")}</Text>
                 </Pressable>
               </>
             )}

@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import type { WorkSetup } from '../workSetup';
 import { workSetupLabel } from '../workSetup';
 import { buildEngagementSchedule, normalizeServices, toggleService, SERVICE_CHOICES, WORK_SHIFTS, type WorkShift } from '../engagementForm';
@@ -105,6 +106,7 @@ export function BookingModal({
   isDeclined = false,
   isAcquired = false,
 }: BookingModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
 
   // Slide animation: Right to Left
@@ -331,14 +333,14 @@ export function BookingModal({
 
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         {!readOnly && <View style={styles.progressContainer}>
-          <View style={styles.progressMeta}><Text style={styles.progressText}>Step {offerStep} of {OFFER_STEPS.length}</Text>
+          <View style={styles.progressMeta}><Text style={styles.progressText}>{uiText("Step")}{offerStep} {uiText("of")}{OFFER_STEPS.length}</Text>
             <Text style={styles.progressHint}>{currentStep.label}</Text></View>
           <View style={styles.progressRow}>{OFFER_STEPS.map((item, index) => <Pressable key={item.label}
             accessibilityRole="button" accessibilityLabel={`Step ${index + 1}: ${item.label}`}
             accessibilityState={{ selected: offerStep === index + 1, disabled: index + 1 >= offerStep || submitting }}
             disabled={index + 1 >= offerStep || submitting} onPress={() => goToStep((index + 1) as BookingOfferStep)} style={styles.progressItem}>
             <View style={[styles.progressBar, index < offerStep && styles.progressBarActive]} />
-            <Text style={[styles.progressLabel, index + 1 === offerStep && styles.progressLabelActive]}>{item.label}</Text>
+            <Text style={[styles.progressLabel, index + 1 === offerStep && styles.progressLabelActive]}>{uiText(item.label)}</Text>
           </Pressable>)}</View>
         </View>}
         <ScrollView ref={scrollRef} style={styles.scrollView} contentContainerStyle={styles.scrollContent}
@@ -347,7 +349,7 @@ export function BookingModal({
             <ProfileAvatar uri={contactAvatar} name={contactName} size={40} />
             <View style={styles.workerTextCol}>
               <Text style={styles.workerName} numberOfLines={1}>{contactName}</Text>
-              <Text style={styles.kasambahaySub}>{contactRole} · {selectedBookingType === 'short_term' ? 'Short-term' : 'Long-term'}</Text>
+              <Text style={styles.kasambahaySub}>{contactRole} · {selectedBookingType === 'short_term' ? uiText("Short-term") : uiText("Long-term")}</Text>
             </View>
           </View>
           {!readOnly && <View style={styles.stepIntro} accessibilityLiveRegion="polite"><Text style={styles.stepTitle}>{offerStep === 1 && userRole === 'kasambahay' ? 'Which services will you offer?' : currentStep.title}</Text><Text style={styles.stepHint}>{currentStep.hint}</Text></View>}
@@ -358,20 +360,20 @@ export function BookingModal({
 
           {!readOnly && offerStep === 1 && <>
             <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>SERVICES</Text>
+              <Text style={styles.fieldLabel}>{uiText("SERVICES")}</Text>
               <View style={styles.serviceGrid}>{SERVICE_CHOICES.map(item => {
                 const selected = serviceCategory.includes(item.id);
                 return <Pressable key={item.id} disabled={submitting} accessibilityRole="button" accessibilityState={{ selected }}
                   style={[styles.serviceChoice, selected && styles.choiceActive]} onPress={() => setServiceCategory(current => toggleService(current, item.id))}>
                   <Ionicons name={item.icon} size={24} color={selected ? '#9A3412' : '#6B7280'} />
-                  <Text style={styles.choiceText}>{item.label}</Text>
+                  <Text style={styles.choiceText}>{uiText(item.label)}</Text>
                   {selected && <Ionicons style={styles.choiceCheck} name="checkmark-circle" size={16} color="#9A3412" />}
                 </Pressable>;
               })}</View>
               <Text style={styles.helperText}>{serviceCategory.includes('All-around') ? 'All-around includes all five services.' : 'Select one or more services. All five become All-around.'}</Text>
             </View>
             <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>WORK SETUP</Text>
+              <Text style={styles.fieldLabel}>{uiText("WORK SETUP")}</Text>
               <View style={styles.typeSelectorRow}>{(['stay_in', 'stay_out'] as const).map(value => <Pressable key={value}
                 accessibilityRole="button" accessibilityState={{ selected: workSetup === value }} disabled={submitting}
                 style={[styles.setupChoice, workSetup === value && styles.choiceActive]} onPress={() => setWorkSetup(value)}>
@@ -380,7 +382,7 @@ export function BookingModal({
               </Pressable>)}</View>
             </View>
             <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>ENGAGEMENT TYPE</Text>
+              <Text style={styles.fieldLabel}>{uiText("ENGAGEMENT TYPE")}</Text>
               <View style={styles.typeSelectorRow}>{(['short_term', 'long_term'] as const).map(value => <Pressable key={value}
                 accessibilityRole="button" accessibilityState={{ selected: selectedBookingType === value }} disabled={submitting}
                 style={[styles.termChoice, selectedBookingType === value && styles.choiceActive]}
@@ -388,7 +390,7 @@ export function BookingModal({
                   if (value !== selectedBookingType) { setSalary(''); setWorkHours(''); setSelectedShift(null); setSelectedDays([]); setEndDate(''); }
                   setSelectedBookingType(value);
                 }}>
-                <Text style={styles.choiceText}>{value === 'short_term' ? 'Short-term' : 'Long-term'}</Text>
+                <Text style={styles.choiceText}>{value === 'short_term' ? uiText("Short-term") : uiText("Long-term")}</Text>
                 <Text style={styles.helperText}>{value === 'short_term' ? 'A dated shift · daily pay' : 'Ongoing work · monthly pay'}</Text>
               </Pressable>)}</View>
             </View>
@@ -400,7 +402,7 @@ export function BookingModal({
             disabled={!visible || submitting} />}
           {!readOnly && offerStep === 3 && <>
             <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>WORK ADDRESS</Text>
+              <Text style={styles.fieldLabel}>{uiText("WORK ADDRESS")}</Text>
               <WorkLocationFields form={address} disabled={submitting} />
             </View>
             <View style={styles.formGroup}>
@@ -410,13 +412,13 @@ export function BookingModal({
                 <TextInput accessibilityLabel={selectedBookingType === 'short_term' ? 'Daily rate' : 'Monthly salary'}
                   style={styles.inputText} value={salary} onChangeText={setSalary} editable={!submitting} keyboardType="decimal-pad"
                   placeholder="Enter amount" placeholderTextColor="#9CA3AF" />
-                <Text style={styles.rateUnitSuffix}>{selectedBookingType === 'short_term' ? '/ day' : '/ month'}</Text>
+                <Text style={styles.rateUnitSuffix}>{selectedBookingType === 'short_term' ? uiText("/ day") : uiText("/ month")}</Text>
               </View>
-              {policyLoading ? <View style={styles.policyLoading}><ActivityIndicator size="small" color="#9A3412" /><Text style={styles.helperText}>Checking minimum pay…</Text></View>
+              {policyLoading ? <View style={styles.policyLoading}><ActivityIndicator size="small" color="#9A3412" /><Text style={styles.helperText}>{uiText("Checking minimum pay…")}</Text></View>
                 : minWageInfo ? <Text style={[styles.helperText, isBelowMinWage && styles.invalidRateHint]}>
-                  Minimum: ₱{Number(minWageInfo.minimum_rate).toLocaleString('en-PH')} / {minWageInfo.rate_period === 'day' ? 'day' : 'month'}
+                  {uiText("Minimum: ₱")}{Number(minWageInfo.minimum_rate).toLocaleString('en-PH')} / {minWageInfo.rate_period === 'day' ? uiText("day") : uiText("month")}
                 </Text> : !!region && <Pressable accessibilityRole="button" style={styles.retryPolicy} onPress={() => { setFormError(null); setPolicyAttempt(value => value + 1); }}>
-                  <Ionicons name="refresh-outline" size={16} color="#9A3412" /><Text style={styles.retryText}>Minimum pay unavailable · Retry</Text>
+                  <Ionicons name="refresh-outline" size={16} color="#9A3412" /><Text style={styles.retryText}>{uiText("Minimum pay unavailable · Retry")}</Text>
                 </Pressable>}
             </View>
           </>}
@@ -438,17 +440,17 @@ export function BookingModal({
             isAcquired ? (
               <View style={[styles.pendingBanner, { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1' }]}>
                 <Ionicons name="lock-closed" size={18} color="#64748B" style={{ marginRight: 6 }} />
-                <Text style={[styles.pendingBannerText, { color: '#475569' }]}>This job position has already been acquired.</Text>
+                <Text style={[styles.pendingBannerText, { color: '#475569' }]}>{uiText("This job position has already been acquired.")}</Text>
               </View>
             ) : isDeclined ? (
               <View style={[styles.pendingBanner, { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5' }]}>
                 <Ionicons name="close-circle" size={18} color="#EF4444" style={{ marginRight: 6 }} />
-                <Text style={[styles.pendingBannerText, { color: '#B91C1C' }]}>Booking Offer Declined</Text>
+                <Text style={[styles.pendingBannerText, { color: '#B91C1C' }]}>{uiText("Booking Offer Declined")}</Text>
               </View>
             ) : isConfirmed ? (
               <View style={styles.confirmedBanner}>
                 <Ionicons name="checkmark-circle" size={20} color="#4CAF50" style={{ marginRight: 6 }} />
-                <Text style={styles.confirmedBannerText}>Booking Confirmed</Text>
+                <Text style={styles.confirmedBannerText}>{uiText("Booking Confirmed")}</Text>
               </View>
             ) : canRespond ? (
               <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
@@ -472,7 +474,7 @@ export function BookingModal({
                   }}
                 >
                   <Ionicons name="close-circle-outline" size={18} color="#DC2626" style={{ marginRight: 6 }} />
-                  <Text style={styles.declineBtnText}>Decline</Text>
+                  <Text style={styles.declineBtnText}>{uiText("Decline")}</Text>
                 </Pressable>
 
                 <Pressable
@@ -494,27 +496,26 @@ export function BookingModal({
                   }}
                 >
                   <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
-                  <Text style={styles.agreeBtnText}>Agree & Accept</Text>
+                  <Text style={styles.agreeBtnText}>{uiText("Agree & Accept")}</Text>
                 </Pressable>
               </View>
             ) : (
               <View style={styles.pendingBanner}>
                 <Ionicons name="time-outline" size={18} color="#D97706" style={{ marginRight: 6 }} />
                 <Text style={styles.pendingBannerText}>
-                  Offer Sent • Waiting for {contactName || 'Kasambahay'} to accept or decline
-                </Text>
+                  {uiText("Offer Sent • Waiting for")}{contactName || uiText("Kasambahay")} {uiText("to accept or decline")}</Text>
               </View>
             )
           ) : (
             <View style={styles.footerRow}>
               <Pressable accessibilityRole="button" disabled={submitting} onPress={handleBack} style={styles.wizardBack}>
-                <Text style={styles.wizardBackText}>{offerStep === 1 ? 'Cancel' : 'Back'}</Text>
+                <Text style={styles.wizardBackText}>{offerStep === 1 ? uiText("Cancel") : uiText("Back")}</Text>
               </Pressable>
               <Pressable accessibilityRole="button" disabled={submitting || (offerStep === 3 && policyLoading)}
                 style={({ pressed }) => [styles.confirmBtn, styles.wizardNext, pressed && styles.pressedBtn, (submitting || (offerStep === 3 && policyLoading)) && styles.disabledBtn]}
                 onPress={offerStep === 4 ? handleConfirm : handleNext}>
                 {(submitting || (offerStep === 3 && policyLoading)) && <ActivityIndicator size="small" color="#0D0D11" />}
-                <Text style={styles.confirmBtnText}>{submitting ? 'Sending…' : offerStep === 3 && policyLoading ? 'Checking pay…' : offerStep === 4 ? 'Send Offer' : offerStep === 3 ? 'Review Offer' : 'Next'}</Text>
+                <Text style={styles.confirmBtnText}>{submitting ? 'Sending…' : offerStep === 3 && policyLoading ? 'Checking pay…' : offerStep === 4 ? 'Send Offer' : offerStep === 3 ? 'Review Offer' : uiText("Next")}</Text>
                 {!submitting && !(offerStep === 3 && policyLoading) && <Ionicons name={offerStep === 4 ? 'paper-plane-outline' : 'arrow-forward'} size={18} color="#0D0D11" />}
               </Pressable>
             </View>

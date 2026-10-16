@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../localization/LanguageContext';
 import React, { useState, useMemo } from 'react';
 import {
   Modal,
@@ -42,6 +43,7 @@ export function DemographicPickerModal({
   onSelect,
   onClose,
 }: DemographicPickerModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const [customValue, setCustomValue] = useState('');
   const [isTypingCustom, setIsTypingCustom] = useState(false);
@@ -116,7 +118,7 @@ export function DemographicPickerModal({
         {/* Custom input drawer if "Other" was clicked */}
         {isTypingCustom ? (
           <View style={styles.customInputCard}>
-            <Text style={styles.customInputLabel}>Please specify:</Text>
+            <Text style={styles.customInputLabel}>{uiText("Please specify:")}</Text>
             <View style={styles.customInputRow}>
               <TextInput
                 style={styles.customInput}
@@ -131,7 +133,7 @@ export function DemographicPickerModal({
                 disabled={!customValue.trim()}
                 onPress={handleConfirmCustom}
               >
-                <Text style={styles.customConfirmBtnText}>Save</Text>
+                <Text style={styles.customConfirmBtnText}>{uiText("Save")}</Text>
               </Pressable>
             </View>
           </View>
@@ -159,7 +161,7 @@ export function DemographicPickerModal({
                     style={[styles.optionLabel, isSelected && styles.optionLabelSelected]}
                     numberOfLines={1}
                   >
-                    {item.label}
+                    {uiText(item.label)}
                   </Text>
                   {item.sublabel ? (
                     <Text style={styles.optionSublabel} numberOfLines={1}>

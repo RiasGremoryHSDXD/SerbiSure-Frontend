@@ -12,18 +12,18 @@ import { fetchNotifications } from '../../notifications/api/notificationsApi';
 import { BookingItem, fetchMyBookings, cancelBooking } from '../../bookings/api/bookingApi';
 
 import { resolveRole, ROLE_CONFIG } from '../../../app/roleConfig';
-import { PROFILE_COPY } from '../profileConfig';
+import { localizeProfileCopy } from '../profileConfig';
 import type { ProfileScreenProps } from '../types';
 import { useWorkerProfile } from '../worker/useWorkerProfile';
 
 export function useProfile({ role: requestedRole, avatarUri, initialView = 'main', onUpdateAvatar, onBack, onLogout }: ProfileScreenProps) {
   const insets = useSafeAreaInsets();
-  const { language, setLanguage, t } = useLanguage();
+  const { language, setLanguage, t, tr } = useLanguage();
   const { getFullName, getFirstNameOnly, user, updateUser } = useUser();
   const role = requestedRole || resolveRole(user.accountType);
   const isWorker = ROLE_CONFIG[role].workerProfile;
   const requiredDocuments = ROLE_CONFIG[role].requiredDocuments;
-  const copy = PROFILE_COPY[role];
+  const copy = localizeProfileCopy(role, tr);
   const worker = useWorkerProfile(isWorker);
   const { isOnJob, analyticsData, isLoadingAnalytics, refreshWorkerProfile, handleToggleJobStatus } = worker;
   const [currentView, setCurrentView] = useState<'main' | 'personal_info'>(initialView);
@@ -44,6 +44,7 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
   const [isNotificationsModalVisible, setIsNotificationsModalVisible] = useState(false);
   const [isAboutUsModalVisible, setIsAboutUsModalVisible] = useState(false);
   const [isPrivacyPolicyModalVisible, setIsPrivacyPolicyModalVisible] = useState(false);
+  const [isTermsModalVisible, setIsTermsModalVisible] = useState(false);
   const [isMyBookingsModalVisible, setIsMyBookingsModalVisible] = useState(false);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [verificationData, setVerificationData] = useState<VerificationStatusResponse | null>(null);
@@ -358,6 +359,8 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
     setIsAboutUsModalVisible,
     isPrivacyPolicyModalVisible,
     setIsPrivacyPolicyModalVisible,
+    isTermsModalVisible,
+    setIsTermsModalVisible,
     isMyBookingsModalVisible,
     setIsMyBookingsModalVisible,
     verificationData,

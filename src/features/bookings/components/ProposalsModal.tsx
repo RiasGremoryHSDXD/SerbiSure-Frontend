@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { realtime } from '../../../shared/realtime';
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, Pressable, Modal, ActivityIndicator, Alert, ScrollView, Image } from 'react-native';
@@ -28,6 +29,7 @@ export function ProposalsModal({
   token,
   onUpdated,
 }: ProposalsModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
 
   const [proposals, setProposals] = useState<BookingProposal[]>([]);
@@ -93,7 +95,7 @@ export function ProposalsModal({
     setSubmitting(false);
 
     if (res.success) {
-      Alert.alert('Offer Submitted', 'Your proposed rate has been sent to the poster!');
+      Alert.alert(res.language_warning ? 'Notice' : 'Offer Submitted', res.language_warning || 'Your proposed rate has been sent to the poster!');
       setMessage('');
       setShowOfferForm(false);
       loadProposals();
@@ -157,20 +159,20 @@ export function ProposalsModal({
         >
           {/* Current Rate Banner */}
           {isPoster && rateNeedsReview ? <View style={{ padding: 16, backgroundColor: '#FFF4ED', borderRadius: 16, marginBottom: 12 }}>
-              <Text style={{ fontWeight: '700' }}>Confirm the monthly salary</Text>
-              <Text>This older post used an ambiguous rate field. Enter the actual monthly amount before accepting any proposal.</Text>
+              <Text style={{ fontWeight: '700' }}>{uiText("Confirm the monthly salary")}</Text>
+              <Text>{uiText("This older post used an ambiguous rate field. Enter the actual monthly amount before accepting any proposal.")}</Text>
               <TextInput value={counterRate} onChangeText={setCounterRate} keyboardType="decimal-pad" style={{ padding: 12, backgroundColor: '#FFFFFF', marginVertical: 8 }} />
               <Pressable disabled={submitting} onPress={confirmLegacyRate}><Text style={{ color: '#C2410C', fontWeight: '700' }}>{submitting ? 'Confirming...' : 'Confirm Monthly Amount'}</Text></Pressable>
             </View> : null}
             <View style={styles.rateBanner}>
-            <Text style={styles.rateBannerLabel}>LISTED RATE</Text>
+            <Text style={styles.rateBannerLabel}>{uiText("LISTED RATE")}</Text>
             <Text style={styles.rateBannerVal}>₱{currentRate || '0.00'} / {ratePeriod}</Text>
           </View>
 
           {/* Offer Form for Worker */}
           {!isPoster && (
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Your Proposed Rate</Text>
+              <Text style={styles.cardTitle}>{uiText("Your Proposed Rate")}</Text>
               <View style={styles.inputBox}>
                 <Text style={styles.pesoSign}>₱</Text>
                 <TextInput
@@ -184,7 +186,7 @@ export function ProposalsModal({
                 <Text style={styles.perDay}>/ {ratePeriod}</Text>
               </View>
 
-              <Text style={[styles.cardTitle, { marginTop: 14 }]}>Note / Message (Optional)</Text>
+              <Text style={[styles.cardTitle, { marginTop: 14 }]}>{uiText("Note / Message (Optional)")}</Text>
               <TextInput
                 style={styles.textArea}
                 multiline
@@ -203,7 +205,7 @@ export function ProposalsModal({
                 {submitting ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
-                  <Text style={styles.submitBtnText}>Submit Counter-Offer</Text>
+                  <Text style={styles.submitBtnText}>{uiText("Submit Counter-Offer")}</Text>
                 )}
               </Pressable>
             </View>
@@ -256,13 +258,13 @@ export function ProposalsModal({
                         style={styles.declineBtn}
                         onPress={() => handleRespond(item.proposal_id, 'reject')}
                       >
-                        <Text style={styles.declineBtnText}>Decline</Text>
+                        <Text style={styles.declineBtnText}>{uiText("Decline")}</Text>
                       </Pressable>
                       <Pressable
                         style={styles.acceptBtn}
                         onPress={() => handleRespond(item.proposal_id, 'accept')}
                       >
-                        <Text style={styles.acceptBtnText}>Accept Offer</Text>
+                        <Text style={styles.acceptBtnText}>{uiText("Accept Offer")}</Text>
                       </Pressable>
                     </View>
                   ) : null}
@@ -272,7 +274,7 @@ export function ProposalsModal({
           ) : (
             <View style={styles.emptyCard}>
               <Ionicons name="pricetags-outline" size={32} color="#D1D5DB" />
-              <Text style={styles.emptyTitle}>No proposals yet</Text>
+              <Text style={styles.emptyTitle}>{uiText("No proposals yet")}</Text>
               <Text style={styles.emptySubtitle}>
                 {isPoster
                   ? 'Counter-offers from interested workers will appear here.'

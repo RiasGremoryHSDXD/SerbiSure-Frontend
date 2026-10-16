@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState, useEffect } from 'react';
 import { Modal, StyleSheet, Text, View, Pressable, ScrollView, ActivityIndicator, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -115,6 +116,7 @@ export function VerificationStatusModal({
   onOpenUpload,
   role,
 }: VerificationStatusModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [idPhotoVisible, setIdPhotoVisible] = useState(false);
   const [activeBox, setActiveBox] = useState<'nbi' | 'police' | 'national_front' | 'national_back' | null>(null);
@@ -480,8 +482,7 @@ export function VerificationStatusModal({
             {/* Labels Row */}
             <View style={styles.progressLabelsRow}>
               <Text style={[styles.progressStepLabel, styles.progressStepLabelDone]}>
-                Submitted
-              </Text>
+                {uiText("Submitted")}</Text>
               <Text
                 style={[
                   styles.progressStepLabel,
@@ -492,8 +493,7 @@ export function VerificationStatusModal({
                 {isRejected ? 'Needs Action' : 'Being Reviewed'}
               </Text>
               <Text style={[styles.progressStepLabel, isApproved && styles.progressStepLabelDone]}>
-                Approved
-              </Text>
+                {uiText("Approved")}</Text>
             </View>
           </View>
         )}
@@ -503,8 +503,7 @@ export function VerificationStatusModal({
           <View style={styles.whatNextBox}>
             <Ionicons name="notifications-outline" size={15} color="#B45309" style={styles.whatNextIcon} />
             <Text style={styles.whatNextText}>
-              You'll get a notification once your documents are approved or if we need anything from you.
-            </Text>
+              {uiText("You'll get a notification once your documents are approved or if we need anything from you.")}</Text>
           </View>
         )}
       </View>
@@ -575,7 +574,7 @@ export function VerificationStatusModal({
                 isRejected && styles.statusBadgeTextRejected,
               ]}
             >
-              {isVerified ? 'Approved ✓' : isRejected ? 'Needs Re-upload' : 'Under Review'}
+              {isVerified ? 'Approved ✓' : isRejected ? 'Needs Re-upload' : uiText("Under Review")}
             </Text>
           </View>
         </View>
@@ -585,7 +584,7 @@ export function VerificationStatusModal({
           <View style={styles.rejectedCard}>
             <View style={styles.rejectedHeader}>
               <Ionicons name="close-circle" size={18} color="#DC2626" style={{ marginRight: 6 }} />
-              <Text style={styles.rejectedTitle}>This document was not accepted</Text>
+              <Text style={styles.rejectedTitle}>{uiText("This document was not accepted")}</Text>
             </View>
             <Text style={styles.rejectedReasonText}>
               {doc.rejection_reason
@@ -599,7 +598,7 @@ export function VerificationStatusModal({
                 onPress={() => handleReupload(doc.document_type)}
               >
                 <Ionicons name="camera-outline" size={17} color="#FFF" style={{ marginRight: 6 }} />
-                <Text style={styles.reuploadFullBtnText}>Upload a New Photo</Text>
+                <Text style={styles.reuploadFullBtnText}>{uiText("Upload a New Photo")}</Text>
               </Pressable>
 
               <Pressable
@@ -623,10 +622,9 @@ export function VerificationStatusModal({
           <View style={styles.ocrScanningBanner}>
             <ActivityIndicator size="small" color="#D97706" style={{ marginRight: 10 }} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.ocrScanningTitle}>Reading your document...</Text>
+              <Text style={styles.ocrScanningTitle}>{uiText("Reading your document...")}</Text>
               <Text style={styles.ocrScanningSubtitle}>
-                Our system is checking the details on your {docTitle}. This takes just a moment.
-              </Text>
+                {uiText("Our system is checking the details on your")}{docTitle}{uiText(". This takes just a moment.")}</Text>
             </View>
           </View>
         ) : (!isRejected && (hasOcrData || hasDiscrepancies)) ? (
@@ -672,18 +670,17 @@ export function VerificationStatusModal({
                   <View style={styles.friendlyNoticeBox}>
                     <View style={styles.friendlyNoticeHeader}>
                       <Ionicons name="bulb-outline" size={18} color="#92400E" style={{ marginRight: 6 }} />
-                      <Text style={styles.friendlyNoticeTitle}>Don't worry — this is common!</Text>
+                      <Text style={styles.friendlyNoticeTitle}>{uiText("Don't worry — this is common!")}</Text>
                     </View>
                     <Text style={styles.friendlyNoticeText}>
-                      The name on your ID looks slightly different from your SerbiSure profile (for example, a nickname or middle name). Barangay officials will check your actual photo ID during review.
-                    </Text>
+                      {uiText("The name on your ID looks slightly different from your SerbiSure profile (for example, a nickname or middle name). Barangay officials will check your actual photo ID during review.")}</Text>
                   </View>
                 )}
 
                 {/* Section A: What We Noticed (Replaces Account vs Document Discrepancy) */}
                 {hasDiscrepancies && (
                   <View style={styles.discrepancyBox}>
-                    <Text style={styles.discrepancyBoxHeaderLabel}>Here is what we noticed:</Text>
+                    <Text style={styles.discrepancyBoxHeaderLabel}>{uiText("Here is what we noticed:")}</Text>
 
                     {doc.ocr_discrepancies.map((disc, idx) => {
                       const fieldLabel = EXTRACTED_FIELD_LABELS[disc.field] || disc.field;
@@ -692,14 +689,14 @@ export function VerificationStatusModal({
                           <Text style={styles.humanFieldBadge}>{fieldLabel.toUpperCase()}</Text>
 
                           <View style={styles.humanRow}>
-                            <Text style={styles.humanLabel}>Your profile says:</Text>
+                            <Text style={styles.humanLabel}>{uiText("Your profile says:")}</Text>
                             <Text style={styles.humanValProfile}>{disc.profile_value || '(Not set)'}</Text>
                           </View>
 
                           <View style={styles.humanRowDivider} />
 
                           <View style={styles.humanRow}>
-                            <Text style={styles.humanLabel}>Your document shows:</Text>
+                            <Text style={styles.humanLabel}>{uiText("Your document shows:")}</Text>
                             <Text style={styles.humanValDoc}>{disc.document_value || '(Not found)'}</Text>
                           </View>
                         </View>
@@ -709,8 +706,7 @@ export function VerificationStatusModal({
                     <View style={styles.profileTipRow}>
                       <Ionicons name="create-outline" size={15} color="#92400E" style={{ marginRight: 6 }} />
                       <Text style={styles.profileTipText}>
-                        If there is a typo in your SerbiSure name, you can update it anytime in Profile Settings.
-                      </Text>
+                        {uiText("If there is a typo in your SerbiSure name, you can update it anytime in Profile Settings.")}</Text>
                     </View>
                   </View>
                 )}
@@ -758,11 +754,11 @@ export function VerificationStatusModal({
 
     return (
       <View style={styles.uploadSection}>
-        <Text style={styles.uploadSectionHeader}>Upload Documents</Text>
+        <Text style={styles.uploadSectionHeader}>{uiText("Upload Documents")}</Text>
 
         {needsNbi ? (
           <UploadBox
-            title="NBI Clearance"
+            title={uiText("NBI Clearance")}
             subtitle="Click or drag file to upload"
             image={nbiImage}
             defaultFilename="nbi_clearance.jpg"
@@ -773,7 +769,7 @@ export function VerificationStatusModal({
 
         {needsPolice ? (
           <UploadBox
-            title="Police Clearance"
+            title={uiText("Police Clearance")}
             subtitle="Click or drag file to upload"
             image={policeImage}
             defaultFilename="police_clearance.jpg"
@@ -784,7 +780,7 @@ export function VerificationStatusModal({
 
         {needsFront ? (
           <UploadBox
-            title="National ID (Front)"
+            title={uiText("National ID (Front)")}
             subtitle="Tap or upload image"
             image={nationalFrontImage}
             defaultFilename="national_id_front.jpg"
@@ -795,7 +791,7 @@ export function VerificationStatusModal({
 
         {needsBack ? (
           <UploadBox
-            title="National ID (Back)"
+            title={uiText("National ID (Back)")}
             subtitle="Tap or upload image"
             image={nationalBackImage}
             defaultFilename="national_id_back.jpg"
@@ -815,7 +811,7 @@ export function VerificationStatusModal({
             ) : (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Ionicons name="cloud-upload-outline" size={16} color="#FFF" />
-                <Text style={styles.submitBtnText}>Submit Documents</Text>
+                <Text style={styles.submitBtnText}>{uiText("Submit Documents")}</Text>
               </View>
             )}
           </Pressable>
@@ -833,7 +829,7 @@ export function VerificationStatusModal({
             <View style={styles.header}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Ionicons name="shield-checkmark" size={22} color="#FFB43B" style={{ marginRight: 8 }} />
-                <Text style={styles.headerTitle}>Document Verification</Text>
+                <Text style={styles.headerTitle}>{uiText("Document Verification")}</Text>
               </View>
               <Pressable onPress={handleClose} hitSlop={8}>
                 <Ionicons name="close" size={24} color="#333" />
@@ -844,7 +840,7 @@ export function VerificationStatusModal({
               {loading ? (
                 <View style={styles.loadingBox}>
                   <ActivityIndicator size="large" color="#FFB43B" />
-                  <Text style={styles.loadingText}>Loading verification status...</Text>
+                  <Text style={styles.loadingText}>{uiText("Loading verification status...")}</Text>
                 </View>
               ) : (
                 <>
@@ -852,7 +848,7 @@ export function VerificationStatusModal({
 
                   {statusData?.documents && statusData.documents.length > 0 ? (
                     <>
-                      <Text style={styles.sectionHeader}>Submitted Documents</Text>
+                      <Text style={styles.sectionHeader}>{uiText("Submitted Documents")}</Text>
                       {statusData.documents.map(renderDocumentItem)}
                     </>
                   ) : null}
@@ -865,7 +861,7 @@ export function VerificationStatusModal({
             {/* Footer */}
             <View style={styles.footer}>
               <Pressable style={styles.closeFooterBtn} onPress={handleClose}>
-                <Text style={styles.closeFooterBtnText}>Close</Text>
+                <Text style={styles.closeFooterBtnText}>{uiText("Close")}</Text>
               </Pressable>
             </View>
           </View>

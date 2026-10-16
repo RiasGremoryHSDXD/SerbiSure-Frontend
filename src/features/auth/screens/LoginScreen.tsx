@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +16,7 @@ type LoginScreenProps = {
 };
 
 export function LoginScreen({ onLoginSuccess, onSignUp, onBack }: LoginScreenProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -121,7 +123,7 @@ export function LoginScreen({ onLoginSuccess, onSignUp, onBack }: LoginScreenPro
         <View style={styles.brandHeader}>
           <Image source={logoSource} style={styles.logo} resizeMode="contain" />
           <Text style={styles.brandTitle}>SerbiSure</Text>
-          <Text style={styles.brandSubtitle}>Connecting kasambahays and homeowners</Text>
+          <Text style={styles.brandSubtitle}>{uiText("Connecting kasambahays and homeowners")}</Text>
         </View>
 
         {/* Login Form White Card */}
@@ -175,11 +177,11 @@ export function LoginScreen({ onLoginSuccess, onSignUp, onBack }: LoginScreenPro
                 size={18}
                 color="#000000"
               />
-              <Text style={styles.rememberText}>Remember me</Text>
+              <Text style={styles.rememberText}>{uiText("Remember me")}</Text>
             </Pressable>
 
             <Pressable style={styles.forgotBtn}>
-              <Text style={styles.forgotText}>Forgot Password?</Text>
+              <Text style={styles.forgotText}>{uiText("Forgot Password?")}</Text>
             </Pressable>
           </View>
 
@@ -196,7 +198,7 @@ export function LoginScreen({ onLoginSuccess, onSignUp, onBack }: LoginScreenPro
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <>
-                <Text style={styles.loginBtnText}>Log in</Text>
+                <Text style={styles.loginBtnText}>{uiText("Log in")}</Text>
                 <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 8 }} />
               </>
             )}
@@ -207,9 +209,9 @@ export function LoginScreen({ onLoginSuccess, onSignUp, onBack }: LoginScreenPro
 
           {/* Sign Up Link */}
           <View style={styles.signupRow}>
-            <Text style={styles.signupText}>Don't have an account? </Text>
+            <Text style={styles.signupText}>{uiText("Don't have an account?")}</Text>
             <Pressable onPress={onSignUp}>
-              <Text style={styles.signupLink}>Sign up</Text>
+              <Text style={styles.signupLink}>{uiText("Sign up")}</Text>
             </Pressable>
           </View>
         </View>

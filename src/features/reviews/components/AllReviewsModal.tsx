@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState, useMemo } from 'react';
 import { StyleSheet, Text, View, Modal, ScrollView, Pressable, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +25,7 @@ export function AllReviewsModal({
   positivePercentage,
   title = 'Reviews & Feedback',
 }: AllReviewsModalProps) {
+  const { tr: uiText, formatDate } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const [activeFilter, setActiveFilter] = useState<FilterTab>('All');
 
@@ -92,8 +94,8 @@ export function AllReviewsModal({
             <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
           </Pressable>
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>{title}</Text>
-            <Text style={styles.headerSubtitle}>{(reviews || []).length} total client reviews</Text>
+            <Text style={styles.headerTitle}>{uiText(title)}</Text>
+            <Text style={styles.headerSubtitle}>{uiText('{count} total reviews', { count: reviews.length })}</Text>
           </View>
           <View style={{ width: 40 }} />
         </View>
@@ -118,7 +120,7 @@ export function AllReviewsModal({
                   />
                 ))}
               </View>
-              <Text style={styles.summarySubText}>Based on {(reviews || []).length} reviews</Text>
+              <Text style={styles.summarySubText}>{uiText('Based on {count} reviews', { count: reviews.length })}</Text>
             </View>
 
             <View style={styles.summaryDivider} />
@@ -128,13 +130,12 @@ export function AllReviewsModal({
                 <Ionicons name="sparkles" size={13} color="#059669" style={{ marginRight: 4 }} />
                 <Text style={styles.sentimentPillText}>
                   {positivePercentage !== null && positivePercentage !== undefined
-                    ? `${positivePercentage}% Positive`
-                    : `${counts.Positive} Positive`}
+                    ? uiText('{count}% Positive', { count: positivePercentage })
+                    : uiText('{count} Positive', { count: counts.Positive })}
                 </Text>
               </View>
               <Text style={styles.sentimentHelperText}>
-                {counts.Neutral} Neutral • {counts.Negative} Negative
-              </Text>
+                {uiText('{neutral} Neutral · {negative} Negative', { neutral: counts.Neutral, negative: counts.Negative })}</Text>
             </View>
           </View>
 
@@ -150,7 +151,7 @@ export function AllReviewsModal({
                   style={[styles.filterChip, isActive && styles.filterChipActive]}
                 >
                   <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
-                    {tab} ({count})
+                    {uiText(tab)} ({count})
                   </Text>
                 </Pressable>
               );
@@ -161,8 +162,8 @@ export function AllReviewsModal({
           {filteredReviews.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="chatbox-ellipses-outline" size={38} color="#CBD5E1" />
-              <Text style={styles.emptyTitle}>No {activeFilter} reviews</Text>
-              <Text style={styles.emptySubtitle}>There are currently no reviews in this category.</Text>
+              <Text style={styles.emptyTitle}>{activeFilter === 'All' ? uiText('No reviews yet') : uiText('No {sentiment} reviews', { sentiment: uiText(activeFilter) })}</Text>
+              <Text style={styles.emptySubtitle}>{uiText("There are currently no reviews in this category.")}</Text>
             </View>
           ) : (
             filteredReviews.map((r) => {
@@ -189,16 +190,12 @@ export function AllReviewsModal({
                       )}
                       <View style={{ marginLeft: 10, flex: 1 }}>
                         <Text style={styles.reviewerName} numberOfLines={1}>
-                          {r.reviewer_name || 'Verified Client'}
+                          {r.reviewer_name || uiText("Verified Client")}
                         </Text>
                         <Text style={styles.reviewDate}>
                           {r.createdAt
-                            ? new Date(r.createdAt).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })
-                            : 'Verified review'}
+                            ? formatDate(r.createdAt)
+                            : uiText("Verified review")}
                         </Text>
                       </View>
                     </View>
@@ -217,7 +214,7 @@ export function AllReviewsModal({
                         style={{ marginRight: 3 }}
                       />
                       <Text style={[styles.sentimentBadgeText, { color: badgeStyle.text }]}>
-                        {r.nlp_sentiment || 'Positive'}
+                        {uiText(r.nlp_sentiment || 'Positive')}
                       </Text>
                     </View>
                   </View>

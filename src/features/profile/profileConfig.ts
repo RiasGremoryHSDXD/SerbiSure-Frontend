@@ -24,3 +24,15 @@ export const PROFILE_COPY = {
     sentimentKey: 'clientSentiment',
   },
 } as const;
+
+export function localizeProfileCopy(role: keyof typeof PROFILE_COPY, translate: (source: string) => string) {
+  const copy = PROFILE_COPY[role];
+  return {
+    ...copy,
+    name: translate(copy.name), addTags: translate(copy.addTags), aboutSubtitle: translate(copy.aboutSubtitle),
+    addBio: translate(copy.addBio), emptyBio: translate(copy.emptyBio), pendingPosts: translate(copy.pendingPosts),
+    emptyPosts: translate(copy.emptyPosts), waiting: translate(copy.waiting), reviewer: translate(copy.reviewer),
+    reviewTitle: translate(copy.reviewTitle), bookingTitle: translate(copy.bookingTitle), pendingTitle: translate(copy.pendingTitle),
+    pendingDescription: translate(copy.pendingDescription), bioHelp: translate(copy.bioHelp), bioPlaceholder: translate(copy.bioPlaceholder),
+  };
+}

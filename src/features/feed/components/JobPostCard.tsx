@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -5,6 +6,7 @@ import THEME from '../../../shared/theme/theme';
 import type { FeedPost } from '../types';
 
 export function JobPostCard({ post: job, saved, applied, onViewProfile, onDetails, onToggleSave }: { post: FeedPost; saved: boolean; applied: boolean; onViewProfile: () => void; onDetails: () => void; onToggleSave: () => void }) {
+  const { tr: uiText } = useUiLanguage();
   return (
     <Pressable style={styles.jobCard} onPress={onDetails}>
       <View style={styles.jobHeader}>
@@ -15,14 +17,14 @@ export function JobPostCard({ post: job, saved, applied, onViewProfile, onDetail
           <Pressable style={styles.nameRow} onPress={onViewProfile} hitSlop={6}>
             <Text style={styles.employerName}>{job.employerName}</Text>
           </Pressable>
-          <Text style={styles.postTime}>{job.time}</Text>
+          <Text style={styles.postTime}>{uiText(job.time)}</Text>
 
           <View style={styles.tagsRow}>
             <View style={[styles.tagBadge, styles.tagRole]}>
-              <Text style={styles.tagRoleText}>{job.roleTag}</Text>
+              <Text style={styles.tagRoleText}>{uiText(job.roleTag)}</Text>
             </View>
             <View style={[styles.tagBadge, styles.tagTerm]}>
-              <Text style={styles.tagTermText}>{job.termTag}</Text>
+              <Text style={styles.tagTermText}>{uiText(job.termTag)}</Text>
             </View>
           </View>
         </View>
@@ -45,7 +47,7 @@ export function JobPostCard({ post: job, saved, applied, onViewProfile, onDetail
 
       <View style={styles.jobFooter}>
         <Text style={styles.priceText}>
-          {job.price} <Text style={styles.unitText}>{job.unit}</Text>
+          {job.price} <Text style={styles.unitText}>{uiText(job.unit)}</Text>
         </Text>
 
         <Pressable
@@ -53,7 +55,7 @@ export function JobPostCard({ post: job, saved, applied, onViewProfile, onDetail
           onPress={onDetails}
         >
           <Text style={[styles.seeDetailsText, applied && styles.seeDetailsTextApplied]}>
-            {applied ? 'Applied' : 'See Details'}
+            {applied ? uiText("Applied") : uiText("See Details")}
           </Text>
         </Pressable>
       </View>
