@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../shared/localization/LanguageContext';
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { realtime } from '../../shared/realtime';
 import { AppState, StyleSheet, Text, View, Pressable } from 'react-native';
@@ -86,6 +87,7 @@ export function useNotifications() {
 }
 
 export function NotificationBell() {
+  const { tr: uiText } = useUiLanguage();
   const { unreadCount, openNotifications } = useNotifications();
 
   return (
@@ -94,7 +96,7 @@ export function NotificationBell() {
       onPress={openNotifications}
       hitSlop={8}
       accessibilityRole="button"
-      accessibilityLabel="Notifications"
+      accessibilityLabel={uiText("Notifications")}
     >
       <Ionicons name="notifications-outline" size={21} color={THEME.colors.ink} />
       {unreadCount > 0 && (

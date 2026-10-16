@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { realtime } from '../../../shared/realtime';
 import { AppState } from 'react-native';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -157,6 +158,7 @@ export function NotificationsModal({
   token,
   onUnreadCountChange,
 }: NotificationsModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -468,18 +470,18 @@ export function NotificationsModal({
                 style={[styles.senderName, isUnread && styles.senderNameUnread]}
                 numberOfLines={1}
               >
-                {meta.displayTitle}
+                {meta.category === 'verification' || !item.sender_name ? uiText(meta.displayTitle) : meta.displayTitle}
               </Text>
               <View style={[styles.categoryPill, { backgroundColor: meta.iconBg }]}>
                 <Text style={[styles.categoryPillText, { color: meta.iconColor }]}>
-                  {meta.tagLabel}
+                  {uiText(meta.tagLabel)}
                 </Text>
               </View>
             </View>
 
             <View style={styles.timeGroup}>
               <Text style={[styles.timeText, isUnread && styles.timeTextUnread]}>
-                {formatRelativeTime(item.createdAt)}
+                {uiText(formatRelativeTime(item.createdAt))}
               </Text>
               {isUnread && <View style={styles.unreadDot} />}
             </View>
@@ -534,7 +536,7 @@ export function NotificationsModal({
             {/* Modal Header */}
             <View style={styles.modalHeader}>
               <View style={styles.headerTitleGroup}>
-                <Text style={styles.modalTitle}>Notifications</Text>
+                <Text style={styles.modalTitle}>{uiText("Notifications")}</Text>
                 {unreadCount > 0 ? (
                   <View style={styles.unreadBadge}>
                     <Text style={styles.unreadBadgeText}>
@@ -565,7 +567,7 @@ export function NotificationsModal({
                           color={THEME.colors.brandDark}
                           style={{ marginRight: 4 }}
                         />
-                        <Text style={styles.markAllBtnText}>Mark all read</Text>
+                        <Text style={styles.markAllBtnText}>{uiText("Mark all read")}</Text>
                       </>
                     )}
                   </Pressable>
@@ -578,7 +580,7 @@ export function NotificationsModal({
           {loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={THEME.colors.brandDark} />
-              <Text style={styles.loadingText}>Updating notifications...</Text>
+              <Text style={styles.loadingText}>{uiText("Updating notifications...")}</Text>
             </View>
           ) : (
             <FlatList
@@ -608,10 +610,9 @@ export function NotificationsModal({
                   <View style={styles.emptyIconCircle}>
                     <Ionicons name="notifications-off-outline" size={32} color="#9CA3AF" />
                   </View>
-                  <Text style={styles.emptyTitle}>All caught up!</Text>
+                  <Text style={styles.emptyTitle}>{uiText("All caught up!")}</Text>
                   <Text style={styles.emptySubtitle}>
-                    You have no notifications right now. Activity and updates will appear here.
-                  </Text>
+                    {uiText("You have no notifications right now. Activity and updates will appear here.")}</Text>
                 </View>
               }
             />

@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { BrowseActivityCard } from '../components/BrowseActivityCard';
 import { AppHeader } from '../../../shared/components/AppHeader';
 import { BrowseHeader, BrowseFilters } from '../components/BrowseHeader';
@@ -38,6 +39,7 @@ export interface WorkerProfile {
 }
 
 export function WorkersScreen({ avatarUri, onViewProfile, token }: { avatarUri?: string | null, onViewProfile?: () => void, token?: string | null }) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const effectiveToken = token || user.token;
@@ -244,7 +246,7 @@ export function WorkersScreen({ avatarUri, onViewProfile, token }: { avatarUri?:
     position.setValue({ x: 0, y: 0 });
   };
 
-  const headerCopy = browseHeaderCopy('homeowner', subTab, subTab === 'explore' ? profiles.length : savedCount, isLoading, feedError);
+  const headerCopy = browseHeaderCopy('homeowner', subTab, subTab === 'explore' ? profiles.length : savedCount, isLoading, feedError, uiText);
 
   const renderExploreDeck = () => {
     if (isLoading) return <View style={deckStyles.container}><BrowseDeckSkeleton /></View>;
@@ -395,8 +397,8 @@ export function WorkersScreen({ avatarUri, onViewProfile, token }: { avatarUri?:
               handleToggleSaveWorker(selectedSavedWorker);
             }
           }}
-          ctaText="Message Kasambahay"
-          ctaNotice="Start a direct chat with this kasambahay"
+          ctaText={uiText("Message Kasambahay")}
+          ctaNotice={uiText("Start a direct chat with this kasambahay")}
           onViewProfile={() => {
             if (selectedSavedWorker) {
               const worker = selectedSavedWorker;

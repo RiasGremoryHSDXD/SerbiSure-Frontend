@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../localization/LanguageContext';
 import React, { useState, useMemo } from 'react';
 import {
   Modal,
@@ -35,6 +36,7 @@ export function SearchablePickerModal({
   onSelect,
   onClose,
 }: SearchablePickerModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const [searchQuery, setSearchQuery] = useState('');
 
   // Filter items using name, displayName, and aliases (e.g. 'cdo')
@@ -126,12 +128,12 @@ export function SearchablePickerModal({
         {loading ? (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color="#FFB43B" />
-            <Text style={styles.loadingText}>Loading options...</Text>
+            <Text style={styles.loadingText}>{uiText("Loading options...")}</Text>
           </View>
         ) : filteredItems.length === 0 ? (
           <View style={styles.centerContainer}>
             <Ionicons name="location-outline" size={48} color="#CCCCCC" />
-            <Text style={styles.emptyTitle}>No results found</Text>
+            <Text style={styles.emptyTitle}>{uiText("No results found")}</Text>
             <Text style={styles.emptySubtitle}>
               {searchQuery ? `Nothing matches "${searchQuery}"` : 'No available options'}
             </Text>

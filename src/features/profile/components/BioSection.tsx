@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { Text, View, Pressable } from 'react-native';
 
@@ -7,6 +8,7 @@ import { profileStyles as styles } from '../styles';
 import type { ProfileController } from '../hooks/useProfile';
 
 export function BioSection({ profile }: { profile: ProfileController }) {
+  const { tr: uiText } = useUiLanguage();
   const {
     t,
     copy,
@@ -18,7 +20,7 @@ export function BioSection({ profile }: { profile: ProfileController }) {
     {/* About Kasambahay Section (About Me First) */}
     <View style={styles.sectionCard}>
       <View style={styles.sectionCardHeader}>
-        <View>
+        <View style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
           <Text style={styles.sectionCardTitle}>{t.aboutTitle} {copy.name}</Text>
           <Text style={styles.sectionCardSubtitle}>{copy.aboutSubtitle}</Text>
         </View>
@@ -31,7 +33,7 @@ export function BioSection({ profile }: { profile: ProfileController }) {
             }}
           >
             <Ionicons name="pencil" size={12} color="#FFFFFF" />
-            <Text style={styles.actionPillButtonText}>Edit</Text>
+            <Text style={styles.actionPillButtonText}>{uiText("Edit")}</Text>
           </Pressable>
         ) : null}
       </View>

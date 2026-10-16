@@ -562,6 +562,7 @@ export const profileStyles = StyleSheet.create({
   },
   reviewerMetaRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     marginTop: 2,
   },
@@ -1004,6 +1005,8 @@ export const profileStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#6B7280',
+    flexShrink: 1,
+    textAlign: 'center',
   },
   segmentedTabTextActive: {
     fontFamily: THEME.typography.fontFamily.mainBold,

@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { StyleSheet, Text, View, Modal, Pressable, ScrollView, Image, Linking, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +11,7 @@ interface AboutUsModalProps {
 }
 
 export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const handleOpenEmail = () => {
     Linking.openURL('mailto:support@serbisure.ph?subject=Serbisure Support Inquiry').catch(() => { });
   };
@@ -34,8 +36,8 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
                 <Ionicons name="information-circle" size={22} color="#FFB43B" />
               </View>
               <View style={{ marginLeft: 12 }}>
-                <Text style={styles.modalTitle}>About Us</Text>
-                <Text style={styles.modalSubtitle}>Learn more about Serbisure</Text>
+                <Text style={styles.modalTitle}>{uiText("About Us")}</Text>
+                <Text style={styles.modalSubtitle}>{uiText("Learn more about Serbisure")}</Text>
               </View>
             </View>
             <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn}>
@@ -52,10 +54,9 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
               <Image source={logoSource} style={styles.logo} resizeMode="contain" />
               <Text style={styles.appName}>SerbiSure</Text>
               <Text style={styles.appTagline}>
-                Connecting Trusted Kasambahay & Filipino Homes
-              </Text>
+                {uiText("Connecting Trusted Kasambahay & Filipino Homes")}</Text>
               <View style={styles.versionBadge}>
-                <Text style={styles.versionText}>Version 1.0.0 (Beta)</Text>
+                <Text style={styles.versionText}>{uiText("Version 1.0.0 (Beta)")}</Text>
               </View>
             </View>
 
@@ -63,20 +64,17 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="heart-outline" size={18} color="#FFB43B" style={{ marginRight: 8 }} />
-                <Text style={styles.sectionTitle}>Our Mission</Text>
+                <Text style={styles.sectionTitle}>{uiText("Our Mission")}</Text>
               </View>
               <Text style={styles.sectionParagraph}>
-                Serbisure was created to bridge the gap between hardworking Filipino domestic workers
-                and households seeking reliable, honest care. We empower Kasambahays through fair representation
-                and provide Homeowners with the peace of mind they deserve through verified identification.
-              </Text>
+                {uiText("Serbisure was created to bridge the gap between hardworking Filipino domestic workers and households seeking reliable, honest care. We empower Kasambahays through fair representation and provide Homeowners with the peace of mind they deserve through verified identification.")}</Text>
             </View>
 
             {/* Core Pillars */}
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="sparkles-outline" size={18} color="#FFB43B" style={{ marginRight: 8 }} />
-                <Text style={styles.sectionTitle}>Why Choose Serbisure?</Text>
+                <Text style={styles.sectionTitle}>{uiText("Why Choose Serbisure?")}</Text>
               </View>
 
               <View style={styles.pillarItem}>
@@ -84,10 +82,9 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
                   <Ionicons name="shield-checkmark" size={18} color="#27AE60" />
                 </View>
                 <View style={styles.pillarTextCol}>
-                  <Text style={styles.pillarTitle}>Verified Credentials</Text>
+                  <Text style={styles.pillarTitle}>{uiText("Verified Credentials")}</Text>
                   <Text style={styles.pillarDesc}>
-                    National ID screening, NBI & Police Clearances reviewed with state-of-the-art OCR & official verification.
-                  </Text>
+                    {uiText("National ID screening, NBI & Police Clearances reviewed with state-of-the-art OCR & official verification.")}</Text>
                 </View>
               </View>
 
@@ -96,10 +93,9 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
                   <Ionicons name="star" size={18} color="#F39C12" />
                 </View>
                 <View style={styles.pillarTextCol}>
-                  <Text style={styles.pillarTitle}>Transparent Feedback</Text>
+                  <Text style={styles.pillarTitle}>{uiText("Transparent Feedback")}</Text>
                   <Text style={styles.pillarDesc}>
-                    AI sentiment-analyzed ratings and reviews ensure honest community insights for every booking.
-                  </Text>
+                    {uiText("AI sentiment-analyzed ratings and reviews ensure honest community insights for every booking.")}</Text>
                 </View>
               </View>
 
@@ -108,10 +104,9 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
                   <Ionicons name="people" size={18} color="#8E44AD" />
                 </View>
                 <View style={styles.pillarTextCol}>
-                  <Text style={styles.pillarTitle}>Community Centered</Text>
+                  <Text style={styles.pillarTitle}>{uiText("Community Centered")}</Text>
                   <Text style={styles.pillarDesc}>
-                    Built with local Philippine communities in mind, starting right here in Cagayan de Oro City.
-                  </Text>
+                    {uiText("Built with local Philippine communities in mind, starting right here in Cagayan de Oro City.")}</Text>
                 </View>
               </View>
             </View>
@@ -120,7 +115,7 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="chatbubble-ellipses-outline" size={18} color="#FFB43B" style={{ marginRight: 8 }} />
-                <Text style={styles.sectionTitle}>Get in Touch</Text>
+                <Text style={styles.sectionTitle}>{uiText("Get in Touch")}</Text>
               </View>
 
               <Pressable style={styles.contactRow} onPress={handleOpenEmail}>
@@ -128,7 +123,7 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
                   <Ionicons name="mail-outline" size={18} color="#FFB43B" />
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.contactLabel}>Email Support</Text>
+                  <Text style={styles.contactLabel}>{uiText("Email Support")}</Text>
                   <Text style={styles.contactValue}>support@serbisure.ph</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#BDBDBD" />
@@ -139,7 +134,7 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
                   <Ionicons name="globe-outline" size={18} color="#FFB43B" />
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.contactLabel}>Official Website</Text>
+                  <Text style={styles.contactLabel}>{uiText("Official Website")}</Text>
                   <Text style={styles.contactValue}>https://serbisure.ph</Text>
                 </View>
                 <Ionicons name="open-outline" size={16} color="#BDBDBD" />
@@ -150,7 +145,7 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
                   <Ionicons name="location-outline" size={18} color="#FFB43B" />
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.contactLabel}>Headquarters</Text>
+                  <Text style={styles.contactLabel}>{uiText("Headquarters")}</Text>
                   <Text style={styles.contactValue}>Cagayan de Oro, Misamis Oriental, PH</Text>
                 </View>
               </View>
@@ -159,8 +154,7 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
             {/* Footer */}
             <View style={styles.footer}>
               <Text style={styles.footerText}>
-                © {new Date().getFullYear()} SerbiSure Technologies Inc. All rights reserved.
-              </Text>
+                © {new Date().getFullYear()} {uiText("SerbiSure Technologies Inc. All rights reserved.")}</Text>
             </View>
           </ScrollView>
         </View>

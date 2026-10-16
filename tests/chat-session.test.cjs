@@ -55,6 +55,8 @@ const deferred = () => {
 const payload = text => ({ messages: [{ chat_message_id: text, message_payload: text, is_sender: false,
   createdAt: '2026-10-15T10:00:00Z' }], partnerIsTyping: false, partnerIsOnline: false });
 const tick = async () => { await new Promise(resolve => setImmediate(resolve)); renderer.flushPassiveEffects(); };
+const localizationMessages = compile('src/shared/localization/messages.ts', {});
+const languageContext = compile('src/shared/localization/LanguageContext.tsx', { './messages': localizationMessages });
 
 function screen(t) {
   let user = { id: 'account-one', token: 'token-one', accountType: 'Homeowner' };
@@ -77,6 +79,7 @@ function screen(t) {
   };
   const { createThreadRefreshQueue } = compile('src/features/chat/threadRefreshQueue.ts', {});
   const { ChatDetailScreen } = compile('src/features/chat/components/ChatDetailScreen.tsx', {
+    '../../../shared/localization/LanguageContext': languageContext,
     'react-native': native,
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
     '@expo/vector-icons': { Ionicons: 'Icon' }, 'expo-image-picker': {},

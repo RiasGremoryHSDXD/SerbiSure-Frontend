@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +20,7 @@ interface HeaderProps {
 }
 
 export function BrowseHeader({ title, subtitle, name, avatarUri, tab, savedCount, appliedCount, onTabChange, onProfilePress, onFilterPress }: HeaderProps) {
+  const { tr: uiText } = useUiLanguage();
   const tabs: { key: BrowseTab; label: string; count?: number }[] = [{ key: 'explore', label: 'Explore' }, { key: 'saved', label: 'Saved', count: savedCount }];
   if (appliedCount !== undefined) tabs.push({ key: 'applied', label: 'Applied', count: appliedCount });
   return (
@@ -26,34 +28,35 @@ export function BrowseHeader({ title, subtitle, name, avatarUri, tab, savedCount
       <View style={styles.tabs} accessibilityRole="tablist">
         {tabs.map((item) => (
           <Pressable key={item.key} accessibilityRole="tab" accessibilityState={{ selected: tab === item.key }} onPress={() => onTabChange(item.key)} style={[styles.tab, tab === item.key && styles.selectedTab]}>
-            <Text style={[styles.tabLabel, tab === item.key && styles.selectedTabLabel]}>{item.label}{item.count === undefined ? '' : ` (${item.count})`}</Text>
+            <Text style={[styles.tabLabel, tab === item.key && styles.selectedTabLabel]}>{uiText(item.label)}{item.count === undefined ? '' : ` (${item.count})`}</Text>
           </Pressable>
         ))}
       </View>
       <View style={styles.headingRow}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Open your profile" onPress={onProfilePress} disabled={!onProfilePress}>
+        <Pressable accessibilityRole="button" accessibilityLabel={uiText("Open your profile")} onPress={onProfilePress} disabled={!onProfilePress}>
           <ProfileAvatar uri={avatarUri} name={name} size={48} />
         </Pressable>
         <View style={styles.heading}>
-          <Text style={styles.title} numberOfLines={2}>{title}</Text>
+          <Text style={styles.title} numberOfLines={2}>{uiText(title)}</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
         </View>
-        {tab === 'explore' && <Pressable accessibilityRole="button" accessibilityLabel="Open filters and sorting" onPress={onFilterPress} style={styles.filterButton}><Ionicons name="options-outline" size={22} color={THEME.colors.ink} /></Pressable>}
+        {tab === 'explore' && <Pressable accessibilityRole="button" accessibilityLabel={uiText("Open filters and sorting")} onPress={onFilterPress} style={styles.filterButton}><Ionicons name="options-outline" size={22} color={THEME.colors.ink} /></Pressable>}
       </View>
     </View>
   );
 }
 
 export function BrowseFilters({ activeChip, filterCount, onChipPress, onFilterPress }: Readonly<{ activeChip: string; filterCount: number; onChipPress: (label: string) => void; onFilterPress: () => void }>) {
+  const { tr: uiText } = useUiLanguage();
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipScroll}>
       <Pressable accessibilityRole="button" accessibilityLabel={`Open filters, ${filterCount} active`} onPress={onFilterPress} style={[styles.chip, styles.advancedChip]}>
         <Ionicons name="funnel-outline" size={16} color={THEME.colors.brandDark} />
-        <Text style={styles.advancedLabel}>Filters{filterCount > 0 ? ` (${filterCount})` : ''}</Text>
+        <Text style={styles.advancedLabel}>{uiText("Filters")}{filterCount > 0 ? ` (${filterCount})` : ''}</Text>
       </Pressable>
       {BROWSE_QUICK_FILTERS.map((label) => (
         <Pressable key={label} accessibilityRole="button" accessibilityLabel={`Filter: ${label}`} accessibilityState={{ selected: activeChip === label }} onPress={() => onChipPress(label)} style={[styles.chip, activeChip === label && styles.selectedChip]}>
-          <Text style={styles.chipLabel}>{label}</Text>
+          <Text style={styles.chipLabel}>{uiText(label)}</Text>
         </Pressable>
       ))}
     </ScrollView>

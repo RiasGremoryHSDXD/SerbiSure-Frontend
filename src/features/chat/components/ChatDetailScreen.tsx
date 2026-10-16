@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { AppState } from 'react-native';
 import { realtime } from '../../../shared/realtime';
 import { useRealtimeStatus } from '../../../shared/realtime/useRealtimeStatus';
@@ -383,6 +384,7 @@ function ChatDetailSession({
   initialReplyTo,
   userRole = 'homeowner',
 }: ChatDetailScreenProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const effectiveToken = token || user.token;
@@ -1430,14 +1432,14 @@ function ChatDetailSession({
               {messages.length === 0 && !threadLoading && !threadError ? (
                 <View style={{ padding: 32, alignItems: 'center' }}>
                   <Ionicons name="chatbubbles-outline" size={38} color="#9CA3AF" />
-                  <Text style={{ marginTop: 12, fontWeight: '700' }}>No messages yet</Text>
+                  <Text style={{ marginTop: 12, fontWeight: '700' }}>{uiText("No messages yet")}</Text>
                   <Text style={{ marginTop: 6, color: '#6B7280', textAlign: 'center' }}>{isSupportConversation ? 'Tell us how we can help. Your message will be sent to this support desk.' : 'Send a message or use the calendar button to propose a booking.'}</Text>
                 </View>
               ) : null}
 
               {liveStatus !== 'connected' ? <Text accessibilityLiveRegion="polite" style={{ padding: 12, color: '#71717A', fontSize: 12 }}>{liveStatus === 'unauthorized' ? 'Live updates unavailable. Please sign in again.' : 'Reconnecting live updates…'}</Text> : null}
               {threadLoading && !messages.length ? <ActivityIndicator style={{ marginTop: 32 }} color="#FFB380" /> : null}
-              {threadError ? <View style={{ padding: 20 }}><Text>{threadError}</Text><Pressable onPress={() => setThreadReload(value => value + 1)}><Text style={{ marginTop: 8, color: '#EA580C' }}>Retry conversation</Text></Pressable></View> : null}
+              {threadError ? <View style={{ padding: 20 }}><Text>{threadError}</Text><Pressable onPress={() => setThreadReload(value => value + 1)}><Text style={{ marginTop: 8, color: '#EA580C' }}>{uiText("Retry conversation")}</Text></Pressable></View> : null}
               {/* Messages */}
               {messages.map((item, index) => {
                 const prevMsg = index > 0 ? messages[index - 1] : null;
@@ -1470,9 +1472,9 @@ function ChatDetailSession({
                         </View>
                         <View style={{ flex: 1 }}>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Text style={styles.listingClosedTitle}>Job Position Acquired</Text>
+                            <Text style={styles.listingClosedTitle}>{uiText("Job Position Acquired")}</Text>
                             <View style={styles.closedTagMicro}>
-                              <Text style={styles.closedTagMicroText}>ACQUIRED</Text>
+                              <Text style={styles.closedTagMicroText}>{uiText("ACQUIRED")}</Text>
                             </View>
                           </View>
                           <Text style={styles.listingClosedSub}>{cleanMsg}</Text>
@@ -1577,7 +1579,7 @@ function ChatDetailSession({
                               }}
                             >
                               <Ionicons name="close-circle-outline" size={16} color="#DC2626" style={{ marginRight: 4 }} />
-                              <Text style={styles.compactQuickDeclineText}>Decline</Text>
+                              <Text style={styles.compactQuickDeclineText}>{uiText("Decline")}</Text>
                             </Pressable>
 
                             <Pressable
@@ -1591,7 +1593,7 @@ function ChatDetailSession({
                               }}
                             >
                               <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                              <Text style={styles.compactQuickAgreeText}>Agree & Accept</Text>
+                              <Text style={styles.compactQuickAgreeText}>{uiText("Agree & Accept")}</Text>
                             </Pressable>
                           </View>
                         ) : null}
@@ -1878,7 +1880,7 @@ function ChatDetailSession({
                   <View style={styles.replyBannerHeaderLeft}>
                     <Ionicons name="arrow-undo" size={13} color="#8E8E93" style={{ marginRight: 5 }} />
                     <Text style={styles.replyBannerAuthor}>
-                      Replying to <Text style={styles.replyBannerAuthorName}>{replyingTo.author}</Text>
+                      {uiText("Replying to")}<Text style={styles.replyBannerAuthorName}>{replyingTo.author}</Text>
                     </Text>
                   </View>
                   <Pressable
@@ -1899,12 +1901,12 @@ function ChatDetailSession({
 
           {/* Messenger Style Input Footer */}
           {!!safety?.restricted_until && !isSupportConversation && <View style={{ paddingHorizontal: 20, paddingVertical: 12 }}>
-            <Text style={{ color: '#6B7280', fontSize: 13 }}>Messaging paused until {new Date(safety.restricted_until).toLocaleString()}. Contact your Barangay desk or SerbiSure Support for help.</Text>
+            <Text style={{ color: '#6B7280', fontSize: 13 }}>{uiText("Messaging paused until")}{new Date(safety.restricted_until).toLocaleString()}{uiText(". Contact your Barangay desk or SerbiSure Support for help.")}</Text>
           </View>}
           {isUploadingImage && (
             <View style={styles.uploadingBar}>
               <ActivityIndicator size="small" color="#FFB43B" />
-              <Text style={styles.uploadingText}>Sending photo...</Text>
+              <Text style={styles.uploadingText}>{uiText("Sending photo...")}</Text>
             </View>
           )}
           <View style={[styles.inputFooter, { paddingBottom: Math.max(insets.bottom, 10) }]}>
@@ -1918,7 +1920,7 @@ function ChatDetailSession({
             <TextInput
               ref={inputRef}
               style={styles.textInput}
-              placeholder="Type a message..."
+              placeholder={uiText("Type a message...")}
               placeholderTextColor="#888"
               value={inputMessage}
               editable={!isSendingText && !chatPaused}
@@ -2163,7 +2165,7 @@ function ChatDetailSession({
                   }}
                 >
                   <Ionicons name="arrow-undo-outline" size={19} color="#1A1A1A" style={styles.actionMenuIcon} />
-                  <Text style={styles.actionMenuText}>Reply</Text>
+                  <Text style={styles.actionMenuText}>{uiText("Reply")}</Text>
                 </Pressable>
 
                 {/* Copy */}
@@ -2180,7 +2182,7 @@ function ChatDetailSession({
                     }}
                   >
                     <Ionicons name="copy-outline" size={19} color="#1A1A1A" style={styles.actionMenuIcon} />
-                    <Text style={styles.actionMenuText}>Copy</Text>
+                    <Text style={styles.actionMenuText}>{uiText("Copy")}</Text>
                   </Pressable>
                 ) : null}
 
@@ -2196,7 +2198,7 @@ function ChatDetailSession({
                     onPress={() => handleDeleteOrUnsend(activeActionMenuMsg, 'unsend')}
                   >
                     <Ionicons name="trash-outline" size={19} color="#EF4444" style={styles.actionMenuIcon} />
-                    <Text style={[styles.actionMenuText, { color: '#EF4444' }]}>Unsend</Text>
+                    <Text style={[styles.actionMenuText, { color: '#EF4444' }]}>{uiText("Unsend")}</Text>
                   </Pressable>
                 ) : null}
 
@@ -2211,7 +2213,7 @@ function ChatDetailSession({
                     onPress={() => handleDeleteOrUnsend(activeActionMenuMsg, 'delete_for_me')}
                   >
                     <Ionicons name="trash-outline" size={19} color="#EF4444" style={styles.actionMenuIcon} />
-                    <Text style={[styles.actionMenuText, { color: '#EF4444' }]}>Delete for me</Text>
+                    <Text style={[styles.actionMenuText, { color: '#EF4444' }]}>{uiText("Delete for me")}</Text>
                   </Pressable>
                 ) : null}
               </Animated.View>

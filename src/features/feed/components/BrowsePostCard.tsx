@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState } from 'react';
 import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +23,7 @@ interface CardProps {
 }
 
 export function BrowsePostCard({ name, avatarUri, authorRole, title, location, description, tags, price, unit, saved, applied, onProfilePress, onSave, onDetails }: CardProps) {
+  const { tr: uiText } = useUiLanguage();
   const displayTags = Array.from(new Set(tags.filter((tag) => !tag.startsWith('Verified')))).slice(0, 3);
   const workerPost = authorRole === 'Kasambahay';
   return (
@@ -31,10 +33,10 @@ export function BrowsePostCard({ name, avatarUri, authorRole, title, location, d
           <View style={styles.identityRow}>
             <Pressable accessibilityRole="button" accessibilityLabel={`View ${name}'s profile`} onPress={onProfilePress} style={styles.profilePill}>
               <ProfileAvatar uri={avatarUri} name={name} size={20} />
-              <Text style={styles.profileLabel} numberOfLines={1}>{workerPost ? 'View Profile' : name}</Text>
+              <Text style={styles.profileLabel} numberOfLines={1}>{workerPost ? uiText("View Profile") : name}</Text>
               <Ionicons name="information-circle-outline" size={14} color={THEME.colors.brand} />
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel={saved ? 'Unsave post' : 'Save post'} accessibilityState={{ selected: saved }} onPress={onSave} style={styles.bookmark} hitSlop={8}>
+            <Pressable accessibilityRole="button" accessibilityLabel={saved ? uiText("Unsave post") : uiText("Save post")} accessibilityState={{ selected: saved }} onPress={onSave} style={styles.bookmark} hitSlop={8}>
               <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={20} color={saved ? THEME.colors.brandDark : THEME.colors.ink} />
             </Pressable>
           </View>
@@ -45,10 +47,10 @@ export function BrowsePostCard({ name, avatarUri, authorRole, title, location, d
             <View style={styles.locationRow}><Ionicons name="location-outline" size={14} color={THEME.colors.brand} /><Text style={styles.location} numberOfLines={1}>{location}</Text></View>
             {workerPost && <Text style={styles.serviceTitle} numberOfLines={1}>{title}</Text>}
             <Text style={styles.description} numberOfLines={2}>{description}</Text>
-            <View style={styles.tags}>{displayTags.map((tag) => <View key={tag} style={styles.tag}><Text style={styles.tagText}>{tag}</Text></View>)}</View>
+            <View style={styles.tags}>{displayTags.map((tag) => <View key={tag} style={styles.tag}><Text style={styles.tagText}>{uiText(tag)}</Text></View>)}</View>
             <View style={styles.footer}>
-              <View style={styles.rate}><Text style={styles.price} numberOfLines={1} adjustsFontSizeToFit>{price}</Text><Text style={styles.unit}>{unit}</Text></View>
-              <Pressable accessibilityRole="button" onPress={onDetails} style={[styles.details, applied && styles.applied]}><Text style={[styles.detailsLabel, applied && styles.appliedLabel]}>{applied ? 'Applied' : 'See Details'}</Text></Pressable>
+              <View style={styles.rate}><Text style={styles.price} numberOfLines={1} adjustsFontSizeToFit>{price}</Text><Text style={styles.unit}>{uiText(unit)}</Text></View>
+              <Pressable accessibilityRole="button" onPress={onDetails} style={[styles.details, applied && styles.applied]}><Text style={[styles.detailsLabel, applied && styles.appliedLabel]}>{applied ? uiText("Applied") : uiText("See Details")}</Text></Pressable>
             </View>
           </View>
         </View>

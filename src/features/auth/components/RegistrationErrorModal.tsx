@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useMemo } from 'react';
 import { Modal, View, Text, Pressable, ScrollView, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -235,6 +236,7 @@ export function RegistrationErrorModal({
   onGoToStep,
   onNavigateToLogin,
 }: RegistrationErrorModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const parsed = useMemo(() => parseRegistrationErrors(errorData), [errorData]);
 
   if (!visible) return null;
@@ -300,7 +302,7 @@ export function RegistrationErrorModal({
               onPress={onClose}
               hitSlop={12}
               style={styles.closeIconButton}
-              accessibilityLabel="Close"
+              accessibilityLabel={uiText("Close")}
             >
               <Ionicons name="close" size={20} color={THEME.colors.textSecondary} />
             </Pressable>
@@ -315,8 +317,7 @@ export function RegistrationErrorModal({
             <View style={styles.conflictBanner}>
               <Ionicons name="information-circle" size={18} color="#E28B50" style={{ marginRight: 8, marginTop: 1 }} />
               <Text style={styles.conflictBannerText}>
-                If you already have an account, you can sign in directly. Or you can update your entries to use a different email or phone.
-              </Text>
+                {uiText("If you already have an account, you can sign in directly. Or you can update your entries to use a different email or phone.")}</Text>
             </View>
           )}
 
@@ -334,7 +335,7 @@ export function RegistrationErrorModal({
                     <Ionicons name={item.iconName} size={18} color="#EF4444" />
                   </View>
                   <View style={styles.errorItemContent}>
-                    <Text style={styles.errorItemLabel}>{item.label}</Text>
+                    <Text style={styles.errorItemLabel}>{uiText(item.label)}</Text>
                     <Text style={styles.errorItemMessage}>{item.message}</Text>
                   </View>
                 </View>
@@ -357,7 +358,7 @@ export function RegistrationErrorModal({
                     onPress={handleGoToLogin}
                   >
                     <Ionicons name="log-in-outline" size={20} color="#0D0D11" style={{ marginRight: 6 }} />
-                    <Text style={styles.brandButtonText}>Sign In to Account</Text>
+                    <Text style={styles.brandButtonText}>{uiText("Sign In to Account")}</Text>
                   </Pressable>
                 )}
 
@@ -369,7 +370,7 @@ export function RegistrationErrorModal({
                   ]}
                   onPress={handleFixDetails}
                 >
-                  <Text style={styles.secondaryButtonText}>Change Details in Step 1</Text>
+                  <Text style={styles.secondaryButtonText}>{uiText("Change Details in Step 1")}</Text>
                 </Pressable>
               </>
             ) : parsed.isNetworkError ? (
@@ -382,7 +383,7 @@ export function RegistrationErrorModal({
                   ]}
                   onPress={onClose}
                 >
-                  <Text style={styles.darkButtonText}>Try Again</Text>
+                  <Text style={styles.darkButtonText}>{uiText("Try Again")}</Text>
                 </Pressable>
               </>
             ) : (
@@ -396,7 +397,7 @@ export function RegistrationErrorModal({
                   onPress={handleFixDetails}
                 >
                   <Text style={styles.darkButtonText}>
-                    Review & Fix (Step {parsed.suggestedStep})
+                    {uiText("Review & Fix (Step")}{parsed.suggestedStep})
                   </Text>
                 </Pressable>
 
@@ -407,7 +408,7 @@ export function RegistrationErrorModal({
                   ]}
                   onPress={onClose}
                 >
-                  <Text style={styles.secondaryButtonText}>Dismiss</Text>
+                  <Text style={styles.secondaryButtonText}>{uiText("Dismiss")}</Text>
                 </Pressable>
               </>
             )}

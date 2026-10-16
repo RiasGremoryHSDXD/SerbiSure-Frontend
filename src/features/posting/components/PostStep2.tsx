@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { WorkScheduleFields } from '../../bookings/components/WorkScheduleFields';
 import { WorkLocationFields } from '../../bookings/components/WorkLocationFields';
 import React from 'react';
@@ -9,6 +10,7 @@ import { postingStyles as styles } from '../styles';
 import type { PostFormController } from '../hooks/usePostForm';
 
 export function PostStep2({ form }: { form: PostFormController }) {
+  const { tr: uiText } = useUiLanguage();
   const {
     step,
     engagementType,
@@ -23,7 +25,7 @@ export function PostStep2({ form }: { form: PostFormController }) {
     {step === 2 && (
       <View style={styles.step2Container}>
         {/* 1. Engagement Type: Short-term vs Long-term */}
-        <Text style={styles.sectionLabel}>ENGAGEMENT TYPE</Text>
+        <Text style={styles.sectionLabel}>{uiText("ENGAGEMENT TYPE")}</Text>
         <View style={styles.typeToggleRow}>
           <Pressable
             style={[styles.typeCard, engagementType === 'short' && styles.typeCardActive]}
@@ -35,7 +37,7 @@ export function PostStep2({ form }: { form: PostFormController }) {
               color={engagementType === 'short' ? '#0D0D11' : '#FFB380'}
               style={styles.typeIcon}
             />
-            <Text style={styles.typeTitle}>Short-term</Text>
+            <Text style={styles.typeTitle}>{uiText("Short-term")}</Text>
           </Pressable>
 
           <Pressable
@@ -48,12 +50,12 @@ export function PostStep2({ form }: { form: PostFormController }) {
               color={engagementType === 'long' ? '#0D0D11' : '#FFB380'}
               style={styles.typeIcon}
             />
-            <Text style={styles.typeTitle}>Long-term</Text>
+            <Text style={styles.typeTitle}>{uiText("Long-term")}</Text>
           </Pressable>
         </View>
 
         {/* 2. Setup Preference: Stay-in vs Stay-out */}
-        <Text style={[styles.sectionLabel, { marginTop: 14 }]}>WORK SETUP PREFERENCE</Text>
+        <Text style={[styles.sectionLabel, { marginTop: 14 }]}>{uiText("WORK SETUP PREFERENCE")}</Text>
         <View style={styles.typeToggleRow}>
           <Pressable
             style={[styles.typeCard, setupPreference === 'stay-out' && styles.typeCardActive]}
@@ -65,7 +67,7 @@ export function PostStep2({ form }: { form: PostFormController }) {
               color={setupPreference === 'stay-out' ? '#0D0D11' : '#FFB380'}
               style={styles.typeIcon}
             />
-            <Text style={styles.typeTitle}>Stay-out</Text>
+            <Text style={styles.typeTitle}>{uiText("Stay-out")}</Text>
           </Pressable>
 
           <Pressable
@@ -78,7 +80,7 @@ export function PostStep2({ form }: { form: PostFormController }) {
               color={setupPreference === 'stay-in' ? '#0D0D11' : '#FFB380'}
               style={styles.typeIcon}
             />
-            <Text style={styles.typeTitle}>Stay-in</Text>
+            <Text style={styles.typeTitle}>{uiText("Stay-in")}</Text>
           </Pressable>
         </View>
 
@@ -90,9 +92,9 @@ export function PostStep2({ form }: { form: PostFormController }) {
           disabled={!form.visible || form.isPosting}
         />}
         {engagementType === 'long' && <View style={{ marginTop: 14 }}>
-          <Text style={styles.sectionLabel}>WORK REGION</Text>
+          <Text style={styles.sectionLabel}>{uiText("WORK REGION")}</Text>
           <WorkLocationFields form={form} regionOnly disabled={!form.visible || form.isPosting} />
-          <Text style={styles.longTermScheduleText}>Complete the Province, City / Municipality, Barangay and street address in Step 3.</Text>
+          <Text style={styles.longTermScheduleText}>{uiText("Complete the Province, City / Municipality, Barangay and street address in Step 3.")}</Text>
         </View>}
 
       </View>

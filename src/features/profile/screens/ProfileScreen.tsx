@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { Text, View, Image, ScrollView, Pressable, Alert, Modal, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
 
@@ -34,6 +35,7 @@ import { ReviewsSection } from '../components/ReviewsSection';
 import { ProfileTabs } from '../components/ProfileTabs';
 
 export function ProfileScreen(props: ProfileScreenProps) {
+  const { tr: uiText } = useUiLanguage();
   const profile = useProfile(props);
   const {
     avatarUri,
@@ -196,7 +198,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
                             showContactNumber ? styles.privacyPillTextPublic : styles.privacyPillTextPrivate,
                           ]}
                         >
-                          {showContactNumber ? 'Public' : 'Private'}
+                          {showContactNumber ? uiText("Public") : uiText("Private")}
                         </Text>
                       </Pressable>
                     </View>
@@ -245,7 +247,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
                     hitSlop={6}
                   >
                     <Ionicons name="pencil" size={11} color="#0D0D11" />
-                    <Text style={styles.heroTagEditBtnText}>Edit</Text>
+                    <Text style={styles.heroTagEditBtnText}>{uiText("Edit")}</Text>
                   </Pressable>
                 </View>
               ) : (
@@ -293,7 +295,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
                     ) : null}
                   </View>
                   <View style={styles.heroRolePillBadge}>
-                    <Text style={styles.rolePillText}>{(user.accountType || ROLE_CONFIG[role].accountType).toUpperCase()}</Text>
+                    <Text style={styles.rolePillText}>{uiText(user.accountType || ROLE_CONFIG[role].accountType).toUpperCase()}</Text>
                   </View>
                   {user.email ? (
                     <View style={styles.heroContactRow}>
@@ -303,7 +305,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
                   ) : null}
                   <View style={styles.heroContactRow}>
                     <Ionicons name="call" size={12} color="#9CA3AF" />
-                    <Text style={styles.heroContactText}>{user.contactNumber || 'No phone registered'}</Text>
+                    <Text style={styles.heroContactText}>{user.contactNumber || uiText("No phone registered")}</Text>
                     <View
                       style={[
                         styles.privacyPill,
@@ -316,7 +318,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
                           showContactNumber ? styles.privacyPillTextPublic : styles.privacyPillTextPrivate,
                         ]}
                       >
-                        {showContactNumber ? 'Public' : 'Private'}
+                        {showContactNumber ? uiText("Public") : uiText("Private")}
                       </Text>
                     </View>
                   </View>
@@ -352,10 +354,9 @@ export function ProfileScreen(props: ProfileScreenProps) {
                   <Ionicons name="alert-circle" size={18} color="#B91C1C" />
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={[styles.verificationNoticeTitle, { color: '#B91C1C' }]}>Verification Needs Attention</Text>
+                  <Text style={[styles.verificationNoticeTitle, { color: '#B91C1C' }]}>{uiText("Verification Needs Attention")}</Text>
                   <Text style={styles.verificationNoticeSub}>
-                    A document was rejected. Tap to review feedback and re-upload.
-                  </Text>
+                    {uiText("A document was rejected. Tap to review feedback and re-upload.")}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#B91C1C" />
               </Pressable>
@@ -392,7 +393,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit About Me</Text>
+              <Text style={styles.modalTitle}>{uiText("Edit About Me")}</Text>
               <Pressable
                 disabled={isSavingBio}
                 onPress={() => setIsEditingBio(false)}
@@ -427,7 +428,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
                 disabled={isSavingBio}
                 onPress={() => setIsEditingBio(false)}
               >
-                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                <Text style={styles.cancelModalBtnText}>{uiText("Cancel")}</Text>
               </Pressable>
 
               <Pressable
@@ -454,7 +455,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
                 {isSavingBio ? (
                   <ActivityIndicator size="small" color="#FFF" />
                 ) : (
-                  <Text style={styles.saveModalBtnText}>Save</Text>
+                  <Text style={styles.saveModalBtnText}>{uiText("Save")}</Text>
                 )}
               </Pressable>
             </View>

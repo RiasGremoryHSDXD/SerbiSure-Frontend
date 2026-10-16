@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +14,7 @@ type RoleSelectionScreenProps = {
 };
 
 export function RoleSelectionScreen({ onSelectRole, onBack }: RoleSelectionScreenProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
 
   return (
@@ -31,9 +33,8 @@ export function RoleSelectionScreen({ onSelectRole, onBack }: RoleSelectionScree
 
       <View style={styles.titleContainer}>
         <Text style={styles.title}>
-          How would <Text style={styles.titleHighlight}>you</Text>{'\n'}like to join?
-        </Text>
-        <Text style={styles.subtitle}>Choose your path to get started</Text>
+          {uiText("How would")}<Text style={styles.titleHighlight}>{uiText("you")}</Text>{'\n'}{uiText("like to join?")}</Text>
+        <Text style={styles.subtitle}>{uiText("Choose your path to get started")}</Text>
       </View>
 
       <View style={styles.cardsContainer}>
@@ -43,7 +44,7 @@ export function RoleSelectionScreen({ onSelectRole, onBack }: RoleSelectionScree
         >
           <Image source={homeownerSource} style={styles.cardImage} />
           <View style={[styles.cardLabel, styles.homeownerLabel]}>
-            <Text style={styles.cardLabelText}>I am a Homeowner</Text>
+            <Text style={styles.cardLabelText}>{uiText("I am a Homeowner")}</Text>
           </View>
         </Pressable>
 
@@ -53,7 +54,7 @@ export function RoleSelectionScreen({ onSelectRole, onBack }: RoleSelectionScree
         >
           <Image source={kasambahaySource} style={styles.cardImage} />
           <View style={[styles.cardLabel, styles.kasambahayLabel]}>
-            <Text style={styles.cardLabelText}>I am a Kasambahay</Text>
+            <Text style={styles.cardLabelText}>{uiText("I am a Kasambahay")}</Text>
           </View>
         </Pressable>
       </View>

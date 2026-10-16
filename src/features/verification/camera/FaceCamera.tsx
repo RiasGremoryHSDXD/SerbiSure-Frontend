@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useLanguage } from '../../../shared/localization/LanguageContext';
 import { Camera as VisionCamera, useCameraDevice, useCameraFormat, useCameraPermission } from 'react-native-vision-camera';
 import { Delegate, RunningMode, useFaceLandmarkDetection, type DetectionError, type Dims, type FaceLandmarkDetectionResultBundle } from 'react-native-mediapipe';
 
@@ -16,6 +17,7 @@ export type FaceCameraHandle = {
 };
 
 export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function FaceCamera({ onLandmarks, detecting = true }, ref) {
+  const { tr } = useLanguage();
   const cameraRef = useRef<VisionCamera | null>(null);
   const lastResultAt = useRef(0);
   const device = useCameraDevice('front');
@@ -102,7 +104,7 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
   if (!hasPermission) {
     return (
       <View style={styles.fallback}>
-        <Text style={styles.fallbackTitle}>Camera permission is required</Text>
+        <Text style={styles.fallbackTitle}>{tr('Camera permission is required')}</Text>
       </View>
     );
   }
@@ -110,7 +112,7 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
   if (!device) {
     return (
       <View style={styles.fallback}>
-        <Text style={styles.fallbackTitle}>Front camera unavailable</Text>
+        <Text style={styles.fallbackTitle}>{tr('Front camera unavailable')}</Text>
       </View>
     );
   }
@@ -136,7 +138,7 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
       />
       {detecting && detectorError ? (
         <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{detectorError}</Text>
+          <Text style={styles.errorText}>{tr(detectorError)}</Text>
         </View>
       ) : null}
     </View>

@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { WorkLocationFields } from '../../bookings/components/WorkLocationFields';
 import React from 'react';
 import { Text, View, Pressable, TextInput } from 'react-native';
@@ -10,6 +11,7 @@ import { postingStyles as styles } from '../styles';
 import type { PostFormController } from '../hooks/usePostForm';
 
 export function PostStep3({ form }: { form: PostFormController }) {
+  const { tr: uiText } = useUiLanguage();
   const {
     config,
     user,
@@ -29,23 +31,23 @@ export function PostStep3({ form }: { form: PostFormController }) {
       <View style={styles.step3Container}>
         {/* Location Header & Profile Address Quick Use */}
         <View style={styles.locationHeaderRow}>
-          <Text style={styles.inputGroupLabel}>{config.addressLabel}</Text>
+          <Text style={styles.inputGroupLabel}>{uiText(config.addressLabel)}</Text>
           {user && (user.barangay || user.city) ? (
             <Pressable style={styles.useProfileAddressBtn} onPress={applyUserProfileAddress}>
               <Ionicons name="location" size={13} color="#EA580C" />
-              <Text style={styles.useProfileAddressText}>Use Profile Address</Text>
+              <Text style={styles.useProfileAddressText}>{uiText("Use Profile Address")}</Text>
             </Pressable>
           ) : null}
         </View>
 
         <WorkLocationFields form={form} disabled={form.isPosting} />
 
-        <Text style={styles.inputGroupLabel}>{config.instructionsLabel}</Text>
+        <Text style={styles.inputGroupLabel}>{uiText(config.instructionsLabel)}</Text>
         <TextInput
           style={styles.multilineInput}
           multiline
           numberOfLines={4}
-          placeholder={config.instructionsPlaceholder}
+          placeholder={uiText(config.instructionsPlaceholder)}
           placeholderTextColor="#9CA3AF"
           value={instructions}
           onChangeText={setInstructions}

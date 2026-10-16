@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { Text, View, Pressable } from 'react-native';
 
@@ -7,6 +8,7 @@ import { postingStyles as styles } from '../styles';
 import type { PostFormController } from '../hooks/usePostForm';
 
 export function PostStep1({ form }: { form: PostFormController }) {
+  const { tr: uiText } = useUiLanguage();
   const {
     step,
     selectedServices,
@@ -33,7 +35,7 @@ export function PostStep1({ form }: { form: PostFormController }) {
                 style={styles.serviceIcon}
               />
               <Text style={[styles.serviceLabel, isSelected && styles.serviceLabelActive]}>
-                {item.label}
+                {uiText(item.label)}
               </Text>
             </Pressable>
           );

@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View, Animated, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +27,7 @@ export function LandingScreen({
   onLoginSuccess,
   onSignUp,
 }: LandingScreenProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const animProgress = useRef(new Animated.Value(isLoginView ? 1 : 0)).current;
 
@@ -188,12 +190,11 @@ export function LandingScreen({
 
             <View style={styles.contentBlock}>
               <Text style={styles.title}>
-                Find the perfect help{'\n'}
-                <Text style={{ color: THEME.colors.brand }}>for your home</Text>
+                {uiText("Find the perfect help")}{'\n'}
+                <Text style={{ color: THEME.colors.brand }}>{uiText("for your home")}</Text>
               </Text>
               <Text style={styles.subtitle}>
-                SerbiSure connects Filipinos for reliable home services.
-              </Text>
+                {uiText("SerbiSure connects Filipinos for reliable home services.")}</Text>
             </View>
 
             <View style={styles.footer}>
@@ -201,14 +202,14 @@ export function LandingScreen({
                 style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
                 onPress={onGetStarted}
               >
-                <Text style={styles.primaryButtonText}>Get Started</Text>
+                <Text style={styles.primaryButtonText}>{uiText("Get Started")}</Text>
                 <Ionicons name="arrow-forward-outline" size={22} color="#FFFFFF" style={styles.buttonIcon} />
               </Pressable>
 
               <View style={styles.loginContainer}>
-                <Text style={styles.loginText}>Already have an account? </Text>
+                <Text style={styles.loginText}>{uiText("Already have an account?")}</Text>
                 <Pressable onPress={onLoginPress}>
-                  <Text style={styles.loginLink}>Log in</Text>
+                  <Text style={styles.loginLink}>{uiText("Log in")}</Text>
                 </Pressable>
               </View>
             </View>
@@ -289,11 +290,11 @@ export function LandingScreen({
                       size={18}
                       color="#000000"
                     />
-                    <Text style={styles.rememberText}>Remember me</Text>
+                    <Text style={styles.rememberText}>{uiText("Remember me")}</Text>
                   </Pressable>
 
                   <Pressable style={styles.forgotBtn}>
-                    <Text style={styles.forgotText}>Forgot Password?</Text>
+                    <Text style={styles.forgotText}>{uiText("Forgot Password?")}</Text>
                   </Pressable>
                 </View>
 
@@ -310,7 +311,7 @@ export function LandingScreen({
                     <ActivityIndicator color="#FFFFFF" />
                   ) : (
                     <>
-                      <Text style={styles.loginBtnText}>Log in</Text>
+                      <Text style={styles.loginBtnText}>{uiText("Log in")}</Text>
                       <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 8 }} />
                     </>
                   )}
@@ -321,9 +322,9 @@ export function LandingScreen({
 
                 {/* Sign Up Link */}
                 <View style={styles.signupRow}>
-                  <Text style={styles.signupText}>Don't have an account? </Text>
+                  <Text style={styles.signupText}>{uiText("Don't have an account?")}</Text>
                   <Pressable onPress={onSignUp}>
-                    <Text style={styles.signupLink}>Sign up</Text>
+                    <Text style={styles.signupLink}>{uiText("Sign up")}</Text>
                   </Pressable>
                 </View>
               </View>

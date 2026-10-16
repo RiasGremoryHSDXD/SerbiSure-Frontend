@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, Pressable, Modal, ActivityIndicator, Alert, KeyboardAvoidingView, Keyboard, Platform, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +24,7 @@ const SENTIMENT_COLORS = {
 };
 
 export function ReviewModal({ visible, onClose, bookingId, revieweeName = 'Service Partner', token, onSuccess, isMandatory = false }: ReviewModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const [rating, setRating] = useState(5);
   const [feedback, setFeedback] = useState('');
@@ -114,7 +116,7 @@ export function ReviewModal({ visible, onClose, bookingId, revieweeName = 'Servi
         </View>
         <ScrollView ref={scroll} style={styles.scrollBody} contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 16) + 24 }]} keyboardShouldPersistTaps="handled">
           <View style={styles.card}>
-            <Text style={styles.revieweeText}>How was your experience with</Text>
+            <Text style={styles.revieweeText}>{uiText("How was your experience with")}</Text>
             <Text style={styles.revieweeName}>{revieweeName}?</Text>
             <View style={styles.starsRow}>
               {[1, 2, 3, 4, 5].map(score => (
@@ -123,22 +125,22 @@ export function ReviewModal({ visible, onClose, bookingId, revieweeName = 'Servi
                 </Pressable>
               ))}
             </View>
-            <Text style={styles.ratingScoreText}>{rating}.0 — {RATING_LABELS[rating]}</Text>
-            <Text style={styles.revieweeText}>Your star rating is separate from feedback sentiment.</Text>
+            <Text style={styles.ratingScoreText}>{rating}.0 — {uiText(RATING_LABELS[rating] || '')}</Text>
+            <Text style={styles.revieweeText}>{uiText("Your star rating is separate from feedback sentiment.")}</Text>
           </View>
           <View style={styles.inputCard}>
-            <Text style={styles.inputLabel}>YOUR EXPERIENCE</Text>
-            <TextInput style={styles.textArea} accessibilityLabel="Review feedback" placeholder="Share what went well or what could be better. You can write in English, Filipino, or Bisaya." placeholderTextColor="#9CA3AF" multiline textAlignVertical="top" value={feedback} editable={!isSubmitting && !savedReview} onChangeText={text => { setFeedback(text); setErrorMsg(null); setAnalysisUnavailable(false); }} maxLength={1000} />
+            <Text style={styles.inputLabel}>{uiText("YOUR EXPERIENCE")}</Text>
+            <TextInput style={styles.textArea} accessibilityLabel={uiText('Reviews & Feedback')} placeholder={uiText('Share what went well or what could be better. You can write in English, Filipino, or Bisaya.')} placeholderTextColor="#9CA3AF" multiline textAlignVertical="top" value={feedback} editable={!isSubmitting && !savedReview} onChangeText={text => { setFeedback(text); setErrorMsg(null); setAnalysisUnavailable(false); }} maxLength={1000} />
             <View style={styles.charCountRow}>
-              <Text style={styles.charCountText}>{feedback.trim().length} / 1000 characters · minimum 10</Text>
+              <Text style={styles.charCountText}>{feedback.trim().length} {uiText("/ 1000 characters · minimum 10")}</Text>
             </View>
           </View>
           {isSubmitting && (
             <View onLayout={() => scroll.current?.scrollToEnd({ animated: true })} style={styles.statusCard} accessibilityLiveRegion="polite" accessibilityState={{ busy: true }}>
               <ActivityIndicator size="small" color="#B45309" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.statusTitle}>Analyzing your feedback…</Text>
-                <Text style={styles.statusText}>{stillWaiting ? 'Still checking. Please keep this screen open for a moment.' : 'We’re checking the tone of your feedback before saving your review. This may take a moment.'}</Text>
+                <Text style={styles.statusTitle}>{uiText("Analyzing your feedback…")}</Text>
+                <Text style={styles.statusText}>{uiText(stillWaiting ? 'Still checking. Please keep this screen open for a moment.' : 'We’re checking the tone of your feedback before saving your review. This may take a moment.')}</Text>
               </View>
             </View>
           )}
@@ -146,9 +148,9 @@ export function ReviewModal({ visible, onClose, bookingId, revieweeName = 'Servi
             <View onLayout={() => scroll.current?.scrollToEnd({ animated: true })} style={[styles.statusCard, { backgroundColor: '#F0FDF4' }]} accessibilityLiveRegion="polite">
               <Ionicons name="checkmark-circle" size={28} color="#16A34A" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.statusTitle}>Review submitted</Text>
-                <Text style={styles.statusText}>Thank you! Your review has been saved.</Text>
-                <Text style={[styles.resultBadge, SENTIMENT_COLORS[savedReview.nlp_sentiment]]}>Feedback sentiment: {savedReview.nlp_sentiment}</Text>
+                <Text style={styles.statusTitle}>{uiText("Review submitted")}</Text>
+                <Text style={styles.statusText}>{uiText("Thank you! Your review has been saved.")}</Text>
+                <Text style={[styles.resultBadge, SENTIMENT_COLORS[savedReview.nlp_sentiment]]}>{uiText("Feedback sentiment:")} {uiText(savedReview.nlp_sentiment)}</Text>
               </View>
             </View>
           )}
@@ -156,13 +158,13 @@ export function ReviewModal({ visible, onClose, bookingId, revieweeName = 'Servi
             <View onLayout={() => scroll.current?.scrollToEnd({ animated: true })} style={styles.errorBox} accessibilityLiveRegion="polite">
               <Ionicons name="alert-circle-outline" size={22} color="#B45309" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.statusTitle}>{analysisUnavailable ? 'Analysis is unavailable right now' : 'Could not submit your review'}</Text>
+                <Text style={styles.statusTitle}>{uiText(analysisUnavailable ? 'Analysis is unavailable right now' : 'Could not submit your review')}</Text>
                 <Text style={styles.errorText}>{errorMsg}</Text>
               </View>
             </View>
           )}
           <Pressable accessibilityRole="button" accessibilityState={{ disabled: isSubmitting, busy: isSubmitting }} style={({ pressed }) => [styles.submitBtn, (pressed || isSubmitting) && { opacity: 0.7 }]} disabled={isSubmitting} onPress={savedReview ? onClose : handleSubmit}>
-            <Text style={styles.submitBtnText}>{savedReview ? 'Done' : isSubmitting ? 'Please wait…' : errorMsg ? 'Try Again' : 'Submit Review'}</Text>
+            <Text style={styles.submitBtnText}>{savedReview ? uiText("Done") : isSubmitting ? uiText("Please wait…") : errorMsg ? uiText("Try Again") : uiText("Submit Review")}</Text>
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>

@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../shared/localization/LanguageContext';
 import { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,6 +31,7 @@ interface AppNavigatorProps {
 }
 
 export function AppNavigator({ role = 'homeowner', avatarUri: oldAvatarUri, token, onUpdateAvatar, onLogout }: AppNavigatorProps) {
+  const { tr: uiText } = useUiLanguage();
 
   const { user } = useUser();
   const insets = useSafeAreaInsets();
@@ -169,8 +171,8 @@ export function AppNavigator({ role = 'homeowner', avatarUri: oldAvatarUri, toke
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Create a post"
-          accessibilityHint="Open the form to create a new post."
+          accessibilityLabel={uiText("Create a post")}
+          accessibilityHint={uiText("Open the form to create a new post.")}
           style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
           onPress={() => setPostJobVisible(true)}
         >

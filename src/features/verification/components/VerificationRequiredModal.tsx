@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { Modal, View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +19,7 @@ export function VerificationRequiredModal({
   role = 'kasambahay',
   verificationStatus = 'Unverified',
 }: VerificationRequiredModalProps) {
+  const { tr: uiText } = useUiLanguage();
   if (!visible) return null;
 
   const isKasambahay = role === 'kasambahay';
@@ -87,7 +89,7 @@ export function VerificationRequiredModal({
               onPress={onClose}
               hitSlop={12}
               style={styles.closeIconButton}
-              accessibilityLabel="Close"
+              accessibilityLabel={uiText("Close")}
             >
               <Ionicons name="close" size={20} color={THEME.colors.textSecondary} />
             </Pressable>
@@ -102,21 +104,19 @@ export function VerificationRequiredModal({
             <View style={styles.pendingCard}>
               <View style={styles.pendingHeaderRow}>
                 <Ionicons name="hourglass-outline" size={18} color="#B45309" />
-                <Text style={styles.pendingTitle}>Under active review</Text>
+                <Text style={styles.pendingTitle}>{uiText("Under active review")}</Text>
               </View>
               <Text style={styles.pendingBodyText}>
-                Our team usually completes document reviews within 24 hours. You'll receive an in-app notification the moment your account is active.
-              </Text>
+                {uiText("Our team usually completes document reviews within 24 hours. You'll receive an in-app notification the moment your account is active.")}</Text>
             </View>
           ) : isRejected ? (
             <View style={styles.rejectedCard}>
               <View style={styles.rejectedHeaderRow}>
                 <Ionicons name="warning-outline" size={18} color="#B91C1C" />
-                <Text style={styles.rejectedTitle}>Action required to unlock posting</Text>
+                <Text style={styles.rejectedTitle}>{uiText("Action required to unlock posting")}</Text>
               </View>
               <Text style={styles.rejectedBodyText}>
-                Please check the rejection notes on your Profile screen to see what needs correcting (e.g. blurry image, expired document, or mismatched name).
-              </Text>
+                {uiText("Please check the rejection notes on your Profile screen to see what needs correcting (e.g. blurry image, expired document, or mismatched name).")}</Text>
             </View>
           ) : (
             <View style={styles.benefitsCard}>
@@ -184,7 +184,7 @@ export function VerificationRequiredModal({
               onPress={onClose}
             >
               <Text style={styles.secondaryButtonText}>
-                {isPending ? 'Close' : "I'll Do This Later"}
+                {isPending ? uiText("Close") : "I'll Do This Later"}
               </Text>
             </Pressable>
           </View>

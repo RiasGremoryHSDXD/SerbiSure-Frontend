@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { useState, useEffect, useRef, useSyncExternalStore } from 'react';
 import { Image, Pressable, StyleSheet, Text, View, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,6 +35,7 @@ type DocumentUploadScreenProps = {
 };
 
 export function DocumentUploadScreen({ role = 'kasambahay', token, selfieUpload, onBack, onNext, onCancel, onSkip }: DocumentUploadScreenProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const [modalVisible, setModalVisible] = useState(false);
   const [activeBox, setActiveBox] = useState<'nbi' | 'police' | 'national_front' | 'national_back' | null>(null);
@@ -192,29 +194,29 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, selfieUpload,
         <Image source={logoSource} style={styles.logo} resizeMode="contain" />
         <View style={[styles.headerSide, styles.headerSideRight]}>
           <Pressable onPress={() => { void finishRegistration(onSkip); }} disabled={loading}>
-            <Text style={styles.skipText}>Skip</Text>
+            <Text style={styles.skipText}>{uiText("Skip")}</Text>
           </Pressable>
         </View>
       </View>
 
       <View style={styles.titleBlock}>
-        <Text style={styles.title}>Verify Your Identity</Text>
-        <Text style={styles.subtitle}>Upload your documents to activate your profile</Text>
+        <Text style={styles.title}>{uiText("Verify Your Identity")}</Text>
+        <Text style={styles.subtitle}>{uiText("Upload your documents to activate your profile")}</Text>
       </View>
 
       <View style={styles.alertBox}>
         <Ionicons name="alert-circle" size={16} color="#000" style={styles.alertIcon} />
         <View style={styles.alertContent}>
-          <Text style={styles.alertTitle}>Verification Process</Text>
-          <Text style={styles.alertText}>Documents are securely stored and typically reviewed within 24 hours.</Text>
+          <Text style={styles.alertTitle}>{uiText("Verification Process")}</Text>
+          <Text style={styles.alertText}>{uiText("Documents are securely stored and typically reviewed within 24 hours.")}</Text>
           {selfieState?.status === 'uploading' && <View style={styles.selfieStatus}>
             <ActivityIndicator size="small" color={THEME.colors.ink} />
-            <Text accessibilityLiveRegion="polite" style={styles.selfieStatusText}>Saving your selfie. You can select documents now.</Text>
+            <Text accessibilityLiveRegion="polite" style={styles.selfieStatusText}>{uiText("Saving your selfie. You can select documents now.")}</Text>
           </View>}
           {selfieState?.status === 'failed' && <View style={styles.selfieStatus}>
             <Text accessibilityRole="alert" style={styles.selfieStatusText}>{selfieState.error}</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Retry saving selfie" disabled={loading} onPress={() => { void finishRegistration(); }} style={styles.selfieRetry}>
-              <Text style={styles.selfieRetryText}>Retry</Text>
+              <Text style={styles.selfieRetryText}>{uiText("Retry")}</Text>
             </Pressable>
           </View>}
         </View>
@@ -243,15 +245,15 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, selfieUpload,
                   ) : existingDocs.has('national_id_front') ? (
                     <View style={styles.attachmentContainer}>
                       <Ionicons name="checkmark-circle" size={32} color="#16A34A" />
-                      <Text style={[styles.uploadTitle, { color: '#16A34A', marginTop: 4 }]}>National ID (Front)</Text>
-                      <Text style={[styles.uploadSubtitle, { color: '#15803D' }]}>Submitted (Under Review)</Text>
+                      <Text style={[styles.uploadTitle, { color: '#16A34A', marginTop: 4 }]}>{uiText("National ID (Front)")}</Text>
+                      <Text style={[styles.uploadSubtitle, { color: '#15803D' }]}>{uiText("Submitted (Under Review)")}</Text>
                     </View>
                   ) : (
                     <>
                       <Ionicons name="cloud-upload" size={26} color={THEME.colors.brand} style={styles.uploadIcon} />
-                      <Text style={styles.uploadTitle}>National ID (Front)</Text>
-                      <Text style={styles.uploadSubtitle}>Tap or upload image</Text>
-                      <Text style={styles.uploadMeta}>JPG, PNG, PDF (Max 5MB)</Text>
+                      <Text style={styles.uploadTitle}>{uiText("National ID (Front)")}</Text>
+                      <Text style={styles.uploadSubtitle}>{uiText("Tap or upload image")}</Text>
+                      <Text style={styles.uploadMeta}>{uiText("JPG, PNG, PDF (Max 5MB)")}</Text>
                     </>
                   )}
                 </Pressable>
@@ -267,15 +269,15 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, selfieUpload,
                   ) : existingDocs.has('national_id_back') ? (
                     <View style={styles.attachmentContainer}>
                       <Ionicons name="checkmark-circle" size={32} color="#16A34A" />
-                      <Text style={[styles.uploadTitle, { color: '#16A34A', marginTop: 4 }]}>National ID (Back)</Text>
-                      <Text style={[styles.uploadSubtitle, { color: '#15803D' }]}>Submitted (Under Review)</Text>
+                      <Text style={[styles.uploadTitle, { color: '#16A34A', marginTop: 4 }]}>{uiText("National ID (Back)")}</Text>
+                      <Text style={[styles.uploadSubtitle, { color: '#15803D' }]}>{uiText("Submitted (Under Review)")}</Text>
                     </View>
                   ) : (
                     <>
                       <Ionicons name="cloud-upload" size={26} color={THEME.colors.brand} style={styles.uploadIcon} />
-                      <Text style={styles.uploadTitle}>National ID (Back)</Text>
-                      <Text style={styles.uploadSubtitle}>Tap or upload image</Text>
-                      <Text style={styles.uploadMeta}>JPG, PNG, PDF (Max 5MB)</Text>
+                      <Text style={styles.uploadTitle}>{uiText("National ID (Back)")}</Text>
+                      <Text style={styles.uploadSubtitle}>{uiText("Tap or upload image")}</Text>
+                      <Text style={styles.uploadMeta}>{uiText("JPG, PNG, PDF (Max 5MB)")}</Text>
                     </>
                   )}
                 </Pressable>
@@ -293,9 +295,9 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, selfieUpload,
                   ) : (
                     <>
                       <Ionicons name="cloud-upload" size={26} color={THEME.colors.brand} style={styles.uploadIcon} />
-                      <Text style={styles.uploadTitle}>NBI Clearance</Text>
-                      <Text style={styles.uploadSubtitle}>Click or drag file to upload</Text>
-                      <Text style={styles.uploadMeta}>JPG, PNG, PDF (Max 5MB)</Text>
+                      <Text style={styles.uploadTitle}>{uiText("NBI Clearance")}</Text>
+                      <Text style={styles.uploadSubtitle}>{uiText("Click or drag file to upload")}</Text>
+                      <Text style={styles.uploadMeta}>{uiText("JPG, PNG, PDF (Max 5MB)")}</Text>
                     </>
                   )}
                 </Pressable>
@@ -311,9 +313,9 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, selfieUpload,
                   ) : (
                     <>
                       <Ionicons name="cloud-upload" size={26} color={THEME.colors.brand} style={styles.uploadIcon} />
-                      <Text style={styles.uploadTitle}>Police Clearance</Text>
-                      <Text style={styles.uploadSubtitle}>Click or drag file to upload</Text>
-                      <Text style={styles.uploadMeta}>JPG, PNG, PDF (Max 5MB)</Text>
+                      <Text style={styles.uploadTitle}>{uiText("Police Clearance")}</Text>
+                      <Text style={styles.uploadSubtitle}>{uiText("Click or drag file to upload")}</Text>
+                      <Text style={styles.uploadMeta}>{uiText("JPG, PNG, PDF (Max 5MB)")}</Text>
                     </>
                   )}
                 </Pressable>
@@ -325,13 +327,13 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, selfieUpload,
             <View style={styles.divider} />
             <View style={styles.buttonRow}>
               <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]} onPress={() => { void finishRegistration(onCancel); }} disabled={loading}>
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
+                <Text style={styles.secondaryButtonText}>{uiText("Cancel")}</Text>
               </Pressable>
               <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, loading && { opacity: 0.7 }]} onPress={handleUploadAll} disabled={loading}>
                 {loading ? (
                   <ActivityIndicator color="#FFF" />
                 ) : (
-                  <Text style={styles.primaryButtonText}>Submit</Text>
+                  <Text style={styles.primaryButtonText}>{uiText("Submit")}</Text>
                 )}
               </Pressable>
             </View>

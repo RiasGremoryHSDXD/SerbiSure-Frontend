@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +11,7 @@ export function SupportContactsCard({ token, profileKey, refreshKey, onContact }
   refreshKey: number;
   onContact: (contact: SupportContact) => void;
 }) {
+  const { tr: uiText } = useUiLanguage();
   const [data, setData] = useState<SupportContacts | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -51,7 +53,7 @@ export function SupportContactsCard({ token, profileKey, refreshKey, onContact }
       style={({ pressed }) => [styles.contact, local && styles.divider, pressed && styles.pressed]}>
       <View style={styles.icon}><Ionicons name={local ? 'business-outline' : 'chatbubble-ellipses-outline'} size={20} color="#A44913" /></View>
       <View style={styles.copy}>
-        <Text style={styles.label}>{local ? `${data?.barangay.name} Barangay` : 'SerbiSure Support'}</Text>
+        <Text style={styles.label}>{local ? `${data?.barangay.name} Barangay` : uiText("SerbiSure Support")}</Text>
         {(data?.superadmins.length || 0) > 1 && !local && <Text style={styles.description}>{contact.name}</Text>}
       </View>
       <Ionicons name="chevron-forward" size={18} color="#71717A" />
@@ -60,23 +62,23 @@ export function SupportContactsCard({ token, profileKey, refreshKey, onContact }
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>Need help?</Text>
-      {loading && <View style={styles.loading}><ActivityIndicator color="#A44913" /><Text style={styles.description}>Loading contacts…</Text></View>}
+      <Text style={styles.title}>{uiText("Need help?")}</Text>
+      {loading && <View style={styles.loading}><ActivityIndicator color="#A44913" /><Text style={styles.description}>{uiText("Loading contacts…")}</Text></View>}
       {!loading && error ? <View accessibilityLiveRegion="polite">
         <Text style={styles.notice}>{error}</Text>
         <Pressable accessibilityRole="button" onPress={() => setRetry(value => value + 1)} style={styles.retry}>
-          <Text style={styles.label}>Try again</Text>
+          <Text style={styles.label}>{uiText("Try again")}</Text>
         </Pressable>
       </View> : null}
       {!loading && data && <>
         {data.superadmins.map(contact => contactButton(contact, false))}
-        {data.superadmins.length === 0 && <Text style={styles.notice}>Support is unavailable. Try again later.</Text>}
+        {data.superadmins.length === 0 && <Text style={styles.notice}>{uiText("Support is unavailable. Try again later.")}</Text>}
         {data.barangay.available ? data.barangay.contacts.map(contact => contactButton(contact, true)) : (
           <View style={[styles.contact, styles.divider]} accessibilityLiveRegion="polite">
             <View style={[styles.icon, styles.iconMuted]}><Ionicons name="business-outline" size={20} color="#71717A" /></View>
             <View style={styles.copy}>
-              <Text style={styles.label}>{data.barangay.name ? `${data.barangay.name} Barangay` : 'Your Barangay'}</Text>
-              <Text style={styles.description}>{data.superadmins.length > 0 ? 'Not available yet. Message support.' : 'Not available yet.'}</Text>
+              <Text style={styles.label}>{data.barangay.name ? `${data.barangay.name} Barangay` : uiText("Your Barangay")}</Text>
+              <Text style={styles.description}>{data.superadmins.length > 0 ? uiText("Not available yet. Message support.") : uiText("Not available yet.")}</Text>
             </View>
           </View>
         )}

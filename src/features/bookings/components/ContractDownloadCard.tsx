@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { workSetupLabel } from '../workSetup';
 import React from 'react';
 import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -5,20 +6,21 @@ import { Ionicons } from '@expo/vector-icons';
 import type { BookingItem } from '../api/bookingApi';
 
 export function ContractDownloadCard({ summary }: Readonly<{ summary: NonNullable<BookingItem['contract_summary']> }>) {
+  const { tr: uiText } = useUiLanguage();
   const download = async () => {
     try { await Linking.openURL(summary.contract_pdf_url); }
     catch { Alert.alert('Unable to Download', 'Check your connection and try again.'); }
   };
   return <View style={styles.card}>
-    <Text style={styles.title}>Long-term engagement terms</Text>
+    <Text style={styles.title}>{uiText("Long-term engagement terms")}</Text>
     <Text style={styles.terms}>{summary.service_category.map(value => value.replace(/_/g, ' ')).join(', ')} · {summary.rate_needs_review ? 'Confirm the amount from the original agreement' : 'PHP ' + Number(summary.rate_amount).toLocaleString() + '/month'}</Text>
-    <Text style={styles.terms}>Work setup: {workSetupLabel(summary.work_setup)}</Text>
-    <Text style={styles.terms}>Starts: {new Date(summary.start_date).toLocaleDateString()}</Text>
+    <Text style={styles.terms}>{uiText("Work setup:")}{workSetupLabel(summary.work_setup)}</Text>
+    <Text style={styles.terms}>{uiText("Starts:")}{new Date(summary.start_date).toLocaleDateString()}</Text>
     <Text style={styles.terms}>{summary.location}</Text>
     <Text style={styles.notice}>{summary.notice}</Text>
     <Pressable accessibilityRole="button" onPress={download} style={styles.button}>
       <Ionicons name="download-outline" size={18} color="#9A3412" />
-      <Text style={styles.buttonText}>Download DOLE Standard Kasambahay Contract (PDF)</Text>
+      <Text style={styles.buttonText}>{uiText("Download DOLE Standard Kasambahay Contract (PDF)")}</Text>
     </Pressable>
   </View>;
 }

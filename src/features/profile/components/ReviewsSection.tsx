@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { Text, View, Pressable } from 'react-native';
 
@@ -8,6 +9,7 @@ import type { ProfileController } from '../hooks/useProfile';
 import { ProfileAvatar } from '../../../shared/ui/ProfileAvatar';
 
 export function ReviewsSection({ profile }: { profile: Pick<ProfileController, 't' | 'copy' | 'reviews' | 'isReviewsExpanded' | 'setIsReviewsExpanded'> }) {
+  const { tr: uiText, formatDate } = useUiLanguage();
   const {
     t,
     copy,
@@ -27,7 +29,7 @@ export function ReviewsSection({ profile }: { profile: Pick<ProfileController, '
             style={({ pressed }) => [styles.viewAllBtnWrap, pressed && { opacity: 0.7 }]}
           >
             <Text style={styles.viewAllPill}>
-              {isReviewsExpanded ? 'Show Less' : t.viewAll}
+              {isReviewsExpanded ? uiText("Show Less") : t.viewAll}
             </Text>
             <Ionicons
               name={isReviewsExpanded ? 'chevron-up' : 'chevron-down'}
@@ -42,7 +44,7 @@ export function ReviewsSection({ profile }: { profile: Pick<ProfileController, '
       {reviews.length > 0 ? (
         <View style={styles.reviewsList}>
           {visibleReviews.map((r, index) => {
-            const reviewerName = r.reviewer_name || copy.reviewer;
+            const reviewerName = r.reviewer_name || uiText(copy.reviewer);
             const sentimentColor = r.nlp_sentiment === 'Negative'
               ? '#BE123C'
               : r.nlp_sentiment === 'Neutral'
@@ -62,13 +64,13 @@ export function ReviewsSection({ profile }: { profile: Pick<ProfileController, '
                       <View style={styles.reviewerMetaRow}>
                         <Text style={styles.reviewerDate}>
                           {r.createdAt
-                            ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-                            : 'Verified review'}
+                            ? formatDate(r.createdAt, 'monthYear')
+                            : uiText("Verified review")}
                         </Text>
                         <View style={styles.sentimentInline}>
                           <View style={[styles.sentimentDot, { backgroundColor: sentimentColor }]} />
                           <Text style={[styles.sentimentInlineText, { color: sentimentColor }]}>
-                            {r.nlp_sentiment || 'Positive'}
+                            {uiText(r.nlp_sentiment || 'Positive')}
                           </Text>
                         </View>
                       </View>

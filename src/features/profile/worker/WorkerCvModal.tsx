@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +13,7 @@ import { downloadWorkerCv } from './downloadWorkerCv';
 
 interface Props { visible: boolean; onClose: () => void; userId: string; token: string; editable?: boolean; onSaved?: () => void }
 export function WorkerCvModal({ visible, onClose, userId, token, editable = false, onSaved }: Props) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const [cv, setCv] = useState<WorkerCv | null>(null);
   const [draft, setDraft] = useState(emptyWorkerDraft);
@@ -145,20 +147,20 @@ export function WorkerCvModal({ visible, onClose, userId, token, editable = fals
   };
   return <Modal visible={visible} animationType="slide" onRequestClose={() => { if (!action.current) onClose(); }}>
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <View style={styles.header}><Pressable disabled={busy} onPress={onClose}><Text style={styles.label}>Close</Text></Pressable><Text style={styles.title}>{editing ? 'Edit CV Details' : 'SerbiSure CV'}</Text><View style={{ width: 35 }} /></View>
+      <View style={styles.header}><Pressable disabled={busy} onPress={onClose}><Text style={styles.label}>{uiText("Close")}</Text></Pressable><Text style={styles.title}>{editing ? 'Edit CV Details' : uiText("SerbiSure CV")}</Text><View style={{ width: 35 }} /></View>
       <ScrollView ref={scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {loading && <ActivityIndicator color="#B45309" />}
         {error !== '' && <View accessibilityLiveRegion="polite" style={styles.error}><Text>{error}</Text></View>}
-        {!loading && !cv && <Pressable style={styles.button} onPress={() => { setLoading(true); setError(''); const current = generation.current; refresh(current).catch(() => { if (current === generation.current) setError('Could not load CV. Please try again.'); }).finally(() => { if (current === generation.current) setLoading(false); }); }}><Text>Try Again</Text></Pressable>}
+        {!loading && !cv && <Pressable style={styles.button} onPress={() => { setLoading(true); setError(''); const current = generation.current; refresh(current).catch(() => { if (current === generation.current) setError('Could not load CV. Please try again.'); }).finally(() => { if (current === generation.current) setLoading(false); }); }}><Text>{uiText("Try Again")}</Text></Pressable>}
         {editing ? <WorkerCvForm value={draft} onChange={setDraft} page={page} disabled={busy} /> : cv && <WorkerCvPreview cv={cv} />}
       </ScrollView>
-      {busy && <View style={styles.busy} accessibilityLiveRegion="polite"><ActivityIndicator color="#B45309" /><Text>Preparing your CV…</Text></View>}
+      {busy && <View style={styles.busy} accessibilityLiveRegion="polite"><ActivityIndicator color="#B45309" /><Text>{uiText("Preparing your CV…")}</Text></View>}
       {!loading && cv && <View style={[styles.footer, !editing && styles.previewFooter]}>
-        {editing ? <><Pressable disabled={busy} style={styles.secondary} onPress={() => { if (page) setPage(page - 1); else setEditing(false); setError(''); scroll.current?.scrollTo({ y: 0 }); }}><Text>Back</Text></Pressable><Pressable disabled={busy} style={styles.button} onPress={next}><Text>{page === 3 ? 'Save Details' : 'Next'}</Text></Pressable></> : <>
-          {editable && <Pressable accessibilityRole="button" disabled={busy} style={[styles.editAction, busy && styles.disabled]} onPress={edit}><Text style={styles.secondaryText}>Edit Details</Text></Pressable>}
+        {editing ? <><Pressable disabled={busy} style={styles.secondary} onPress={() => { if (page) setPage(page - 1); else setEditing(false); setError(''); scroll.current?.scrollTo({ y: 0 }); }}><Text>{uiText("Back")}</Text></Pressable><Pressable disabled={busy} style={styles.button} onPress={next}><Text>{page === 3 ? 'Save Details' : uiText("Next")}</Text></Pressable></> : <>
+          {editable && <Pressable accessibilityRole="button" disabled={busy} style={[styles.editAction, busy && styles.disabled]} onPress={edit}><Text style={styles.secondaryText}>{uiText("Edit Details")}</Text></Pressable>}
           <View style={styles.pdfActions}>
-            <Pressable accessibilityRole="button" accessibilityHint="Open a temporary PDF in your PDF viewer" disabled={busy} style={[styles.button, busy && styles.disabled]} onPress={viewPdf}><Text style={styles.buttonText}>View PDF</Text></Pressable>
-            <Pressable accessibilityRole="button" accessibilityHint="Save a copy of the PDF to your device" disabled={busy} style={[styles.downloadButton, busy && styles.disabled]} onPress={downloadPdf}><Text style={styles.downloadText}>Download PDF</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityHint="Open a temporary PDF in your PDF viewer" disabled={busy} style={[styles.button, busy && styles.disabled]} onPress={viewPdf}><Text style={styles.buttonText}>{uiText("View PDF")}</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityHint="Save a copy of the PDF to your device" disabled={busy} style={[styles.downloadButton, busy && styles.disabled]} onPress={downloadPdf}><Text style={styles.downloadText}>{uiText("Download PDF")}</Text></Pressable>
           </View>
         </>}
       </View>}

@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../localization/LanguageContext';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Modal,
@@ -40,6 +41,7 @@ export function DateOfBirthPickerModal({
   onSelect,
   onClose,
 }: DateOfBirthPickerModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const currentYear = new Date().getFullYear();
   const maxYear = currentYear - 18; // Strict legal working age (min 18 years old)
   const minYear = currentYear - 85;
@@ -144,8 +146,8 @@ export function DateOfBirthPickerModal({
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.headerTitle}>Select Date of Birth</Text>
-            <Text style={styles.headerSubtitle}>Must be at least 18 years old</Text>
+            <Text style={styles.headerTitle}>{uiText("Select Date of Birth")}</Text>
+            <Text style={styles.headerSubtitle}>{uiText("Must be at least 18 years old")}</Text>
           </View>
           <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={10}>
             <Ionicons name="close" size={22} color="#4A4945" />
@@ -155,14 +157,14 @@ export function DateOfBirthPickerModal({
         {/* Live Selection Summary Banner */}
         <View style={styles.summaryCard}>
           <View style={styles.summaryLeft}>
-            <Text style={styles.summaryLabel}>Selected Birth Date</Text>
+            <Text style={styles.summaryLabel}>{uiText("Selected Birth Date")}</Text>
             <Text style={styles.summaryDateText}>
               {monthName} {selectedDay}, {selectedYear}
             </Text>
           </View>
           <View style={styles.ageBadge}>
             <Ionicons name="shield-checkmark" size={14} color="#10B981" />
-            <Text style={styles.ageBadgeText}>{liveAge} yrs old</Text>
+            <Text style={styles.ageBadgeText}>{liveAge} {uiText("yrs old")}</Text>
           </View>
         </View>
 
@@ -170,7 +172,7 @@ export function DateOfBirthPickerModal({
         <View style={styles.selectorContainer}>
           {/* Column 1: Month */}
           <View style={styles.columnWrapper}>
-            <Text style={styles.columnHeader}>Month</Text>
+            <Text style={styles.columnHeader}>{uiText("Month")}</Text>
             <FlatList
               data={MONTHS}
               keyExtractor={(item) => `m-${item.value}`}
@@ -194,7 +196,7 @@ export function DateOfBirthPickerModal({
 
           {/* Column 2: Day */}
           <View style={styles.columnWrapper}>
-            <Text style={styles.columnHeader}>Day</Text>
+            <Text style={styles.columnHeader}>{uiText("Day")}</Text>
             <FlatList
               data={days}
               keyExtractor={(item) => `d-${item}`}
@@ -218,7 +220,7 @@ export function DateOfBirthPickerModal({
 
           {/* Column 3: Year */}
           <View style={[styles.columnWrapper, { flex: 1.2 }]}>
-            <Text style={styles.columnHeader}>Year</Text>
+            <Text style={styles.columnHeader}>{uiText("Year")}</Text>
             <FlatList
               data={years}
               keyExtractor={(item) => `y-${item}`}
@@ -244,10 +246,10 @@ export function DateOfBirthPickerModal({
         {/* Footer Actions */}
         <View style={styles.footer}>
           <Pressable style={styles.cancelBtn} onPress={onClose}>
-            <Text style={styles.cancelBtnText}>Cancel</Text>
+            <Text style={styles.cancelBtnText}>{uiText("Cancel")}</Text>
           </Pressable>
           <Pressable style={styles.confirmBtn} onPress={handleConfirm}>
-            <Text style={styles.confirmBtnText}>Set Date of Birth</Text>
+            <Text style={styles.confirmBtnText}>{uiText("Set Date of Birth")}</Text>
           </Pressable>
         </View>
       </SafeAreaView>

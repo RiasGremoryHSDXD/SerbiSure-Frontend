@@ -58,7 +58,10 @@ function harness(t, extraMocks = {}) {
       if (name in mocks) return mocks[name];
       if (name === 'react' || name === 'react/jsx-runtime') return require(name);
       if (/\.png$/.test(name)) return 'image';
-      if (name.startsWith('.')) return load(path.resolve(path.dirname(filename), name + '.ts'));
+      if (name.startsWith('.')) {
+        const target = path.resolve(path.dirname(filename), name);
+        return load(['.ts', '.tsx'].map(extension => target + extension).find(fs.existsSync));
+      }
       throw new Error('Unexpected dependency: ' + name);
     }, module, module.exports);
     cache.set(filename, module.exports);

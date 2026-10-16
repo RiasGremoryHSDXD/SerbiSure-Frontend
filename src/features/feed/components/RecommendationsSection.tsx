@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, Pressable, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +17,7 @@ export function RecommendationsSection({
   onSelectWorker,
   onSelectJob,
 }: RecommendationsSectionProps) {
+  const { tr: uiText } = useUiLanguage();
   const [items, setItems] = useState<RecommendationItem[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -47,10 +49,10 @@ export function RecommendationsSection({
         <View style={styles.titleGroup}>
           <Ionicons name="sparkles" size={17} color="#FFB43B" style={{ marginRight: 6 }} />
           <Text style={styles.title}>
-            {accountType === 'Homeowner' ? 'Top Matched Workers' : 'Recommended Jobs'}
+            {uiText(accountType === 'Homeowner' ? 'Top Matched Workers' : 'Recommended Jobs')}
           </Text>
         </View>
-        <Text style={styles.subtext}>Based on profile information</Text>
+        <Text style={styles.subtext}>{uiText("Based on profile information")}</Text>
       </View>
 
       {loading ? (
@@ -91,7 +93,7 @@ export function RecommendationsSection({
               >
                 {/* Match Score Badge */}
                 <View style={styles.matchBadge}>
-                  <Text style={styles.matchBadgeText}>{item.match_score}% Match</Text>
+                  <Text style={styles.matchBadgeText}>{uiText('{count}% Match', { count: item.match_score })}</Text>
                 </View>
 
                 {/* Avatar / Icon */}
@@ -108,7 +110,7 @@ export function RecommendationsSection({
                 {isWorker ? (
                   <View style={styles.metaRow}>
                     <Ionicons name="star" size={12} color="#FFB43B" />
-                    <Text style={styles.metaText}>{item.rating && item.rating > 0 ? item.rating.toFixed(1) : 'Unrated'}</Text>
+                    <Text style={styles.metaText}>{item.rating && item.rating > 0 ? item.rating.toFixed(1) : uiText('Unrated')}</Text>
                   </View>
                 ) : (
                   <View style={styles.metaRow}>

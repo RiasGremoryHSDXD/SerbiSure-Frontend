@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Canvas, Circle, Path, Skia } from '@shopify/react-native-skia';
@@ -114,6 +115,7 @@ function getInstruction(state: LivenessState, showTrackerNotice: boolean, countd
 }
 
 export function LivenessScreen({ role = 'homeowner', onVerified, onBack }: LivenessScreenProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<FaceCameraHandle | null>(null);
   const captureStartedRef = useRef(false);
@@ -264,16 +266,16 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack }: Liven
       </View>
 
       <View style={styles.titleBlock}>
-        <Text style={styles.title}>Verify Your Identity</Text>
-        <Text style={styles.subtitle}>Take a selfie to verify your identity</Text>
+        <Text style={styles.title}>{uiText("Verify Your Identity")}</Text>
+        <Text style={styles.subtitle}>{uiText("Take a selfie to verify your identity")}</Text>
       </View>
 
       <View style={styles.card}>
         <RegistrationStepper
           currentStep={role === 'kasambahay' ? 4 : 3}
           totalSteps={role === 'kasambahay' ? 5 : 4}
-          title={role === 'kasambahay' ? 'Step 4: Face Verification' : 'Step 3: Face Verification'}
-          help="Position your face within the circle in a well-lit area."
+          title={role === 'kasambahay' ? uiText("Step 4: Face Verification") : uiText("Step 3: Face Verification")}
+          help={uiText('Position your face within the circle in a well-lit area.')}
         />
 
         <View style={styles.cardContent}>
@@ -296,13 +298,13 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack }: Liven
               <View style={styles.captureErrorCard} accessibilityRole="alert" accessibilityLiveRegion="polite">
                 <Ionicons name="camera-outline" size={21} color="#9A5B18" />
                 <View style={styles.captureErrorCopy}>
-                  <Text style={styles.captureErrorTitle}>{captureError}</Text>
-                  <Text style={styles.captureErrorBody}>Your face check is complete. Keep facing the camera and tap Retry to take the photo again.</Text>
+                  <Text style={styles.captureErrorTitle}>{uiText(captureError)}</Text>
+                  <Text style={styles.captureErrorBody}>{uiText("Your face check is complete. Keep facing the camera and tap Retry to take the photo again.")}</Text>
                 </View>
               </View>
             ) : (
               <Text style={[styles.instruction, !started && styles.helperInstruction]}>
-                {instruction}
+                {uiText(instruction)}
               </Text>
             )}
           </View>
@@ -311,19 +313,19 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack }: Liven
             <View style={styles.divider} />
             <View style={styles.buttonRow}>
               <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]} onPress={handleCancel}>
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
+                <Text style={styles.secondaryButtonText}>{uiText("Cancel")}</Text>
               </Pressable>
               {!started ? (
                 <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={handleContinue}>
-                  <Text style={styles.primaryButtonText}>Continue</Text>
+                  <Text style={styles.primaryButtonText}>{uiText("Continue")}</Text>
                 </Pressable>
               ) : state.retryMessage || captureError ? (
                 <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={handleRetry}>
-                  <Text style={styles.primaryButtonText}>Retry</Text>
+                  <Text style={styles.primaryButtonText}>{uiText("Retry")}</Text>
                 </Pressable>
               ) : (
                 <View style={[styles.primaryButton, { opacity: 0.6 }]}>
-                  <Text style={styles.primaryButtonText}>{state.verified ? 'Capturing…' : 'Scanning…'}</Text>
+                  <Text style={styles.primaryButtonText}>{state.verified ? uiText('Capturing…') : uiText("Scanning…")}</Text>
                 </View>
               )}
             </View>

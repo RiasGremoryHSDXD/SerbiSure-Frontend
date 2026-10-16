@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { StyleSheet, Text, View, Image, ScrollView, TextInput, Pressable, RefreshControl, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +18,7 @@ import { useChatPresence } from '../../../shared/realtime/useChatPresence';
 const logoSource = require('../../../../assets/serbisure_new_clean.png');
 
 export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const { t } = useLanguage();
   const { user } = useUser();
@@ -165,7 +167,7 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
           </View>
           {(liveStatus === 'unauthorized' || liveStatus === 'reconnecting') && (
             <Text accessibilityLiveRegion="polite" style={styles.connectionNotice}>
-              {liveStatus === 'unauthorized' ? 'Please sign in again to receive new messages.' : 'Reconnecting…'}
+              {liveStatus === 'unauthorized' ? uiText("Please sign in again to receive new messages.") : uiText("Reconnecting…")}
             </Text>
           )}
         </View>
@@ -181,7 +183,7 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
           )}
         />
 
-        <Text style={styles.sectionHeader}>Recent messages</Text>
+        <Text style={styles.sectionHeader}>{uiText("Recent messages")}</Text>
 
         <View style={styles.chatList}>
           {isLoading ? (
@@ -204,9 +206,9 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
               <View style={styles.emptyIconCircle}>
                 <Ionicons name="chatbubbles" size={32} color={THEME.colors.ink} />
               </View>
-              <Text style={styles.emptyTitle}>{searchQuery.trim() ? 'No messages found' : 'No messages yet'}</Text>
+              <Text style={styles.emptyTitle}>{searchQuery.trim() ? uiText("No messages found") : uiText("No messages yet")}</Text>
               <Text style={styles.emptySub}>
-                {searchQuery.trim() ? 'Try another name or word.' : 'Your conversations will appear here.'}
+                {searchQuery.trim() ? uiText("Try another name or word.") : uiText("Your conversations will appear here.")}
               </Text>
             </View>
           ) : (
@@ -227,7 +229,7 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
                     {online !== undefined && (
                       <View
                         accessible
-                        accessibilityLabel={online ? 'Online' : 'Offline'}
+                        accessibilityLabel={online ? uiText("Online") : uiText("Offline")}
                         style={[styles.onlineDot, !online && styles.offlineDot]}
                       />
                     )}
@@ -247,7 +249,7 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
                       {cleanMessagePreview(chat.message)}
                       {chat.time ? (
                         <Text style={styles.messageTime}>
-                          {` · ${chat.time.replace(' ago', '')}`}
+                          {` · ${uiText(chat.time).replace(' ago', '')}`}
                         </Text>
                       ) : null}
                     </Text>

@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,17 +13,19 @@ export function BrowseDeckEmpty({ role, fetchedCount, hasFilters, error, onRefre
 }
 
 export function BrowseEmptyState({ icon, title, description, action, onAction }: Readonly<{ icon: keyof typeof Ionicons.glyphMap; title: string; description: string; action: string; onAction: () => void }>) {
+  const { tr: uiText } = useUiLanguage();
   return (
     <View style={styles.empty}>
       <View style={styles.iconCircle}><Ionicons name={icon} size={36} color={THEME.colors.brandDark} /></View>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.description}>{description}</Text>
-      <Pressable accessibilityRole="button" onPress={onAction} style={styles.button}><Text style={styles.buttonText}>{action}</Text></Pressable>
+      <Text style={styles.title}>{uiText(title)}</Text>
+      <Text style={styles.description}>{uiText(description)}</Text>
+      <Pressable accessibilityRole="button" onPress={onAction} style={styles.button}><Text style={styles.buttonText}>{uiText(action)}</Text></Pressable>
     </View>
   );
 }
 
 export function BrowseDeckSkeleton() {
+  const { tr: uiText } = useUiLanguage();
   const opacity = useRef(new Animated.Value(0.4)).current;
   useEffect(() => {
     const animation = Animated.loop(Animated.sequence([
@@ -33,7 +36,7 @@ export function BrowseDeckSkeleton() {
     return () => animation.stop();
   }, [opacity]);
   return (
-    <Animated.View style={[styles.skeleton, { opacity }]} accessibilityLabel="Loading posts">
+    <Animated.View style={[styles.skeleton, { opacity }]} accessibilityLabel={uiText("Loading posts")}>
       <View style={styles.skeletonIdentity}><View style={styles.skeletonAvatar} /><View style={[styles.bar, { flex: 1 }]} /></View>
       <View style={[styles.bar, { width: '75%', height: 24 }]} />
       <View style={styles.bar} /><View style={[styles.bar, { width: '85%' }]} />
@@ -43,19 +46,20 @@ export function BrowseDeckSkeleton() {
 }
 
 export function BrowseDeckSwipeControls({ role, dragX, onSkip, onInterested }: Readonly<{ role: Role; dragX: Animated.Value; onSkip: () => void; onInterested: () => void }>) {
+  const { tr: uiText } = useUiLanguage();
   const passBackground = dragX.interpolate({ inputRange: [-150, -20, 0], outputRange: ['#E53935', '#FFEBEE', '#FFFFFF'], extrapolate: 'clamp' });
   const interestedBackground = dragX.interpolate({ inputRange: [0, 20, 150], outputRange: ['#FFFFFF', '#E8F5E9', '#4CD964'], extrapolate: 'clamp' });
   const passHighlight = dragX.interpolate({ inputRange: [-120, -15, 0], outputRange: [1, 0.4, 0], extrapolate: 'clamp' });
   const interestedHighlight = dragX.interpolate({ inputRange: [0, 15, 120], outputRange: [0, 0.4, 1], extrapolate: 'clamp' });
   return (
     <View style={styles.edgeControls} pointerEvents="box-none">
-      <Pressable accessibilityRole="button" accessibilityLabel="Skip this post" onPress={onSkip} hitSlop={8}>
+      <Pressable accessibilityRole="button" accessibilityLabel={uiText("Skip this post")} onPress={onSkip} hitSlop={8}>
         <Animated.View style={[styles.edgeButton, { backgroundColor: passBackground }]}>
           <Ionicons name="close" size={18} color="#E53935" />
           <Animated.View pointerEvents="none" style={[styles.edgeHighlight, { opacity: passHighlight }]}><Ionicons name="close" size={18} color={THEME.colors.white} /></Animated.View>
         </Animated.View>
       </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel={role === 'kasambahay' ? 'Apply to this job' : 'Message this kasambahay'} onPress={onInterested} hitSlop={8}>
+      <Pressable accessibilityRole="button" accessibilityLabel={role === 'kasambahay' ? uiText("Apply to this job") : uiText("Message this kasambahay")} onPress={onInterested} hitSlop={8}>
         <Animated.View style={[styles.edgeButton, { backgroundColor: interestedBackground }]}>
           <Ionicons name="heart-outline" size={18} color="#22C55E" />
           <Animated.View pointerEvents="none" style={[styles.edgeHighlight, { opacity: interestedHighlight }]}><Ionicons name="heart" size={18} color={THEME.colors.white} /></Animated.View>

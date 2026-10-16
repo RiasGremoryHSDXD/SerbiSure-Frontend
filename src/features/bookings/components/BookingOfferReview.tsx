@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +20,7 @@ interface Props {
 
 /** A readable summary of entered or saved terms; missing historic values stay explicit. */
 export function BookingOfferReview(props: Props) {
+  const { tr: uiText } = useUiLanguage();
   const short = props.bookingType === 'short_term';
   const amount = props.salary.trim() && Number.isFinite(Number(props.salary))
     ? `₱${Number(props.salary).toLocaleString('en-PH', { maximumFractionDigits: 2 })}` : props.salary || 'Not provided';
@@ -43,14 +45,14 @@ export function BookingOfferReview(props: Props) {
         <Ionicons name={section.icon} size={18} color={THEME.colors.brandDark} />
         <Text style={styles.heading}>{section.title}</Text>
         {props.onEdit && <Pressable accessibilityRole="button" accessibilityLabel={`Edit ${section.title}`} disabled={props.disabled}
-          hitSlop={8} onPress={() => props.onEdit?.(section.step)}><Text style={styles.edit}>Edit</Text></Pressable>}
+          hitSlop={8} onPress={() => props.onEdit?.(section.step)}><Text style={styles.edit}>{uiText("Edit")}</Text></Pressable>}
       </View>
       {section.rows.map(([label, value]) => <View key={label} style={styles.row}>
         <Text style={styles.label}>{label}</Text><Text style={styles.value}>{value || 'Not provided'}</Text>
       </View>)}
       {section.step === 3 && <View style={styles.pay}>
         <Text style={styles.label}>{short ? 'Agreed daily rate' : 'Agreed monthly salary'}</Text>
-        <Text style={styles.amount}>{amount}<Text style={styles.unit}> {short ? '/ day' : '/ month'}</Text></Text>
+        <Text style={styles.amount}>{amount}<Text style={styles.unit}> {short ? uiText("/ day") : uiText("/ month")}</Text></Text>
       </View>}
     </View>)}
   </View>;

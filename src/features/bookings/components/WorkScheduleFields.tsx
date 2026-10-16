@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function WorkScheduleFields(props: Props) {
+  const { tr: uiText } = useUiLanguage();
   const { bookingType, startDate, endDate, workHours, days, shift, readOnly = false, disabled = false } = props;
   const short = bookingType === 'short_term';
   const locked = readOnly || disabled;
@@ -61,41 +63,41 @@ export function WorkScheduleFields(props: Props) {
 
   return <View style={styles.container}>
     <Text style={styles.label}>{short ? 'AVAILABILITY DATE' : 'START DATE TO END DATE'}</Text>
-    <Text style={styles.hint}>Dates and working times use Philippine time (UTC+8).</Text>
+    <Text style={styles.hint}>{uiText("Dates and working times use Philippine time (UTC+8).")}</Text>
     <View style={styles.row}>
       <Pressable accessibilityRole="button" disabled={locked} onPress={() => openDate('start')} style={styles.field}>
         <Text style={styles.small}>{short ? 'SERVICE DATE' : 'START'}</Text>
         <Text style={styles.value}><Ionicons name="calendar-outline" size={16} /> {startDate || 'MM/DD/YYYY'}</Text>
       </Pressable>
       {(!short || (readOnly && endDate && endDate !== startDate)) && <Pressable accessibilityRole="button" disabled={locked} onPress={() => openDate('end')} style={styles.field}>
-        <Text style={styles.small}>END</Text><Text style={styles.value}>{endDate || 'MM/DD/YYYY'}</Text>
+        <Text style={styles.small}>{uiText("END")}</Text><Text style={styles.value}>{endDate || 'MM/DD/YYYY'}</Text>
       </Pressable>}
     </View>
     {short && !readOnly ? <>
-      <Text style={styles.label}>WHAT TIME WORKS BEST?</Text>
+      <Text style={styles.label}>{uiText("WHAT TIME WORKS BEST?")}</Text>
       <View style={styles.row}>{WORK_SHIFTS.map(item => <Pressable key={item.value} accessibilityRole="button"
         accessibilityState={{ selected: shift === item.value, disabled: locked }} disabled={locked}
         onPress={() => props.onShift(item.value)} style={[styles.shift, shift === item.value && styles.selected]}>
-        <Text style={styles.value}>{item.label}</Text><Text style={styles.small}>{item.hours.replace(/:00/g, '')}</Text>
+        <Text style={styles.value}>{uiText(item.label)}</Text><Text style={styles.small}>{item.hours.replace(/:00/g, '')}</Text>
       </Pressable>)}</View>
     </> : <>
-      <Text style={styles.label}>WORK HOURS</Text>
+      <Text style={styles.label}>{uiText("WORK HOURS")}</Text>
       <Pressable accessibilityRole="button" disabled={locked} onPress={openTime} style={styles.field}>
         <Text style={styles.value}>{workHours || 'Select daily working hours'}</Text>
       </Pressable>
     </>}
     {!short && <>
-      <Text style={styles.label}>WORK SCHEDULE (DAYS)</Text>
+      <Text style={styles.label}>{uiText("WORK SCHEDULE (DAYS)")}</Text>
       <View style={styles.days}>{WORK_DAYS.map(day => <Pressable key={day.value} accessibilityRole="button" disabled={locked}
         accessibilityState={{ selected: days.includes(day.value), disabled: locked }}
         onPress={() => props.onDays(WORK_DAYS.filter(item => item.value === day.value ? !days.includes(item.value) : days.includes(item.value)).map(item => item.value))}
         style={[styles.day, days.includes(day.value) && styles.selected]}><Text>{day.label}</Text></Pressable>)}</View>
-      <Text style={styles.hint}>Choose the agreed working days. The start date must be one of them.</Text>
+      <Text style={styles.hint}>{uiText("Choose the agreed working days. The start date must be one of them.")}</Text>
     </>}
     <Modal visible={target !== null} transparent animationType="fade" onRequestClose={() => setTarget(null)}>
       <Pressable style={styles.overlay} onPress={() => setTarget(null)}>
         <Pressable style={styles.picker} onPress={event => event.stopPropagation()}>
-          <Text style={styles.title}>Select {target === 'end' ? 'End Date' : short ? 'Availability Date' : 'Start Date'}</Text>
+          <Text style={styles.title}>{uiText("Select")}{target === 'end' ? 'End Date' : short ? 'Availability Date' : 'Start Date'}</Text>
           <View style={styles.navigation}>
             <Pressable accessibilityLabel="Previous month" hitSlop={12} onPress={() => navigate(-1)}><Ionicons name="chevron-back" size={24} /></Pressable>
             <Text style={styles.value}>{new Date(Date.UTC(year, month, 1)).toLocaleString('en-US', { month: 'long', timeZone: 'UTC' })} {year}</Text>
@@ -114,7 +116,7 @@ export function WorkScheduleFields(props: Props) {
               </Pressable>;
             })}
           </View>
-          <Pressable style={styles.close} onPress={() => setTarget(null)}><Text>Cancel</Text></Pressable>
+          <Pressable style={styles.close} onPress={() => setTarget(null)}><Text>{uiText("Cancel")}</Text></Pressable>
         </Pressable>
       </Pressable>
     </Modal>
@@ -122,18 +124,18 @@ export function WorkScheduleFields(props: Props) {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <Pressable style={styles.overlay} onPress={() => setShowTime(false)}>
         <Pressable style={styles.picker} onPress={event => event.stopPropagation()}>
-          <Text style={styles.title}>Daily Working Hours</Text>
-          <Text style={styles.hint}>Enter each time as HH:MM in Philippine time.</Text>
+          <Text style={styles.title}>{uiText("Daily Working Hours")}</Text>
+          <Text style={styles.hint}>{uiText("Enter each time as HH:MM in Philippine time.")}</Text>
           {([{ label: 'Start', value: startClock, set: setStartClock, period: startPeriod, setPeriod: setStartPeriod },
             { label: 'End', value: endClock, set: setEndClock, period: endPeriod, setPeriod: setEndPeriod }]).map(item => <View key={item.label}>
-            <Text style={styles.label}>{item.label}</Text><View style={styles.row}>
+            <Text style={styles.label}>{uiText(item.label)}</Text><View style={styles.row}>
               <TextInput accessibilityLabel={`${item.label} time`} style={styles.field} value={item.value} onChangeText={item.set} placeholder="08:00" maxLength={5} />
               {['AM', 'PM'].map(period => <Pressable key={period} style={[styles.day, item.period === period && styles.selected]} onPress={() => item.setPeriod(period)}><Text>{period}</Text></Pressable>)}
             </View>
           </View>)}
           {!!timeError && <Text accessibilityRole="alert" style={styles.error}>{timeError}</Text>}
-          <Pressable style={[styles.close, styles.selected]} onPress={saveTime}><Text style={styles.value}>Set Working Hours</Text></Pressable>
-          <Pressable style={styles.close} onPress={() => setShowTime(false)}><Text>Cancel</Text></Pressable>
+          <Pressable style={[styles.close, styles.selected]} onPress={saveTime}><Text style={styles.value}>{uiText("Set Working Hours")}</Text></Pressable>
+          <Pressable style={styles.close} onPress={() => setShowTime(false)}><Text>{uiText("Cancel")}</Text></Pressable>
         </Pressable>
       </Pressable>
       </KeyboardAvoidingView>

@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { useState, useMemo, useRef } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -71,6 +72,7 @@ type RegistrationScreenProps = {
 };
 
 export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateToLogin }: RegistrationScreenProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const { updateUser } = useUser();
 
@@ -697,7 +699,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
                     <View style={styles.pickerRightBadge}>
                       {calculatedAge ? (
                         <View style={styles.agePillBadge}>
-                          <Text style={styles.agePillText}>{calculatedAge} yrs</Text>
+                          <Text style={styles.agePillText}>{calculatedAge} {uiText("yrs")}</Text>
                         </View>
                       ) : null}
                       <Ionicons name="chevron-down" size={16} color="#8A8985" />
@@ -706,7 +708,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
 
                   {/* Gender Segmented Selection */}
                   <View style={styles.demographicFieldBlock}>
-                    <Text style={styles.fieldSubLabel}>Gender</Text>
+                    <Text style={styles.fieldSubLabel}>{uiText("Gender")}</Text>
                     <View style={styles.genderRow}>
                       {(['Male', 'Female', 'Other'] as const).map((g) => {
                         const isSelected = gender === g;
@@ -740,7 +742,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
                   <View style={styles.demographicRow}>
                     {/* Nationality */}
                     <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={styles.fieldSubLabel}>Nationality</Text>
+                      <Text style={styles.fieldSubLabel}>{uiText("Nationality")}</Text>
                       <Pressable
                         style={[styles.compactInputContainer, styles.compactPickerPressable]}
                         onPress={() => setActiveDemographicPicker('nationality')}
@@ -755,7 +757,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
 
                     {/* Religion */}
                     <View style={{ flex: 1.1 }}>
-                      <Text style={styles.fieldSubLabel}>Religion</Text>
+                      <Text style={styles.fieldSubLabel}>{uiText("Religion")}</Text>
                       <Pressable
                         style={[styles.compactInputContainer, styles.compactPickerPressable]}
                         onPress={() => setActiveDemographicPicker('religion')}
@@ -768,7 +770,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
                           ]}
                           numberOfLines={1}
                         >
-                          {religion || 'Select'}
+                          {religion || uiText("Select")}
                         </Text>
                         <Ionicons name="chevron-down" size={13} color="#8A8985" style={{ marginLeft: 'auto' }} />
                       </Pressable>
@@ -950,7 +952,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
                         color="#000000"
                       />
                       <Text style={styles.checkboxText}>
-                        I consent to <Text style={styles.linkText}>Terms and Conditions</Text>.
+                        {uiText("I consent to")}<Text style={styles.linkText}>{uiText("Terms and Conditions")}</Text>.
                       </Text>
                     </Pressable>
 
@@ -961,7 +963,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
                         color="#000000"
                       />
                       <Text style={styles.checkboxText}>
-                        I consent to <Text style={styles.linkText}>Data Privacy Policy</Text>.
+                        {uiText("I consent to")}<Text style={styles.linkText}>{uiText("Data Privacy Policy")}</Text>.
                       </Text>
                     </Pressable>
                   </View>
@@ -978,13 +980,13 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
                     style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
                     onPress={onCancel}
                   >
-                    <Text style={styles.secondaryButtonText}>Cancel</Text>
+                    <Text style={styles.secondaryButtonText}>{uiText("Cancel")}</Text>
                   </Pressable>
                   <Pressable
                     style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
                     onPress={handleProceedFromStep1}
                   >
-                    <Text style={styles.primaryButtonText}>Next</Text>
+                    <Text style={styles.primaryButtonText}>{uiText("Next")}</Text>
                   </Pressable>
                 </View>
               ) : subStep === 2 ? (
@@ -993,13 +995,13 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
                     style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
                     onPress={() => { if (workerPage > 0) setWorkerPage(workerPage - 1); else setSubStep(1); registrationScroll.current?.scrollTo({ y: 0 }); }}
                   >
-                    <Text style={styles.secondaryButtonText}>Back</Text>
+                    <Text style={styles.secondaryButtonText}>{uiText("Back")}</Text>
                   </Pressable>
                   <Pressable
                     style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
                     onPress={handleProceedFromStep2}
                   >
-                    <Text style={styles.primaryButtonText}>Next</Text>
+                    <Text style={styles.primaryButtonText}>{uiText("Next")}</Text>
                   </Pressable>
                 </View>
               ) : (
@@ -1009,7 +1011,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
                     onPress={() => setSubStep(isHomeowner ? 1 : 2)}
                     disabled={loading}
                   >
-                    <Text style={styles.secondaryButtonText}>Back</Text>
+                    <Text style={styles.secondaryButtonText}>{uiText("Back")}</Text>
                   </Pressable>
                   <Pressable
                     style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
@@ -1019,7 +1021,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
                     {loading ? (
                       <ActivityIndicator color="#FFFFFF" />
                     ) : (
-                      <Text style={styles.primaryButtonText}>Create Account</Text>
+                      <Text style={styles.primaryButtonText}>{uiText("Create Account")}</Text>
                     )}
                   </Pressable>
                 </View>

@@ -1,11 +1,13 @@
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import THEME from '../theme/theme';
+import { useLanguage } from '../localization/LanguageContext';
 
 export function GreetingCard({ name, greeting, avatarUri, onAvatarPress }: {
   name: string; greeting: string; avatarUri?: string | null; onAvatarPress?: () => void;
 }) {
-  const date = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
+  const { formatDate } = useLanguage();
+  const date = formatDate(new Date(), 'greeting').toUpperCase();
   return (
     <View style={styles.card}>
       <Pressable onPress={onAvatarPress}>

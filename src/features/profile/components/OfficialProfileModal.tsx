@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -51,6 +52,7 @@ export function OfficialProfileModal({
   prefilledAvatar,
   prefilledRole = 'Support',
 }: OfficialProfileModalProps) {
+  const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(false);
@@ -87,7 +89,7 @@ export function OfficialProfileModal({
   const displayName = profile?.full_name || prefilledName;
   const roleSource = `${profile?.account_type || prefilledRole} ${prefilledRole}`.toLowerCase();
   const isBarangay = roleSource.includes('barangay') || roleSource.includes('desk');
-  const roleLabel = isBarangay ? 'Barangay desk' : 'SerbiSure Support';
+  const roleLabel = uiText(isBarangay ? 'Barangay desk' : 'SerbiSure Support');
   const avatarUri = profile?.profile_link || prefilledAvatar;
 
   const locationParts = [profile?.street, profile?.barangay, profile?.city, profile?.province]
@@ -96,27 +98,27 @@ export function OfficialProfileModal({
   const location = locationParts.join(', ') || (
     profile?.street || profile?.city || profile?.province
       ? formatRegisteredLocation(profile?.street, profile?.city, profile?.province)
-      : 'Location not posted'
+      : uiText('Location not posted')
   );
 
   const phone = profile?.show_contact_number !== false ? profile?.contact_number : undefined;
   const publicNotice = hasContent(profile?.user_about)
     ? profile.user_about.trim()
     : isBarangay
-      ? 'Office hours and public notices have not been posted yet. Please message this desk for assistance.'
-      : 'Use this support chat for account access, verification, safety, and platform assistance.';
+      ? uiText('Office hours and public notices have not been posted yet. Please message this desk for assistance.')
+      : uiText('Use this support chat for account access, verification, safety, and platform assistance.');
 
   const details: DetailItem[] = isBarangay
     ? [
         { icon: 'person-outline', label: 'Desk Officer in Charge', value: displayName },
-        { icon: 'call-outline', label: 'Official Desk Hotline', value: phone || 'Contact this desk through the chat.', phone: Boolean(phone) },
+        { icon: 'call-outline', label: 'Official Desk Hotline', value: phone || uiText('Contact this desk through the chat.'), phone: Boolean(phone) },
         { icon: 'location-outline', label: 'Physical Desk / Barangay Hall Location', value: location },
         { icon: 'time-outline', label: 'Office Operating Hours & Public Notice', value: publicNotice },
       ]
     : [
         { icon: 'shield-checkmark-outline', label: 'Support Desk', value: displayName },
-        { icon: 'call-outline', label: 'Official Support Hotline', value: phone || 'Contact SerbiSure Support through this chat.', phone: Boolean(phone) },
-        { icon: 'globe-outline', label: 'Service Coverage', value: 'City-wide SerbiSure platform support' },
+        { icon: 'call-outline', label: 'Official Support Hotline', value: phone || uiText('Contact SerbiSure Support through this chat.'), phone: Boolean(phone) },
+        { icon: 'globe-outline', label: 'Service Coverage', value: uiText('City-wide SerbiSure platform support') },
         { icon: 'information-circle-outline', label: 'Support Hours & Public Notice', value: publicNotice },
       ];
 
@@ -127,7 +129,7 @@ export function OfficialProfileModal({
           <Pressable accessibilityRole="button" accessibilityLabel="Back to chat" onPress={onClose} style={styles.backButton} hitSlop={12}>
             <Ionicons name="arrow-back" size={21} color={THEME.colors.ink} />
           </Pressable>
-          <Text style={styles.topBarTitle}>Official profile</Text>
+          <Text style={styles.topBarTitle}>{uiText("Official profile")}</Text>
           <View style={styles.topBarSpacer} />
         </View>
 
@@ -143,14 +145,14 @@ export function OfficialProfileModal({
               <Text style={styles.rolePillText}>{roleLabel}</Text>
             </View>
             <Text style={styles.heroHint}>
-              {isBarangay ? 'Your local government contact on SerbiSure' : 'Official platform support contact'}
+              {uiText(isBarangay ? 'Your local government contact on SerbiSure' : 'Official platform support contact')}
             </Text>
           </View>
 
           {loading && !profile ? (
             <View style={styles.loadingCard}>
               <ActivityIndicator size="small" color={THEME.colors.brandDark} />
-              <Text style={styles.loadingText}>Loading official details…</Text>
+              <Text style={styles.loadingText}>{uiText("Loading official details…")}</Text>
             </View>
           ) : null}
 
@@ -162,14 +164,14 @@ export function OfficialProfileModal({
           ) : null}
 
           <View style={styles.detailsCard}>
-            <Text style={styles.sectionTitle}>Contact information</Text>
+            <Text style={styles.sectionTitle}>{uiText("Contact information")}</Text>
             {details.map((item) => (
               <View key={item.label} style={styles.detailRow}>
                 <View style={styles.iconCircle}>
                   <Ionicons name={item.icon} size={17} color={THEME.colors.brandDark} />
                 </View>
                 <View style={styles.detailCopy}>
-                  <Text style={styles.detailLabel}>{item.label}</Text>
+                  <Text style={styles.detailLabel}>{uiText(item.label)}</Text>
                   {item.phone ? (
                     <Pressable onPress={() => Linking.openURL(`tel:${item.value}`)} hitSlop={6}>
                       <Text style={[styles.detailValue, styles.linkValue]}>{item.value}</Text>
@@ -187,9 +189,9 @@ export function OfficialProfileModal({
               <Ionicons name="chatbubble-ellipses-outline" size={19} color="#8A4A20" />
             </View>
             <View style={styles.chatHintCopy}>
-              <Text style={styles.chatHintTitle}>Need help?</Text>
+              <Text style={styles.chatHintTitle}>{uiText("Need help?")}</Text>
               <Text style={styles.chatHintText}>
-                Return to this conversation to send a message to {isBarangay ? 'your Barangay desk' : 'SerbiSure Support'}.
+                {uiText("Return to this conversation to send a message to")} {uiText(isBarangay ? 'your Barangay desk' : 'SerbiSure Support')}.
               </Text>
             </View>
           </View>

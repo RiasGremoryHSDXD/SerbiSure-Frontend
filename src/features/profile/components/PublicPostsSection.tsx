@@ -1,3 +1,4 @@
+import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +13,7 @@ export function PublicPostsSection({ posts, loading, error, token, ownerId, owne
   ownerId?: string; ownerRole: string; onRefresh: () => void;
   onSubmitted: (postId: string, proposal: NonNullable<PublicPendingPost['viewer_proposal']>) => void;
 }>) {
+  const { tr: uiText } = useUiLanguage();
   const { user } = useUser();
   const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState<PublicPendingPost | null>(null);
@@ -66,12 +68,12 @@ export function PublicPostsSection({ posts, loading, error, token, ownerId, owne
 
   return <View style={styles.pendingPostsSection}>
     <View style={styles.tabSectionHeader}>
-      <View style={{ flex: 1, marginRight: 8 }}><Text style={styles.tabSectionTitle}>Pending Posts</Text><Text style={styles.tabSectionSubtitle}>{isJob ? 'Open jobs accepting applications' : 'Service posts available for hiring'}</Text></View>
+      <View style={{ flex: 1, marginRight: 8 }}><Text style={styles.tabSectionTitle}>{uiText("Pending Posts")}</Text><Text style={styles.tabSectionSubtitle}>{isJob ? 'Open jobs accepting applications' : 'Service posts available for hiring'}</Text></View>
       <Pressable accessibilityRole="button" accessibilityLabel="Refresh pending posts" style={styles.refreshIconBtn} onPress={onRefresh} disabled={loading}><Ionicons name="refresh-outline" size={15} color="#EA580C" /></Pressable>
     </View>
-    {loading ? <View style={styles.postsLoadingTile}><ActivityIndicator color="#FFB380" /><Text style={styles.postsLoadingText}>Loading pending posts...</Text></View>
-      : error ? <View style={styles.postsErrorTile}><Text style={styles.postsErrorTitle}>Unable to load posts</Text><Text style={styles.postsErrorSubtitle}>{error}</Text><Pressable style={styles.postsRetryButton} onPress={onRefresh}><Text style={styles.postsRetryButtonText}>Try Again</Text></Pressable></View>
-      : posts.length === 0 ? <View style={styles.emptyPendingPostsCard}><Ionicons name="time-outline" size={26} color="#9CA3AF" /><Text style={styles.emptyPendingPostsTitle}>No Pending Posts</Text><Text style={styles.emptyPendingPostsSubtitle}>{isJob ? 'This homeowner has no open job posts right now.' : 'This kasambahay has no service posts available right now.'}</Text></View>
+    {loading ? <View style={styles.postsLoadingTile}><ActivityIndicator color="#FFB380" /><Text style={styles.postsLoadingText}>{uiText("Loading pending posts...")}</Text></View>
+      : error ? <View style={styles.postsErrorTile}><Text style={styles.postsErrorTitle}>{uiText("Unable to load posts")}</Text><Text style={styles.postsErrorSubtitle}>{error}</Text><Pressable style={styles.postsRetryButton} onPress={onRefresh}><Text style={styles.postsRetryButtonText}>{uiText("Try Again")}</Text></Pressable></View>
+      : posts.length === 0 ? <View style={styles.emptyPendingPostsCard}><Ionicons name="time-outline" size={26} color="#9CA3AF" /><Text style={styles.emptyPendingPostsTitle}>{uiText("No Pending Posts")}</Text><Text style={styles.emptyPendingPostsSubtitle}>{isJob ? 'This homeowner has no open job posts right now.' : 'This kasambahay has no service posts available right now.'}</Text></View>
       : <View style={styles.pendingPostsList}>{posts.map(post => {
         const status = post.viewer_proposal?.status;
         const pending = status === 'Pending' || status === 'Accepted';
@@ -85,14 +87,14 @@ export function PublicPostsSection({ posts, loading, error, token, ownerId, owne
       <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0, maxHeight: '85%', backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24 }} contentContainerStyle={{ padding: 24, paddingBottom: Math.max(insets.bottom, 16) + 16 }}>
           <Text style={styles.tabSectionTitle}>{isJob ? 'Apply for this Job' : 'Send a Hiring Offer'}</Text>
-          <Text style={[styles.tabSectionSubtitle, { marginBottom: 16 }]}>The owner will review your proposal before confirming a booking.</Text>
+          <Text style={[styles.tabSectionSubtitle, { marginBottom: 16 }]}>{uiText("The owner will review your proposal before confirming a booking.")}</Text>
           <Text style={styles.pendingPostManageBtnText}>Proposed amount (₱/{selected?.rate_period})</Text>
           <TextInput accessibilityLabel="Proposed compensation amount" value={rate} onChangeText={setRate} keyboardType="decimal-pad" editable={!submitting} style={[styles.bioTextInput, { minHeight: 48, marginTop: 8, marginBottom: 16 }]} />
-          <Text style={styles.pendingPostManageBtnText}>Message (optional)</Text>
+          <Text style={styles.pendingPostManageBtnText}>{uiText("Message (optional)")}</Text>
           <TextInput accessibilityLabel="Proposal message" value={message} onChangeText={setMessage} multiline maxLength={450} editable={!submitting} placeholder={isJob ? 'Tell the homeowner why you are a good fit...' : 'Describe the work you would like help with...'} style={[styles.bioTextInput, { marginTop: 8, marginBottom: 16 }]} />
           <View style={styles.modalActionButtons}>
-            <Pressable style={styles.cancelModalBtn} disabled={submitting} onPress={() => setSelected(null)}><Text style={styles.cancelModalBtnText}>Cancel</Text></Pressable>
-            <Pressable style={styles.saveModalBtn} disabled={submitting} onPress={submit}>{submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.saveModalBtnText}>Send {isJob ? 'Application' : 'Offer'}</Text>}</Pressable>
+            <Pressable style={styles.cancelModalBtn} disabled={submitting} onPress={() => setSelected(null)}><Text style={styles.cancelModalBtnText}>{uiText("Cancel")}</Text></Pressable>
+            <Pressable style={styles.saveModalBtn} disabled={submitting} onPress={submit}>{submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.saveModalBtnText}>{uiText("Send")}{isJob ? 'Application' : 'Offer'}</Text>}</Pressable>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

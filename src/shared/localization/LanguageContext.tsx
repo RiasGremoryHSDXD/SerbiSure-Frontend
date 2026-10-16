@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
+import { translateMessage, formatLocalizedDate, type MessageParams } from './messages';
 
 export type Language = 'English' | 'Tagalog' | 'Bisaya' | 'Cebuano';
 
@@ -93,13 +94,13 @@ export const TRANSLATIONS: Record<Language, Translations> = {
 
     personalInfo: 'Impormasyon sa Sarili',
     passwordsSecurity: 'Password at Seguridad',
-    getVerified: 'Kumuha ng Biyeripikasyon',
+    getVerified: 'Magpaberipika',
     notifications: 'Mga Abiso',
     language: 'Wika',
     aboutUs: 'Tungkol sa Amin',
     privacyPolicy: 'Patakaran sa Privacy',
     logout: 'Mag-log out',
-    setStatus: 'Estatuwa',
+    setStatus: 'Katayuan',
     available: 'Nakahanda',
     onJob: 'May Trabaho',
     aboutTitle: 'Tungkol kay',
@@ -117,7 +118,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     searchJobs: 'Maghanap ng trabaho o lokasyon...',
     popularServices: 'Mga Sikat na Serbisyo',
     featuredWorkers: 'Mga Tampok na Kasambahay',
-    topEmployers: 'Mga Nangungunang Employer',
+    topEmployers: 'Mga Nangungunang May-ari ng Bahay',
 
     chatsHeader: 'Mga Mensahe',
     searchChats: 'Maghanap ng mensahe',
@@ -134,19 +135,19 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     getVerified: 'Magpa-Biyeripikar',
     notifications: 'Mga Pahibalo',
     language: 'Pinulongan',
-    aboutUs: 'Tungkol sa Amoa',
+    aboutUs: 'Bahin Kanamo',
     privacyPolicy: 'Polisiya sa Pribasya',
     logout: 'Mag-log out',
-    setStatus: 'Estatuwa',
-    available: 'Makuha',
+    setStatus: 'Kahimtang',
+    available: 'Andam Motrabaho',
     onJob: 'Naa sa Trabaho',
-    aboutTitle: 'Tungkol kang',
+    aboutTitle: 'Bahin kang',
     recentReviews: 'Mga Bag-ong Rebyu',
     viewAll: 'Ipakita Tanan',
     noReviewsYet: 'Wala pay rebyu',
     noReviewsSubtitle: 'Dinhi makita ang mga rebyu gikan sa nahuman nga mga booking.',
-    workerSentiment: 'Saloobin sa Trabahante',
-    clientSentiment: 'Saloobin sa Kliyente',
+    workerSentiment: 'Pagbati sa Trabahante',
+    clientSentiment: 'Pagbati sa Kliyente',
     positive: 'Positibo',
 
     greeting: 'Maayong Adlaw',
@@ -155,7 +156,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     searchJobs: 'Pangita og trabaho o lokasyon...',
     popularServices: 'Inilang mga Serbisyo',
     featuredWorkers: 'Mga Tampok nga Kasambahay',
-    topEmployers: 'Mga Pangunang Homeowner',
+    topEmployers: 'Mga Pangunang Tag-iya sa Balay',
 
     chatsHeader: 'Mga Mensahe',
     searchChats: 'Pangita og mensahe',
@@ -172,19 +173,19 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     getVerified: 'Magpa-Biyeripikar',
     notifications: 'Mga Pahibalo',
     language: 'Pinulongan',
-    aboutUs: 'Tungkol sa Amoa',
+    aboutUs: 'Bahin Kanamo',
     privacyPolicy: 'Polisiya sa Pribasya',
     logout: 'Mag-log out',
-    setStatus: 'Estatuwa',
-    available: 'Makuha',
+    setStatus: 'Kahimtang',
+    available: 'Andam Motrabaho',
     onJob: 'Naa sa Trabaho',
-    aboutTitle: 'Tungkol kang',
+    aboutTitle: 'Bahin kang',
     recentReviews: 'Mga Bag-ong Rebyu',
     viewAll: 'Ipakita Tanan',
     noReviewsYet: 'Wala pay rebyu',
     noReviewsSubtitle: 'Dinhi makita ang mga rebyu gikan sa nahuman nga mga booking.',
-    workerSentiment: 'Saloobin sa Trabahante',
-    clientSentiment: 'Saloobin sa Kliyente',
+    workerSentiment: 'Pagbati sa Trabahante',
+    clientSentiment: 'Pagbati sa Kliyente',
     positive: 'Positibo',
 
     greeting: 'Maayong Adlaw',
@@ -193,7 +194,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     searchJobs: 'Pangita og trabaho o lokasyon...',
     popularServices: 'Inilang mga Serbisyo',
     featuredWorkers: 'Mga Tampok nga Kasambahay',
-    topEmployers: 'Mga Pangunang Homeowner',
+    topEmployers: 'Mga Pangunang Tag-iya sa Balay',
 
     chatsHeader: 'Mga Mensahe',
     searchChats: 'Pangita og mensahe',
@@ -204,20 +205,26 @@ interface LanguageContextType {
   language: Language;
   setLanguage: (lang: Language) => void;
   t: Translations;
+  tr: (source: string, params?: MessageParams) => string;
+  formatDate: (value: Date | string, style?: 'greeting' | 'monthYear' | 'full') => string;
 }
 
 const LanguageContext = createContext<LanguageContextType>({
   language: 'English',
   setLanguage: () => {},
   t: TRANSLATIONS.English,
+  tr: (source, params) => translateMessage('English', source, params),
+  formatDate: (value, style) => formatLocalizedDate('English', value, style),
 });
 
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguage] = useState<Language>('English');
-  const t = TRANSLATIONS[language] || TRANSLATIONS.Bisaya || TRANSLATIONS.English;
+  const t = TRANSLATIONS[language === 'Cebuano' ? 'Bisaya' : language] || TRANSLATIONS.English;
+  const tr = (source: string, params?: MessageParams) => translateMessage(language, source, params);
+  const formatDate = (value: Date | string, style?: 'greeting' | 'monthYear' | 'full') => formatLocalizedDate(language, value, style);
 
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t }}>
+    <LanguageContext.Provider value={{ language, setLanguage, t, tr, formatDate }}>
       {children}
     </LanguageContext.Provider>
   );

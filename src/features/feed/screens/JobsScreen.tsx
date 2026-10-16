@@ -1,5 +1,6 @@
 import { BrowseActivityCard } from '../components/BrowseActivityCard';
 import { AppHeader } from '../../../shared/components/AppHeader';
+import { useLanguage } from '../../../shared/localization/LanguageContext';
 import { BrowseHeader, BrowseFilters } from '../components/BrowseHeader';
 import { BrowsePostCard, BrowseCardBackdrop } from '../components/BrowsePostCard';
 import { BrowseDeckEmpty, BrowseDeckSkeleton, BrowseDeckSwipeControls, BrowseEmptyState, browseDeckStyles as deckStyles } from '../components/BrowseDeck';
@@ -41,6 +42,7 @@ export interface JobOpening {
 }
 
 export function JobsScreen({ avatarUri, onViewProfile, token }: { avatarUri?: string | null; onViewProfile?: () => void, token?: string | null } = {}) {
+  const { tr: uiText } = useLanguage();
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const effectiveToken = token || user.token;
@@ -236,7 +238,7 @@ export function JobsScreen({ avatarUri, onViewProfile, token }: { avatarUri?: st
     position.setValue({ x: 0, y: 0 });
   };
 
-  const headerCopy = browseHeaderCopy('kasambahay', subTab, subTab === 'explore' ? visibleJobs.length : subTab === 'saved' ? savedCount : appliedCount, isLoading, feedError);
+  const headerCopy = browseHeaderCopy('kasambahay', subTab, subTab === 'explore' ? visibleJobs.length : subTab === 'saved' ? savedCount : appliedCount, isLoading, feedError, uiText);
 
   const renderExploreDeck = () => {
     if (isLoading) return <View style={deckStyles.container}><BrowseDeckSkeleton /></View>;
