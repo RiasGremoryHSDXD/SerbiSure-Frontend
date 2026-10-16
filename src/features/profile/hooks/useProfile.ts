@@ -44,6 +44,7 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
   const [isNotificationsModalVisible, setIsNotificationsModalVisible] = useState(false);
   const [isAboutUsModalVisible, setIsAboutUsModalVisible] = useState(false);
   const [isPrivacyPolicyModalVisible, setIsPrivacyPolicyModalVisible] = useState(false);
+  const [isTermsModalVisible, setIsTermsModalVisible] = useState(false);
   const [isMyBookingsModalVisible, setIsMyBookingsModalVisible] = useState(false);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [verificationData, setVerificationData] = useState<VerificationStatusResponse | null>(null);
@@ -358,6 +359,8 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
     setIsAboutUsModalVisible,
     isPrivacyPolicyModalVisible,
     setIsPrivacyPolicyModalVisible,
+    isTermsModalVisible,
+    setIsTermsModalVisible,
     isMyBookingsModalVisible,
     setIsMyBookingsModalVisible,
     verificationData,

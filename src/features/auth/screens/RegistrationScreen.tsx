@@ -1,6 +1,6 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { useState, useMemo, useRef } from 'react';
-import { Image, Pressable, StyleSheet, Text, TextInput, View, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView, Modal } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, TextInput, View, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL } from '../../../shared/api/config';
@@ -14,6 +14,7 @@ import { getRegions, getProvinces, getCities, getBarangays, getZipCodeForCity, R
 import THEME from '../../../shared/theme/theme';
 import { RegistrationStepper } from '../components/RegistrationStepper';
 import { RegistrationErrorModal } from '../components/RegistrationErrorModal';
+import { PrivacyPolicyModal } from '../../profile/components/PrivacyPolicyModal';
 import { SERVICE_CHOICES } from '../../bookings/engagementForm';
 
 import { WorkerCvForm } from '../../profile/worker/WorkerCvForm';
@@ -130,6 +131,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
   // Consent
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [legalDocument, setLegalDocument] = useState<'terms' | 'privacy' | null>(null);
 
   // Form submission loading
   const [loading, setLoading] = useState(false);
@@ -945,27 +947,57 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
 
                   {/* Consent Checkboxes */}
                   <View style={styles.checkboxGroup}>
-                    <Pressable style={styles.checkboxRow} onPress={() => setTermsAccepted(!termsAccepted)}>
-                      <Ionicons
-                        name={termsAccepted ? "checkbox-outline" : "square-outline"}
-                        size={18}
-                        color="#000000"
-                      />
+                    <View style={styles.checkboxRow}>
+                      <Pressable
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: termsAccepted }}
+                        accessibilityLabel={uiText("I consent to") + ' ' + uiText("Terms and Conditions")}
+                        hitSlop={6}
+                        onPress={() => setTermsAccepted(!termsAccepted)}
+                      >
+                        <Ionicons
+                          name={termsAccepted ? "checkbox-outline" : "square-outline"}
+                          size={18}
+                          color="#000000"
+                        />
+                      </Pressable>
                       <Text style={styles.checkboxText}>
-                        {uiText("I consent to")}<Text style={styles.linkText}>{uiText("Terms and Conditions")}</Text>.
+                        {uiText("I consent to")}{' '}
+                        <Text
+                          accessibilityRole="link"
+                          onPress={() => setLegalDocument('terms')}
+                          style={styles.linkText}
+                        >
+                          {uiText("Terms and Conditions")}
+                        </Text>.
                       </Text>
-                    </Pressable>
+                    </View>
 
-                    <Pressable style={styles.checkboxRow} onPress={() => setPrivacyAccepted(!privacyAccepted)}>
-                      <Ionicons
-                        name={privacyAccepted ? "checkbox-outline" : "square-outline"}
-                        size={18}
-                        color="#000000"
-                      />
+                    <View style={styles.checkboxRow}>
+                      <Pressable
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: privacyAccepted }}
+                        accessibilityLabel={uiText("I consent to") + ' ' + uiText("Data Privacy Policy")}
+                        hitSlop={6}
+                        onPress={() => setPrivacyAccepted(!privacyAccepted)}
+                      >
+                        <Ionicons
+                          name={privacyAccepted ? "checkbox-outline" : "square-outline"}
+                          size={18}
+                          color="#000000"
+                        />
+                      </Pressable>
                       <Text style={styles.checkboxText}>
-                        {uiText("I consent to")}<Text style={styles.linkText}>{uiText("Data Privacy Policy")}</Text>.
+                        {uiText("I consent to")}{' '}
+                        <Text
+                          accessibilityRole="link"
+                          onPress={() => setLegalDocument('privacy')}
+                          style={styles.linkText}
+                        >
+                          {uiText("Data Privacy Policy")}
+                        </Text>.
                       </Text>
-                    </Pressable>
+                    </View>
                   </View>
                 </View>
               )}
@@ -1126,6 +1158,12 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
             setSubStep(step);
           }}
           onNavigateToLogin={onNavigateToLogin}
+        />
+
+        <PrivacyPolicyModal
+          visible={legalDocument !== null}
+          document={legalDocument === 'terms' ? 'terms' : 'privacy'}
+          onClose={() => setLegalDocument(null)}
         />
       </View>
     </KeyboardAvoidingView>

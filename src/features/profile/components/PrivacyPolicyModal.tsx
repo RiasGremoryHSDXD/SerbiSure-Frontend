@@ -6,10 +6,12 @@ import { Ionicons } from '@expo/vector-icons';
 interface PrivacyPolicyModalProps {
   visible: boolean;
   onClose: () => void;
+  document?: 'privacy' | 'terms';
 }
 
-export function PrivacyPolicyModal({ visible, onClose }: PrivacyPolicyModalProps) {
+export function PrivacyPolicyModal({ visible, onClose, document = 'privacy' }: PrivacyPolicyModalProps) {
   const { tr: uiText } = useUiLanguage();
+  const isTerms = document === 'terms';
   const handleOpenEmail = () => {
     Linking.openURL('mailto:privacy@serbisure.ph?subject=Privacy Inquiry').catch(() => { });
   };
@@ -30,7 +32,7 @@ export function PrivacyPolicyModal({ visible, onClose }: PrivacyPolicyModalProps
                 <Ionicons name="shield-checkmark" size={20} color="#FFB43B" />
               </View>
               <View style={{ marginLeft: 12 }}>
-                <Text style={styles.modalTitle}>{uiText("Privacy Policy")}</Text>
+                <Text style={styles.modalTitle}>{uiText(isTerms ? "Terms and Conditions" : "Privacy Policy")}</Text>
                 <Text style={styles.modalSubtitle}>{uiText("Effective: September 2026")}</Text>
               </View>
             </View>
@@ -43,6 +45,7 @@ export function PrivacyPolicyModal({ visible, onClose }: PrivacyPolicyModalProps
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}
           >
+            {isTerms ? <TermsContent /> : <>
             {/* Introduction Card */}
             <View style={styles.sectionCard}>
               <Text style={styles.introHeading}>{uiText("Commitment to Data Privacy")}</Text>
@@ -130,11 +133,67 @@ export function PrivacyPolicyModal({ visible, onClose }: PrivacyPolicyModalProps
               </View>
             </View>
 
-            {/* 4. Your Rights as a Data Subject */}
+            {/* 4. Barangay Workforce Analytics and Clearance Confidentiality */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="stats-chart-outline" size={17} color="#FFB43B" style={{ marginRight: 8 }} />
+                <Text style={styles.sectionTitle}>{uiText("4. Barangay Workforce Analytics")}</Text>
+              </View>
+              <Text style={styles.paragraph}>{uiText("SerbiSure may compile aggregated and anonymized demographic, employment-status, and service-category statistics to support local government monitoring and the Batas Kasambahay under RA 10361 and DILG MC 2013-61.")}</Text>
+              <Text style={styles.paragraph}>{uiText("These analytics are available only to authorized Barangay officials and System Administrators. Public users and Homeowners do not receive identity-level workforce reports.")}</Text>
+              <Text style={styles.paragraph}>{uiText("NBI and Police Clearances remain confidential and are visible only to the USTP Superadmin and designated Barangay Desk Officers. They are never publicly visible to Homeowners.")}</Text>
+            </View>
+
+            {/* 5. Third-Party Processors and Cloud Services */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="cloud-outline" size={17} color="#FFB43B" style={{ marginRight: 8 }} />
+                <Text style={styles.sectionTitle}>{uiText("5. Third-Party Processors and Cloud Services")}</Text>
+              </View>
+              <Text style={styles.paragraph}>{uiText("To operate the platform, selected service providers process information on SerbiSure's behalf under access controls and security requirements:")}</Text>
+              <View style={styles.bulletItem}>
+                <Text style={styles.bulletDot}>•</Text>
+                <Text style={styles.bulletText}><Text style={styles.boldText}>{uiText("Cloudinary:")}</Text> {uiText("stores uploaded identity documents, clearance images, and verification media.")}</Text>
+              </View>
+              <View style={styles.bulletItem}>
+                <Text style={styles.bulletDot}>•</Text>
+                <Text style={styles.bulletText}><Text style={styles.boldText}>{uiText("Neon PostgreSQL:")}</Text> {uiText("stores account, profile, booking, and review records.")}</Text>
+              </View>
+              <View style={styles.bulletItem}>
+                <Text style={styles.bulletDot}>•</Text>
+                <Text style={styles.bulletText}><Text style={styles.boldText}>{uiText("Hugging Face XLM-RoBERTa:")}</Text> {uiText("processes written reviews to produce sentiment labels.")}</Text>
+              </View>
+              <View style={styles.bulletItem}>
+                <Text style={styles.bulletDot}>•</Text>
+                <Text style={styles.bulletText}><Text style={styles.boldText}>{uiText("Cloud OCR service:")}</Text> {uiText("extracts text from submitted identity and clearance documents for assisted review.")}</Text>
+              </View>
+            </View>
+
+            {/* 6. Biometric Data and Facial Liveness */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="scan-outline" size={17} color="#FFB43B" style={{ marginRight: 8 }} />
+                <Text style={styles.sectionTitle}>{uiText("6. Biometric Data and Facial Liveness")}</Text>
+              </View>
+              <Text style={styles.paragraph}>{uiText("The MediaPipe liveness check uses facial landmarks to confirm physical presence during verification. A captured selfie may be cross-referenced with the submitted government ID for identity confirmation only.")}</Text>
+              <Text style={styles.paragraph}>{uiText("Facial verification media is sensitive personal information. It is restricted to verification purposes, is never sold, and is not shared with third parties for advertising or unrelated profiling.")}</Text>
+            </View>
+
+            {/* 7. Retention and Disposal */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="archive-outline" size={17} color="#FFB43B" style={{ marginRight: 8 }} />
+                <Text style={styles.sectionTitle}>{uiText("7. Retention and Disposal")}</Text>
+              </View>
+              <Text style={styles.paragraph}>{uiText("Verification documents, liveness media, and account records are retained only for as long as needed for verification, safety, legal compliance, and documented platform operations.")}</Text>
+              <Text style={styles.paragraph}>{uiText("Expired or rejected clearances are marked for review and disposal according to applicable retention requirements. When an account is terminated, records are deleted or anonymized when there is no legal or safety reason to retain them.")}</Text>
+            </View>
+
+            {/* 8. Your Rights as a Data Subject */}
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="person-circle-outline" size={17} color="#FFB43B" style={{ marginRight: 8 }} />
-                <Text style={styles.sectionTitle}>{uiText("4. Your Rights Under RA 10173")}</Text>
+                <Text style={styles.sectionTitle}>{uiText("8. Your Rights Under RA 10173")}</Text>
               </View>
               <Text style={styles.paragraph}>
                 {uiText("As a registered user, you retain the following statutory rights:")}</Text>
@@ -160,7 +219,7 @@ export function PrivacyPolicyModal({ visible, onClose }: PrivacyPolicyModalProps
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="mail-unread-outline" size={17} color="#FFB43B" style={{ marginRight: 8 }} />
-                <Text style={styles.sectionTitle}>{uiText("5. Contact Data Protection Officer")}</Text>
+                <Text style={styles.sectionTitle}>{uiText("9. Contact Data Protection Officer")}</Text>
               </View>
               <Text style={styles.paragraph}>
                 {uiText("For inquiries, data access requests, or privacy concerns, please contact our Data Protection Officer:")}</Text>
@@ -172,6 +231,7 @@ export function PrivacyPolicyModal({ visible, onClose }: PrivacyPolicyModalProps
 
             {/* Bottom spacer */}
             <View style={{ height: 16 }} />
+            </>}
           </ScrollView>
 
           {/* Bottom Action Button */}
@@ -183,6 +243,107 @@ export function PrivacyPolicyModal({ visible, onClose }: PrivacyPolicyModalProps
         </View>
       </View>
     </Modal>
+  );
+}
+
+function TermsContent() {
+  const { tr: uiText } = useUiLanguage();
+
+  return (
+    <>
+      <View style={styles.sectionCard}>
+        <Text style={styles.introHeading}>{uiText("Agreement to Use SerbiSure")}</Text>
+        <Text style={styles.paragraph}>
+          {uiText("By creating a SerbiSure account, you agree to these Terms and Conditions and confirm that you have read the Data Privacy Policy.")}
+        </Text>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeaderRow}>
+          <Ionicons name="person-outline" size={17} color="#FFB43B" style={{ marginRight: 8 }} />
+          <Text style={styles.sectionTitle}>{uiText("1. Eligibility and Account Responsibility")}</Text>
+        </View>
+        <Text style={styles.paragraph}>{uiText("You must provide accurate information, keep your account credentials secure, and be at least 18 years old to use SerbiSure.")}</Text>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeaderRow}>
+          <Ionicons name="people-outline" size={17} color="#FFB43B" style={{ marginRight: 8 }} />
+          <Text style={styles.sectionTitle}>{uiText("2. Using the Platform")}</Text>
+        </View>
+        <Text style={styles.paragraph}>{uiText("SerbiSure helps Homeowners and Kasambahays discover services, communicate, and arrange bookings. You are responsible for the information and messages you share.")}</Text>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeaderRow}>
+          <Ionicons name="shield-checkmark-outline" size={17} color="#FFB43B" style={{ marginRight: 8 }} />
+          <Text style={styles.sectionTitle}>{uiText("3. Verification and Safety")}</Text>
+        </View>
+        <Text style={styles.paragraph}>{uiText("Verification supports trust on the platform but does not guarantee a user's identity, qualifications, conduct, or the outcome of a booking. Use your own judgment and follow applicable safety guidance.")}</Text>
+        <Text style={styles.paragraph}>{uiText("Homeowners must submit a valid PhilSys National ID. Kasambahays must submit valid NBI and PNP Clearances. Counterfeit, borrowed, altered, or expired credentials may result in immediate suspension and reporting to the proper authorities.")}</Text>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeaderRow}>
+          <Ionicons name="document-text-outline" size={17} color="#FFB43B" style={{ marginRight: 8 }} />
+          <Text style={styles.sectionTitle}>{uiText("4. Bookings, Payments, and Reviews")}</Text>
+        </View>
+        <Text style={styles.paragraph}>{uiText("Users are responsible for agreeing on service details, schedules, rates, and payment arrangements. Reviews must be honest, relevant, and based on a real interaction.")}</Text>
+        <Text style={styles.paragraph}>{uiText("Short-term on-demand bookings between the same Homeowner and Kasambahay are limited to three (3) bookings per calendar month. Reaching the cap triggers a programmatic block and requires the parties to consider a formal long-term contract so recurring work is not misclassified as gig work.")}</Text>
+        <Text style={styles.paragraph}>{uiText("After a completed engagement, users must submit a review. Reviews written in English, Filipino, Bisaya, or Taglish may be evaluated by an automated XLM-RoBERTa sentiment model to produce public Positive, Neutral, or Negative labels.")}</Text>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeaderRow}>
+          <Ionicons name="cash-outline" size={17} color="#FFB43B" style={{ marginRight: 8 }} />
+          <Text style={styles.sectionTitle}>{uiText("5. Wage Floor and Platform Role")}</Text>
+        </View>
+        <Text style={styles.paragraph}>{uiText("Job offers and booking compensation must meet or exceed the applicable RTWPB-10 minimum wage floor for Northern Mindanao and Cagayan de Oro City. Offering below the applicable minimum, including through an off-platform arrangement connected to SerbiSure, violates these Terms.")}</Text>
+        <Text style={styles.paragraph}>{uiText("SerbiSure is a technology facilitator and matching marketplace. It is not a Private Employment Agency, employer, or party to the employment contract between a Homeowner and Kasambahay. SerbiSure does not handle payroll, direct wage disbursement, or statutory benefit contributions.")}</Text>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeaderRow}>
+          <Ionicons name="medical-outline" size={17} color="#FFB43B" style={{ marginRight: 8 }} />
+          <Text style={styles.sectionTitle}>{uiText("6. Scope and Safety Boundaries")}</Text>
+        </View>
+        <Text style={styles.paragraph}>{uiText("SerbiSure does not perform medical or mental-fitness evaluations, physical deployment, dispute arbitration, or legal mediation. Homeowners are responsible for requesting standard health certificates directly when required. Disputes remain subject to the appropriate Barangay Lupon or DOLE process.")}</Text>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeaderRow}>
+          <Ionicons name="document-lock-outline" size={17} color="#FFB43B" style={{ marginRight: 8 }} />
+          <Text style={styles.sectionTitle}>{uiText("7. Required Credentials and Reviews")}</Text>
+        </View>
+        <Text style={styles.paragraph}>{uiText("Submitting a counterfeit, borrowed, altered, or expired government credential is fraudulent conduct. It may lead to immediate profile suspension and referral to local authorities. Reviews must describe a real completed engagement and must not expose another person's confidential documents or personal information.")}</Text>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeaderRow}>
+          <Ionicons name="warning-outline" size={17} color="#FFB43B" style={{ marginRight: 8 }} />
+          <Text style={styles.sectionTitle}>{uiText("8. Prohibited Conduct")}</Text>
+        </View>
+        <Text style={styles.paragraph}>{uiText("Do not impersonate another person, submit false documents, harass other users, misuse personal data, or use SerbiSure for unlawful activity.")}</Text>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeaderRow}>
+          <Ionicons name="lock-closed-outline" size={17} color="#FFB43B" style={{ marginRight: 8 }} />
+          <Text style={styles.sectionTitle}>{uiText("9. Account Changes or Suspension")}</Text>
+        </View>
+        <Text style={styles.paragraph}>{uiText("We may limit or suspend access when needed to protect users, investigate violations, or comply with law. You may stop using the service at any time.")}</Text>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeaderRow}>
+          <Ionicons name="mail-outline" size={17} color="#FFB43B" style={{ marginRight: 8 }} />
+          <Text style={styles.sectionTitle}>{uiText("10. Contact and Acceptance")}</Text>
+        </View>
+        <Text style={styles.paragraph}>{uiText("If you have questions about these terms, contact SerbiSure Support. By selecting the consent checkbox, you confirm that you understand and accept these Terms and Conditions.")}</Text>
+      </View>
+
+      <View style={{ height: 16 }} />
+    </>
   );
 }
 

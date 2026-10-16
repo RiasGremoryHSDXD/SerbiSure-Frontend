@@ -24,6 +24,7 @@ export function SettingsSection({ profile }: { profile: ProfileController }) {
     setIsPasswordModalVisible,
     setIsAboutUsModalVisible,
     setIsPrivacyPolicyModalVisible,
+    setIsTermsModalVisible,
     setIsManageSocialLinksModalVisible,
     showContactNumber,
     isUpdatingPrivacy,
@@ -170,6 +171,12 @@ export function SettingsSection({ profile }: { profile: ProfileController }) {
         icon="document-text"
         title={t.privacyPolicy}
         onPress={() => setIsPrivacyPolicyModalVisible(true)}
+      />
+      <View style={styles.rowDivider} />
+      <SettingsRow
+        icon="document-text-outline"
+        title={uiText("Terms and Conditions")}
+        onPress={() => setIsTermsModalVisible(true)}
       />
     </View>
   </>);

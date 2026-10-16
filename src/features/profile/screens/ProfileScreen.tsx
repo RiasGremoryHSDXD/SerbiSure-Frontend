@@ -70,6 +70,8 @@ export function ProfileScreen(props: ProfileScreenProps) {
     setIsAboutUsModalVisible,
     isPrivacyPolicyModalVisible,
     setIsPrivacyPolicyModalVisible,
+    isTermsModalVisible,
+    setIsTermsModalVisible,
     isMyBookingsModalVisible,
     setIsMyBookingsModalVisible,
     verificationData,
@@ -491,6 +493,13 @@ export function ProfileScreen(props: ProfileScreenProps) {
       <PrivacyPolicyModal
         visible={isPrivacyPolicyModalVisible}
         onClose={() => setIsPrivacyPolicyModalVisible(false)}
+      />
+
+      {/* Terms and Conditions Modal */}
+      <PrivacyPolicyModal
+        visible={isTermsModalVisible}
+        document="terms"
+        onClose={() => setIsTermsModalVisible(false)}
       />
 
       {/* My Bookings / Jobs Modal */}
