@@ -93,7 +93,7 @@ export function ProposalsModal({
     setSubmitting(false);
 
     if (res.success) {
-      Alert.alert('Offer Submitted', 'Your proposed rate has been sent to the poster!');
+      Alert.alert(res.language_warning ? 'Notice' : 'Offer Submitted', res.language_warning || 'Your proposed rate has been sent to the poster!');
       setMessage('');
       setShowOfferForm(false);
       loadProposals();

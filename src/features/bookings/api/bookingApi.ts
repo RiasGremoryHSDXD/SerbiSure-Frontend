@@ -292,7 +292,7 @@ export async function submitBookingProposal(
   proposedRate: number | string,
   message: string | undefined,
   ratePeriod: 'day' | 'month'
-): Promise<{ success: boolean; error?: string; proposal?: BookingProposal }> {
+): Promise<{ success: boolean; error?: string; proposal?: BookingProposal; language_warning?: string | null }> {
   try {
     const res = await requestResponse(`${API_BASE_URL}/api/v1/booking/${bookingId}/proposals/`, {
       method: 'POST',
@@ -308,7 +308,7 @@ export async function submitBookingProposal(
     });
     const data = await res.json();
     if (!res.ok) return { success: false, error: bookingError(data, 'Could not submit proposal.') };
-    return { success: true, proposal: data.proposal };
+    return { success: true, proposal: data.proposal, language_warning: data.language_warning };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error.' };
   }

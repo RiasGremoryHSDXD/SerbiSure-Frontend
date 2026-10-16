@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { BookingModal } from '../../bookings/components/BookingModal';
 import { UserProfileView } from '../../profile/components/UserProfileView';
+import { useChatSafety } from '../hooks/useChatSafety';
 
 import { useUser } from '../../auth/session/UserContext';
 import THEME from '../../../shared/theme/theme';
@@ -384,7 +385,9 @@ function ChatDetailSession({
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const effectiveToken = token || user.token;
+  const safety = useChatSafety(effectiveToken, visible);
   const isSupportConversation = ['admin', 'superadmin', 'barangay'].includes(contactRole.toLowerCase());
+  const chatPaused = !!safety?.restricted_until && !isSupportConversation;
   const sessionActive = useRef(true);
   useLayoutEffect(() => {
     sessionActive.current = true;
@@ -448,6 +451,8 @@ function ChatDetailSession({
     `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || 'User')}&background=FFB43B&color=fff`;
 
   const [inputMessage, setInputMessage] = useState('');
+  const sendingText = useRef(false);
+  const [isSendingText, setIsSendingText] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -749,6 +754,7 @@ function ChatDetailSession({
     try {
       const version = ++threadVersion.current;
       const result = await sendBookingOffer(effectiveToken, payload, offerDraft.current.key);
+      if (sessionActive.current && result.language_warning) Alert.alert('Notice', result.language_warning);
       if (!sessionActive.current) return;
       const info = mapBookingCard(result.chat_message.booking_offer);
       if (!info) throw new Error('The server did not return a saved offer. Refresh the conversation before retrying.');
@@ -940,21 +946,21 @@ function ChatDetailSession({
                 if (!isMounted || !sessionActive.current) return;
                 if (res?.data?.chat_message_id && isMounted) {
                   setMessages((prev) =>
-                    prev.map((msg) => (msg.id === tempId ? { ...msg, id: res.data.chat_message_id } : msg))
+                    prev.map((msg) => (msg.id === tempId ? { ...msg, id: res.data.chat_message_id, text: (res.data.message_payload || '').replace(/^> \[[^\n]*\]: [^\n]*\n\n/, '') } : msg))
                   );
                 }
+                if (res.language_warning) Alert.alert('Notice', res.language_warning);
                 chatStore.addOrUpdateChat({
                   partnerId,
                   name: contactName,
                   badge: contactRole,
                   avatar: resolvedAvatar,
-                  message: initialMessage,
+                  message: (res.data.message_payload || '').replace(/^> \[[^\n]*\]: [^\n]*\n\n/, ''),
                   time: 'Just now',
                 });
               })
               .catch((err) => {
-                if (isMounted) { setMessages(current => current.filter(message => message.id !== tempId)); setThreadError('Could not send the initial message. Please retry.'); }
-                console.warn('[ChatDetailScreen] Failed to auto-send initial message:', err);
+                if (isMounted) { setMessages(current => current.filter(message => message.id !== tempId)); setInputMessage(initialMessage || ''); setThreadError(err instanceof Error ? err.message : 'Could not send the initial message. Please retry.'); }
               });
           } else {
             setMessages([]);
@@ -998,7 +1004,10 @@ function ChatDetailSession({
 
   const handleSend = () => {
     const trimmed = inputMessage.trim();
-    if (!trimmed) return;
+    if (!trimmed || sendingText.current || chatPaused) return;
+    if (!partnerId || !effectiveToken) { Alert.alert('Sign in required', 'Please sign in before sending messages.'); return; }
+    sendingText.current = true;
+    setIsSendingText(true);
 
     if (partnerId && effectiveToken) {
       sendChatTyping(effectiveToken, partnerId, false);
@@ -1065,27 +1074,34 @@ function ChatDetailSession({
           if (!sessionActive.current) return;
           if (res?.data?.chat_message_id) {
             setMessages((prev) =>
-              prev.map((msg) => (msg.id === tempId ? { ...msg, id: res.data.chat_message_id } : msg))
+              prev.map((msg) => (msg.id === tempId ? { ...msg, id: res.data.chat_message_id, text: (res.data.message_payload || '').replace(/^> \[[^\n]*\]: [^\n]*\n\n/, '') } : msg))
             );
           }
+          if (res.language_warning) Alert.alert('Notice', res.language_warning);
           chatStore.addOrUpdateChat({
             partnerId,
             name: contactName,
             badge: contactRole,
             avatar: contactAvatar,
-            message: trimmed,
+            message: (res.data.message_payload || '').replace(/^> \[[^\n]*\]: [^\n]*\n\n/, ''),
             time: 'Just now',
           });
         })
         .catch((err) => {
           if (!sessionActive.current) return;
-          console.warn('[ChatDetailScreen] send failed:', err);
-          Alert.alert('Send Error', err.message || 'Could not send message. Please try again.');
+          setMessages(current => current.filter(message => message.id !== tempId));
+          setInputMessage(current => current || trimmed);
+          setReplyingTo(current => current || currentReply);
+          Alert.alert('Message not sent', err.message || 'Could not send message. Please try again.');
+        }).finally(() => {
+          sendingText.current = false;
+          if (sessionActive.current) setIsSendingText(false);
         });
     }
   };
 
   const handlePickImage = async () => {
+    if (chatPaused) return;
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!sessionActive.current) return;
@@ -1881,6 +1897,9 @@ function ChatDetailSession({
           ) : null}
 
           {/* Messenger Style Input Footer */}
+          {!!safety?.restricted_until && !isSupportConversation && <View style={{ paddingHorizontal: 20, paddingVertical: 12 }}>
+            <Text style={{ color: '#6B7280', fontSize: 13 }}>Messaging paused until {new Date(safety.restricted_until).toLocaleString()}. Contact your Barangay desk or SerbiSure Support for help.</Text>
+          </View>}
           {isUploadingImage && (
             <View style={styles.uploadingBar}>
               <ActivityIndicator size="small" color="#FFB43B" />
@@ -1888,10 +1907,10 @@ function ChatDetailSession({
             </View>
           )}
           <View style={[styles.inputFooter, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-            <Pressable style={styles.attachBtn} onPress={handlePickImage}>
+            <Pressable style={styles.attachBtn} disabled={chatPaused} onPress={handlePickImage}>
               <Ionicons name="add-circle" size={32} color="#FFB43B" />
             </Pressable>
-            <Pressable style={styles.imageBtn} onPress={handlePickImage}>
+            <Pressable style={styles.imageBtn} disabled={chatPaused} onPress={handlePickImage}>
               <Ionicons name="image-outline" size={22} color="#888" />
             </Pressable>
 
@@ -1901,6 +1920,7 @@ function ChatDetailSession({
               placeholder="Type a message..."
               placeholderTextColor="#888"
               value={inputMessage}
+              editable={!isSendingText && !chatPaused}
               onChangeText={(text) => {
                 setInputMessage(text);
                 handleTyping();
@@ -1911,13 +1931,13 @@ function ChatDetailSession({
             <Pressable
               style={({ pressed }) => [
                 styles.sendBtn,
-                !inputMessage.trim() && styles.sendBtnDisabled,
+                (!inputMessage.trim() || chatPaused) && styles.sendBtnDisabled,
                 pressed && { opacity: 0.8 },
               ]}
               onPress={handleSend}
-              disabled={!inputMessage.trim()}
+              disabled={!inputMessage.trim() || isSendingText || chatPaused}
             >
-              <Ionicons name="send" size={16} color="#FFFFFF" style={{ marginLeft: 2 }} />
+              {isSendingText ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name="send" size={16} color="#FFFFFF" style={{ marginLeft: 2 }} />}
             </Pressable>
           </View>
         </KeyboardAvoidingView>
@@ -1994,7 +2014,7 @@ function ChatDetailSession({
         {activeActionMenuMsg ? (() => {
           const isSender = activeActionMenuMsg.sender === 'me';
           const pillHeight = 44;
-          const menuHeight = activeActionMenuMsg.text ? 138 : 94;
+          const menuHeight = (activeActionMenuMsg.text ? 138 : 94) + (activeActionMenuMsg.sender === 'other' && !activeActionMenuMsg.bookingInfo ? 48 : 0);
           const bubbleHeight = activeMenuLayout?.height || 48;
           const bubbleWidth = activeMenuLayout?.width;
 
@@ -2149,6 +2169,7 @@ function ChatDetailSession({
                     <Text style={styles.actionMenuText}>Copy</Text>
                   </Pressable>
                 ) : null}
+
 
                 {/* Unsend (if message sender is 'me') */}
                 {isSender ? (

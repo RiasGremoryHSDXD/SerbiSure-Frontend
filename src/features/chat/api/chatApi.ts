@@ -1,6 +1,6 @@
 import type { PersistedChatOffer } from '../bookingCards';
 import { API_BASE_URL } from '../../../shared/api/config';
-import { requestResponse } from '../../../shared/api/httpClient';
+import { ApiError, requestResponse } from '../../../shared/api/httpClient';
 
 const CHAT_BASE = `${API_BASE_URL}/api/v1/chat`;
 
@@ -68,6 +68,7 @@ export interface ChatMessageItem {
 }
 
 export interface SendMessageResponse {
+  language_warning?: string | null;
   message: string;
   data: ChatMessageItem;
 }
@@ -205,7 +206,7 @@ export async function sendChatMessage(
       data.message_payload?.[0] ||
       data.receiver_id?.[0] ||
       `Failed to send message (${res.status})`;
-    throw new Error(msg);
+    throw new ApiError(msg, res.status, data);
   }
 
   return data;
@@ -293,7 +294,7 @@ export async function sendChatImage(
       data.detail ||
       data.non_field_errors?.[0] ||
       `Failed to send image (${res.status})`;
-    throw new Error(msg);
+    throw new ApiError(msg, res.status, data);
   }
 
   return data;

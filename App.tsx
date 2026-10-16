@@ -1,5 +1,5 @@
 import { AppProviders } from './src/app/providers/AppProviders';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, LogBox, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
@@ -20,11 +20,13 @@ import {
   RegistrationStep1,
   RegistrationStep2,
   RegistrationStep3,
+  SuspendedAccountScreen,
 } from './src/features/auth';
 import { clearExploreFeedCache } from './src/features/feed/feedCache';
 import { chatStore } from './src/features/chat/store/chatStore';
 import { AppNavigator, type Role } from './src/app/AppNavigator';
 import { preloadPostLoginAssets } from './src/app/services/preloadAssets';
+import { realtime } from './src/shared/realtime';
 
 // Clean App Navigation Flow matching Figma structure:
 // landing -> login -> user_selection -> registration1-3 -> dashboard (bottom tab navigator)
@@ -35,6 +37,7 @@ type AppFlowState =
   | 'registration1'
   | 'registration2'
   | 'registration3'
+  | 'suspended'
   | 'dashboard';
 
 export default function App() {
@@ -54,6 +57,27 @@ export default function App() {
   const [selectedRole, setSelectedRole] = useState<Role>('homeowner');
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [suspensionMessage, setSuspensionMessage] = useState<string | null>(null);
+
+  const clearSession = useCallback(() => {
+    realtime.stop();
+    clearExploreFeedCache();
+    chatStore.clearCache();
+    setAccessToken(null);
+    setAvatarUri(null);
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    clearSession();
+    setSuspensionMessage(null);
+    setFlowState('login');
+  }, [clearSession]);
+
+  const handleAccountSuspended = useCallback((message: string) => {
+    clearSession();
+    setSuspensionMessage(message);
+    setFlowState('suspended');
+  }, [clearSession]);
 
   if (!fontsLoaded) {
     return (
@@ -69,7 +93,7 @@ export default function App() {
   };
 
   return (
-    <AppProviders token={accessToken}>
+    <AppProviders token={accessToken} onAccountSuspended={handleAccountSuspended}>
       <StatusBar style={flowState === 'registration3' ? 'light' : 'dark'} />
 
       {/* Step 1 & 1.5: Landing Page & Animated Login Flow */}
@@ -142,6 +166,16 @@ export default function App() {
         />
       )}
 
+      {flowState === 'suspended' && (
+        <SuspendedAccountScreen
+          message={suspensionMessage || undefined}
+          onReturnToSignIn={() => {
+            setSuspensionMessage(null);
+            setFlowState('login');
+          }}
+        />
+      )}
+
       {/* Step 6: Main Dashboard (Bottom Tab Navigator - Home, Services/Jobs, Chats, Profile) */}
       {flowState === 'dashboard' && (
         <AppNavigator
@@ -149,13 +183,7 @@ export default function App() {
           avatarUri={avatarUri}
           token={accessToken}
           onUpdateAvatar={(uri: string) => setAvatarUri(uri)}
-          onLogout={() => {
-            clearExploreFeedCache();
-            chatStore.clearCache();
-            setAccessToken(null);
-            setAvatarUri(null);
-            setFlowState('login');
-          }}
+          onLogout={handleLogout}
         />
       )}
     </AppProviders>

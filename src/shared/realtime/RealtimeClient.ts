@@ -1,5 +1,7 @@
+import { notifyAccountSuspension, requestJson } from '../api/httpClient';
+
 export type RealtimeStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'unauthorized';
-export type RealtimeEvent = { type: 'sync' | 'chat.changed' | 'chat.typing' | 'presence.changed' | 'booking.changed' | 'notifications.changed'; partner_id?: string; message_id?: string; booking_id?: string; is_typing?: boolean; is_online?: boolean | null; expires_in?: number };
+export type RealtimeEvent = { type: 'sync' | 'chat.changed' | 'chat.typing' | 'presence.changed' | 'booking.changed' | 'notifications.changed' | 'moderation.changed'; partner_id?: string; message_id?: string; booking_id?: string; is_typing?: boolean; is_online?: boolean | null; expires_in?: number };
 export interface SocketLike {
   onopen: ((event: any) => void) | null;
   onmessage: ((event: any) => void) | null;
@@ -21,6 +23,7 @@ export class RealtimeClient {
   private authTimeout?: ReturnType<typeof setTimeout>;
   private heartbeat?: ReturnType<typeof setInterval>;
   private lastSeen = 0;
+  private authenticated = false;
   private events = new Set<(event: RealtimeEvent) => void>();
   private statuses = new Set<(status: RealtimeStatus) => void>();
   private presenceWatches = new Map<symbol, string[]>();
@@ -54,6 +57,7 @@ export class RealtimeClient {
     this.generation++;
     clearTimeout(this.retry); clearTimeout(this.authTimeout); clearInterval(this.heartbeat);
     this.retry = undefined; this.authTimeout = undefined; this.heartbeat = undefined;
+    this.authenticated = false;
     const socket = this.socket; this.socket = null;
     if (socket) { socket.onopen = socket.onmessage = socket.onclose = socket.onerror = null; socket.close(); }
   }
@@ -80,7 +84,7 @@ export class RealtimeClient {
       if (!data || typeof data !== 'object' || typeof data.type !== 'string') return;
       this.lastSeen = Date.now();
       if (data.type === 'ready') {
-        clearTimeout(this.authTimeout); this.attempt = 0; this.setStatus('connected');
+        clearTimeout(this.authTimeout); this.attempt = 0; this.authenticated = true; this.setStatus('connected');
         if (this.presenceWatches.size) this.sendPresenceWatch();
         this.events.forEach(listener => listener({ type: 'sync' }));
         clearInterval(this.heartbeat);
@@ -89,13 +93,24 @@ export class RealtimeClient {
           if (Date.now() - this.lastSeen > 65000) { reconnect(); return; }
           try { socket.send(JSON.stringify({ type: 'ping' })); } catch { reconnect(); }
         }, 25000);
-      } else if (this.status === 'connected' && ['chat.changed', 'chat.typing', 'presence.changed', 'booking.changed', 'notifications.changed'].includes(data.type)) {
+      } else if (this.status === 'connected' && ['chat.changed', 'chat.typing', 'presence.changed', 'booking.changed', 'notifications.changed', 'moderation.changed'].includes(data.type)) {
         this.events.forEach(listener => listener(data as RealtimeEvent));
       }
     };
     socket.onclose = event => {
       if (!valid()) return;
-      if ([4401, 4403, 4400].includes(event.code)) { this.dispose(); this.setStatus('unauthorized'); }
+      const wasAuthenticated = this.authenticated;
+      const suspended = wasAuthenticated && event.code === 4403;
+      if ([4401, 4403, 4400].includes(event.code)) {
+        this.dispose();
+        if (suspended) notifyAccountSuspension(403, { code: 'account_suspended', detail: 'Your account is suspended. Contact SerbiSure Support for assistance.' });
+        else if (wasAuthenticated && event.code === 4401 && this.token) {
+          // 4401 can also be a token expiry. Ask the authoritative API once so
+          // a missed moderation event still reaches the suspension boundary.
+          void requestJson('/api/v1/chat/safety/status/', { token: this.token }).catch(() => { });
+        }
+        this.setStatus('unauthorized');
+      }
       else reconnect();
     };
     socket.onerror = reconnect;

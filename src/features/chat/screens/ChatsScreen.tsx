@@ -145,7 +145,9 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
 
         {/* Clean Header Area: Title & Pill Search */}
         <View style={styles.headerArea}>
-          <Text style={styles.headerTitle}>{t.chatsHeader || 'Messages'}</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+            <Text style={styles.headerTitle}>{t.chatsHeader || 'Messages'}</Text>
+          </View>
           <View style={styles.searchContainer}>
             <Ionicons name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
             <TextInput

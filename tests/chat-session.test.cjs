@@ -87,6 +87,7 @@ function screen(t) {
     '../bookingCards': { mapBookingCard: () => null }, '../api/bookingOffersApi': {},
     '../../bookings/components/BookingModal': { BookingModal: () => null },
     '../../profile/components/UserProfileView': { UserProfileView: () => null },
+    '../hooks/useChatSafety': { useChatSafety: () => null },
     '../api/chatApi': api, '../threadRefreshQueue': { createThreadRefreshQueue },
     '../store/chatStore': { chatStore: { isMessageDeleted: () => false, loadInbox: async () => [], addOrUpdateChat: entry => previews.push(entry) } },
     '../../bookings/store/savedJobsStore': {}, '../../../shared/api/config': {}, '../../../shared/api/httpClient': {},
@@ -166,6 +167,44 @@ test('a failed new conversation shows its own error and never restores the previ
   chat.update('A'); chat.requests[0].resolve(payload('dogs')); await tick();
   chat.update('B'); chat.requests[1].reject(new Error('Could not load this chat.')); await tick();
   assert.match(chat.texts(), /Could not load this chat/); assert.doesNotMatch(chat.texts(), /dogs/);
+});
+
+test('a blocked send removes its optimistic bubble, restores the editable draft and leaves recipient previews unchanged', async t => {
+  const chat = screen(t);
+  chat.update('A'); chat.requests[0].resolve(payload('Earlier message')); await tick();
+  chat.nodes().find(node => node.type === 'TextInput').props.onChangeText('Unsuitable outgoing text');
+  chat.nodes().find(node => node.type === 'Pressable' && node.children.some(child => child.type === 'Icon' && child.props.name === 'send')).props.onPress();
+  assert.match(chat.texts(), /Unsuitable outgoing text/);
+  chat.sends[0].reject(new Error('This message may contain inappropriate language. Please edit it before sending.'));
+  await tick();
+  assert.doesNotMatch(chat.texts(), /Unsuitable outgoing text/);
+  assert.equal(chat.nodes().find(node => node.type === 'TextInput').props.value, 'Unsuitable outgoing text');
+  assert.equal(chat.alerts.length, 1);
+  assert.match(chat.alerts[0][1], /Please edit it/);
+  assert.deepEqual(chat.previews, []);
+});
+
+test('repeated send taps while a request is pending create only one attempt', async t => {
+  const chat = screen(t);
+  chat.update('A'); chat.requests[0].resolve(payload('Earlier message')); await tick();
+  chat.nodes().find(node => node.type === 'TextInput').props.onChangeText('One outgoing message');
+  const send = chat.nodes().find(node => node.type === 'Pressable' && node.children.some(child => child.type === 'Icon' && child.props.name === 'send')).props.onPress;
+  send(); send();
+  assert.equal(chat.sends.length, 1);
+  assert.equal(chat.nodes().find(node => node.type === 'TextInput').props.editable, false);
+  chat.sends[0].reject(new Error('Please edit this message.')); await tick();
+  assert.equal(chat.nodes().find(node => node.type === 'TextInput').props.editable, true);
+});
+
+test('a late blocked-send response cannot restore a draft into a different conversation', async t => {
+  const chat = screen(t);
+  chat.update('A'); chat.requests[0].resolve(payload('Earlier message')); await tick();
+  chat.nodes().find(node => node.type === 'TextInput').props.onChangeText('Private blocked draft');
+  chat.nodes().find(node => node.type === 'Pressable' && node.children.some(child => child.type === 'Icon' && child.props.name === 'send')).props.onPress();
+  chat.update('B');
+  chat.sends[0].reject(new Error('Blocked message')); await tick();
+  assert.equal(chat.nodes().find(node => node.type === 'TextInput').props.value, '');
+  assert.deepEqual(chat.alerts, []);
 });
 
 test('an offline contact never flashes online on opening or reopening, even with a legacy online hint', async t => {
@@ -263,4 +302,28 @@ test('mobile avatar presence expires, does not resubscribe on a list reorder, an
   renderer.flushSync(() => t.mock.timers.tick(65000));
   assert.equal(screen.value().a, undefined);
   screen.update('account', []); assert.equal(screen.watches.size, 0);
+});
+
+
+test('a successful masked send updates the bubble and inbox preview and shows exactly one notice', async t => {
+  const chat = screen(t);
+  chat.update('A'); chat.requests[0].resolve(payload('Earlier message')); await tick();
+  chat.nodes().find(node => node.type === 'TextInput').props.onChangeText('gago');
+  chat.nodes().find(node => node.type === 'Pressable' && node.children.some(child => child.type === 'Icon' && child.props.name === 'send')).props.onPress();
+  chat.sends[0].resolve({ data: { chat_message_id: 'saved', message_payload: 'g*go' }, language_warning: 'Please communicate respectfully.' });
+  await tick();
+  assert.match(chat.texts(), /g\*go/); assert.doesNotMatch(chat.texts(), /gago/);
+  assert.equal(chat.alerts.length, 1); assert.equal(chat.alerts[0][0], 'Notice');
+  assert.equal(chat.previews[0].message, 'g*go');
+});
+
+test('a masked-send response from an old thread never displays a notice in another chat', async t => {
+  const chat = screen(t);
+  chat.update('A'); chat.requests[0].resolve(payload('Earlier message')); await tick();
+  chat.nodes().find(node => node.type === 'TextInput').props.onChangeText('gago');
+  chat.nodes().find(node => node.type === 'Pressable' && node.children.some(child => child.type === 'Icon' && child.props.name === 'send')).props.onPress();
+  chat.update('B');
+  chat.sends[0].resolve({ data: { chat_message_id: 'saved', message_payload: 'g*go' }, language_warning: 'Please communicate respectfully.' });
+  await tick();
+  assert.deepEqual(chat.alerts, []); assert.deepEqual(chat.previews, []);
 });

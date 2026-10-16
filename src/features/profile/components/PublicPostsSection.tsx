@@ -57,7 +57,7 @@ export function PublicPostsSection({ posts, loading, error, token, ownerId, owne
       }
       onSubmitted(selected.booking_id, result.proposal);
       setSelected(null);
-      Alert.alert(isJob ? 'Application Sent' : 'Hiring Offer Sent', 'The post owner has been notified. Your proposal is pending until they respond.');
+      Alert.alert(result.language_warning ? 'Notice' : isJob ? 'Application Sent' : 'Hiring Offer Sent', result.language_warning || 'The post owner has been notified. Your proposal is pending until they respond.');
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
