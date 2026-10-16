@@ -4,6 +4,7 @@
   "private": true,
   "main": "expo/AppEntry.js",
   "scripts": {
+    "test:registration": "node --test tests/registration.test.cjs",
     "test:realtime": "node --test tests/chat-realtime.test.cjs tests/chat-session.test.cjs",
     "test:verification": "node --test tests/selfie-upload.test.cjs tests/liveness-flow.test.cjs",
     "test:localization": "node --test tests/localization.test.cjs",

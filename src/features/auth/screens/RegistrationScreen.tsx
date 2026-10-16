@@ -14,6 +14,7 @@ import { getRegions, getProvinces, getCities, getBarangays, getZipCodeForCity, R
 import THEME from '../../../shared/theme/theme';
 import { RegistrationStepper } from '../components/RegistrationStepper';
 import { RegistrationErrorModal } from '../components/RegistrationErrorModal';
+import { readRegistrationResponse } from '../api/registration';
 import { PrivacyPolicyModal } from '../../profile/components/PrivacyPolicyModal';
 import { SERVICE_CHOICES } from '../../bookings/engagementForm';
 
@@ -538,8 +539,8 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
         body: JSON.stringify(payload)
       });
 
-      const data = await response.json();
-      if (response.ok) {
+      const result = await readRegistrationResponse(response);
+      if (result.ok) {
         // Save user location & details globally in UserContext ONLY upon successful account creation
         updateUser({
           firstName: firstName.trim(),
@@ -562,14 +563,14 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
           userTags: !isHomeowner ? generatedTags : undefined,
         });
 
-        if (!isHomeowner && data.access) {
-          updateUserAbout(data.access, finalBio).catch(() => { });
-          updateUserTags(data.access, generatedTags).catch(() => { });
+        if (!isHomeowner) {
+          updateUserAbout(result.access, finalBio).catch(() => { });
+          updateUserTags(result.access, generatedTags).catch(() => { });
         }
         Alert.alert("Success", "Account created successfully!");
-        if (onNext) onNext(data.access);
+        if (onNext) onNext(result.access);
       } else {
-        setServerError(data);
+        setServerError(result.error);
       }
     } catch (error: any) {
       setServerError(error);
