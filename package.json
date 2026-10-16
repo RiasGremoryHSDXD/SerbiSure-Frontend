@@ -5,6 +5,7 @@
   "main": "expo/AppEntry.js",
   "scripts": {
     "test:realtime": "node --test tests/chat-realtime.test.cjs tests/chat-session.test.cjs",
+    "test:verification": "node --test tests/selfie-upload.test.cjs tests/liveness-flow.test.cjs",
     "start": "expo start --dev-client",
     "android": "expo run:android",
     "ios": "expo run:ios",

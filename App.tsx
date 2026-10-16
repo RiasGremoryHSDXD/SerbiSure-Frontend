@@ -27,6 +27,7 @@ import { chatStore } from './src/features/chat/store/chatStore';
 import { AppNavigator, type Role } from './src/app/AppNavigator';
 import { preloadPostLoginAssets } from './src/app/services/preloadAssets';
 import { realtime } from './src/shared/realtime';
+import { createSelfieUploadTask, uploadSelfie, type SelfieUploadTask } from './src/features/verification/api/selfieUpload';
 
 // Clean App Navigation Flow matching Figma structure:
 // landing -> login -> user_selection -> registration1-3 -> dashboard (bottom tab navigator)
@@ -58,6 +59,7 @@ export default function App() {
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [suspensionMessage, setSuspensionMessage] = useState<string | null>(null);
+  const [selfieUpload, setSelfieUpload] = useState<SelfieUploadTask | undefined>();
 
   const clearSession = useCallback(() => {
     realtime.stop();
@@ -65,6 +67,7 @@ export default function App() {
     chatStore.clearCache();
     setAccessToken(null);
     setAvatarUri(null);
+    setSelfieUpload(undefined);
   }, []);
 
   const handleLogout = useCallback(() => {
@@ -142,12 +145,10 @@ export default function App() {
           role={selectedRole}
           token={accessToken}
           onVerified={(result) => {
-            if (result.selfiePath) {
-              const uri = result.selfiePath.startsWith('data:') || result.selfiePath.startsWith('file:')
-                ? result.selfiePath
-                : `file://${result.selfiePath}`;
-              setAvatarUri(uri);
-            }
+            if (!result.selfiePath) return;
+            const uri = result.selfiePath.startsWith('file:') ? result.selfiePath : `file://${result.selfiePath}`;
+            setAvatarUri(uri);
+            setSelfieUpload(createSelfieUploadTask(() => uploadSelfie(accessToken || '', uri)));
             setFlowState('registration3');
           }}
           onBack={() => setFlowState('registration1')}
@@ -159,6 +160,7 @@ export default function App() {
         <RegistrationStep2
           role={selectedRole}
           token={accessToken}
+          selfieUpload={selfieUpload}
           onBack={() => setFlowState('registration2')}
           onNext={() => setFlowState('dashboard')}
           onCancel={() => setFlowState('dashboard')}

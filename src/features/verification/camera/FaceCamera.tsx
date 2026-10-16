@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Camera as VisionCamera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import { Camera as VisionCamera, useCameraDevice, useCameraFormat, useCameraPermission } from 'react-native-vision-camera';
 import { Delegate, RunningMode, useFaceLandmarkDetection, type DetectionError, type Dims, type FaceLandmarkDetectionResultBundle } from 'react-native-mediapipe';
 
 import { faceLandmarkerResultToLandmarkFrame } from '../face/mediapipeFaceTracker';
@@ -8,15 +8,24 @@ import type { LandmarkFrame } from '../face/types';
 
 type FaceCameraProps = {
   onLandmarks: (frame: LandmarkFrame) => void;
+  detecting?: boolean;
 };
 
 export type FaceCameraHandle = {
   captureSelfie: () => Promise<string | null>;
 };
 
-export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function FaceCamera({ onLandmarks }, ref) {
+export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function FaceCamera({ onLandmarks, detecting = true }, ref) {
   const cameraRef = useRef<VisionCamera | null>(null);
+  const lastResultAt = useRef(0);
   const device = useCameraDevice('front');
+  // Avoid the default highest-resolution buffers and multi-megapixel selfie.
+  // Keep enough photo detail for the official's manual identity review.
+  const format = useCameraFormat(device, [
+    { photoResolution: { width: 1280, height: 960 } },
+    { videoResolution: { width: 640, height: 480 } },
+    { fps: 30 },
+  ]);
   const { hasPermission, requestPermission } = useCameraPermission();
   const [detectorError, setDetectorError] = useState<string | null>(null);
 
@@ -28,6 +37,11 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
 
   const handleResults = useCallback(
     (resultBundle: FaceLandmarkDetectionResultBundle, viewSize: Dims, mirrored: boolean) => {
+      if (!detecting) return;
+      const now = Date.now();
+      // Drop excess JS callbacks before mapping hundreds of landmark points.
+      if (now - lastResultAt.current < 100) return;
+      lastResultAt.current = now;
       setDetectorError(null);
       onLandmarks(
         faceLandmarkerResultToLandmarkFrame(
@@ -38,11 +52,12 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
         ),
       );
     },
-    [onLandmarks],
+    [onLandmarks, detecting],
   );
 
   const handleError = useCallback((error: DetectionError) => {
-    setDetectorError(error.message);
+    console.warn('[Liveness] Face tracking failed', { code: error.code });
+    setDetectorError('Face tracking paused. Face the camera in good light and try again.');
   }, []);
 
   const faceLandmarkDetection = useFaceLandmarkDetection(
@@ -76,6 +91,8 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
           flash: 'off',
         });
 
+        console.info('[Liveness timing]', { stage: 'selfie_dimensions', width: photo.width, height: photo.height });
+
         return photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`;
       },
     }),
@@ -104,14 +121,20 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
         device={device}
+        format={format}
+        fps={format ? Math.max(format.minFps, Math.min(30, format.maxFps)) : undefined}
+        photoQualityBalance="speed"
         isActive
         pixelFormat="rgb"
         photo
+        // Keep outputs bound until capture finishes. Removing the processor
+        // here rebuilds Android's ImageCapture and can race with takePhoto().
+        // `detecting` pauses result handling; unmount releases the camera.
         frameProcessor={faceLandmarkDetection.frameProcessor}
         onLayout={faceLandmarkDetection.cameraViewLayoutChangeHandler}
         onOutputOrientationChanged={faceLandmarkDetection.cameraOrientationChangedHandler}
       />
-      {detectorError ? (
+      {detecting && detectorError ? (
         <View style={styles.errorBanner}>
           <Text style={styles.errorText}>{detectorError}</Text>
         </View>

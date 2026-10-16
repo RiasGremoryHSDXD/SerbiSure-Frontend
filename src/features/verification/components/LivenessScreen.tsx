@@ -3,13 +3,10 @@ import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Canvas, Circle, Path, Skia } from '@shopify/react-native-skia';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { API_BASE_URL } from '../../../shared/api/config';
-import { fetchWithTimeout } from '../../../shared/api/httpClient';
 
 import { FaceCamera, type FaceCameraHandle } from '../camera/FaceCamera';
 import type { LandmarkFrame } from '../face/types';
 import { advanceLiveness, initialLivenessState, retryCurrentStep, type LivenessResult, type LivenessState } from '../liveness/livenessMachine';
-import { getFaceAlignment } from '../liveness/livenessRules';
 
 import THEME from '../../../shared/theme/theme';
 import { RegistrationStepper } from '../../auth/components/RegistrationStepper';
@@ -116,17 +113,27 @@ function getInstruction(state: LivenessState, showTrackerNotice: boolean, countd
   return 'Face forward and stay still';
 }
 
-export function LivenessScreen({ role = 'homeowner', token, onVerified, onBack, onCancel, onSkip }: LivenessScreenProps) {
+export function LivenessScreen({ role = 'homeowner', onVerified, onBack }: LivenessScreenProps) {
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<FaceCameraHandle | null>(null);
   const captureStartedRef = useRef(false);
   const [started, setStarted] = useState(false);
   const [state, setState] = useState(initialLivenessState);
-  const [faceCentered, setFaceCentered] = useState(false);
-  const [lastLandmarkAt, setLastLandmarkAt] = useState<number | null>(null);
+  const stateRef = useRef(initialLivenessState);
+  const lastLandmarkAt = useRef<number | null>(null);
+  const startedAt = useRef(0);
+  const mounted = useRef(true);
+  const verifiedCallback = useRef(onVerified);
+  verifiedCallback.current = onVerified;
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [captureAttempt, setCaptureAttempt] = useState(0);
   const [showTrackerNotice, setShowTrackerNotice] = useState(false);
   const [showCenterCheck, setShowCenterCheck] = useState(false);
-  const [capturedSelfiePath, setCapturedSelfiePath] = useState<string | null>(null);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   useEffect(() => {
     if (!started) {
@@ -134,31 +141,36 @@ export function LivenessScreen({ role = 'homeowner', token, onVerified, onBack, 
     }
 
     const timer = setTimeout(() => {
-      if (lastLandmarkAt === null) {
+      if (lastLandmarkAt.current === null) {
         setShowTrackerNotice(true);
       }
     }, 2600);
 
     return () => clearTimeout(timer);
-  }, [lastLandmarkAt, started]);
+  }, [started]);
+
+  useEffect(() => {
+    if (!state.completedSteps.length) return;
+    setShowCenterCheck(true);
+    const timer = setTimeout(() => setShowCenterCheck(false), 650);
+    return () => clearTimeout(timer);
+  }, [state.completedSteps.length]);
 
   const handleLandmarks = useCallback((frame: LandmarkFrame) => {
-    setLastLandmarkAt(Date.now());
+    if (captureStartedRef.current || !mounted.current) return;
+    const now = Date.now();
+    // FaceCamera already limits landmark mapping/UI callbacks to ten per second.
+    if (lastLandmarkAt.current === null) {
+      console.info('[Liveness timing]', { stage: 'first_landmarks', durationMs: now - startedAt.current });
+    }
+    lastLandmarkAt.current = now;
     setShowTrackerNotice(false);
-    setFaceCentered(getFaceAlignment(frame).centered);
-    setState((current) => {
-      const next = advanceLiveness(current, frame);
-      if (next.completedSteps.length > current.completedSteps.length) {
-        setShowCenterCheck(true);
-        setTimeout(() => setShowCenterCheck(false), 650);
-      }
-
-      if (!current.verified && next.verified) {
-        setShowCenterCheck(true);
-      }
-
-      return next;
-    });
+    const next = advanceLiveness(stateRef.current, frame);
+    if (next.step !== stateRef.current.step) {
+      console.info('[Liveness timing]', { stage: next.step, durationMs: now - startedAt.current });
+    }
+    stateRef.current = next;
+    setState(next);
   }, []);
 
   useEffect(() => {
@@ -169,44 +181,25 @@ export function LivenessScreen({ role = 'homeowner', token, onVerified, onBack, 
     captureStartedRef.current = true;
     setShowCenterCheck(true);
 
-    void cameraRef.current?.captureSelfie().then(async (selfiePath) => {
-      if (selfiePath) {
-        setCapturedSelfiePath(selfiePath);
-
-        try {
-          const uri = selfiePath.startsWith('file:') ? selfiePath : `file://${selfiePath}`;
-          const filename = uri.split('/').pop() || 'profile.jpg';
-          const match = /\.(\w+)$/.exec(filename);
-          const type = match ? `image/${match[1]}` : `image/jpeg`;
-
-          const formData = new FormData();
-          formData.append('profile_image', {
-            uri,
-            name: filename,
-            type
-          } as any);
-
-          await fetchWithTimeout(`${API_BASE_URL}/api/v1/accounts/profile-image/`, {
-            method: "PUT",
-            headers: {
-              'Content-Type': 'multipart/form-data',
-              "Authorization": token ? `Bearer ${token}` : "",
-            },
-            body: formData,
-          }, 60000); // 60 seconds — image uploads to Cloudinary take longer than the default 15s
-        } catch (e) {
-          console.error("Failed to upload profile image", e);
-        }
-      }
-      setTimeout(() => {
-        onVerified?.({
-          verified: true,
-          completedAt: Date.now(),
-          selfiePath: selfiePath ?? undefined,
+    const captureStartedAt = Date.now();
+    void (async () => {
+      try {
+        const selfiePath = await cameraRef.current?.captureSelfie();
+        if (!selfiePath) throw new Error('The camera could not capture your selfie. Please retry.');
+        if (!mounted.current) return;
+        console.info('[Liveness timing]', {
+          stage: 'documents_ready', captureMs: Date.now() - captureStartedAt,
+          durationMs: Date.now() - startedAt.current,
         });
-      }, 500); // reduced timeout slightly to compensate for upload time
-    });
-  }, [onVerified, started, state.verified, token]);
+        // Registration owns the upload; document selection starts immediately.
+        verifiedCallback.current?.({ verified: true, completedAt: Date.now(), selfiePath });
+      } catch (error) {
+        const code = error && typeof error === 'object' && 'code' in error ? error.code : 'capture-failed';
+        console.warn('[Liveness] Selfie capture failed', { code });
+        if (mounted.current) setCaptureError('We couldn’t take your selfie.');
+      }
+    })();
+  }, [started, state.verified, captureAttempt]);
 
   const countdownValue = useMemo(() => {
     if (state.step !== 'still' || state.verified) {
@@ -216,7 +209,7 @@ export function LivenessScreen({ role = 'homeowner', token, onVerified, onBack, 
     return Math.max(1, Math.ceil(3 - state.stillnessProgress * 3));
   }, [state.step, state.stillnessProgress, state.verified]);
 
-  const instruction = started
+  const instruction = state.verified ? 'Face check passed. Capturing selfie…' : started
     ? getInstruction(state, showTrackerNotice, countdownValue)
     : 'Make sure your selfie is within the frame and you\'re in a well lit area. Remove anything on your face like a face mask or sunglasses.';
   const ringProgress = started ? getRingProgress(state) : 0;
@@ -224,21 +217,23 @@ export function LivenessScreen({ role = 'homeowner', token, onVerified, onBack, 
 
   const handleContinue = useCallback(() => {
     setStarted(true);
+    startedAt.current = Date.now();
+    stateRef.current = initialLivenessState;
     setState(initialLivenessState);
-    setFaceCentered(false);
     setShowTrackerNotice(false);
     setShowCenterCheck(false);
-    setLastLandmarkAt(null);
-    setCapturedSelfiePath(null);
+    lastLandmarkAt.current = null;
+    setCaptureError(null);
     captureStartedRef.current = false;
   }, []);
 
   const handleRetry = useCallback(() => {
-    setState((current) => retryCurrentStep(current));
-    setFaceCentered(false);
+    stateRef.current = retryCurrentStep(stateRef.current);
+    setState(stateRef.current);
     setShowCenterCheck(false);
-    setCapturedSelfiePath(null);
+    setCaptureError(null);
     captureStartedRef.current = false;
+    setCaptureAttempt(value => value + 1);
   }, []);
 
   const handleCancel = useCallback(() => {
@@ -284,19 +279,9 @@ export function LivenessScreen({ role = 'homeowner', token, onVerified, onBack, 
         <View style={styles.cardContent}>
           <View>
             <View style={styles.verificationFrame}>
-              {capturedSelfiePath ? (
-                <Image
-                  source={{
-                    uri: capturedSelfiePath.startsWith('file://') || capturedSelfiePath.startsWith('data:')
-                      ? capturedSelfiePath
-                      : `file://${capturedSelfiePath}`,
-                  }}
-                  style={styles.capturedSelfie}
-                  resizeMode="cover"
-                />
-              ) : started ? (
+              {started ? (
                 <View style={styles.cameraCircle}>
-                  <FaceCamera ref={cameraRef} onLandmarks={handleLandmarks} />
+                  <FaceCamera ref={cameraRef} onLandmarks={handleLandmarks} detecting={!state.verified} />
                 </View>
               ) : null}
               <LivenessRing progress={ringProgress} showFaceIcon={showFaceIcon} showCheck={started && showCenterCheck} />
@@ -307,9 +292,19 @@ export function LivenessScreen({ role = 'homeowner', token, onVerified, onBack, 
               ) : null}
             </View>
 
-            <Text style={[styles.instruction, !started && styles.helperInstruction]}>
-              {instruction}
-            </Text>
+            {captureError ? (
+              <View style={styles.captureErrorCard} accessibilityRole="alert" accessibilityLiveRegion="polite">
+                <Ionicons name="camera-outline" size={21} color="#9A5B18" />
+                <View style={styles.captureErrorCopy}>
+                  <Text style={styles.captureErrorTitle}>{captureError}</Text>
+                  <Text style={styles.captureErrorBody}>Your face check is complete. Keep facing the camera and tap Retry to take the photo again.</Text>
+                </View>
+              </View>
+            ) : (
+              <Text style={[styles.instruction, !started && styles.helperInstruction]}>
+                {instruction}
+              </Text>
+            )}
           </View>
 
           <View>
@@ -322,13 +317,13 @@ export function LivenessScreen({ role = 'homeowner', token, onVerified, onBack, 
                 <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={handleContinue}>
                   <Text style={styles.primaryButtonText}>Continue</Text>
                 </Pressable>
-              ) : state.retryMessage ? (
+              ) : state.retryMessage || captureError ? (
                 <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={handleRetry}>
                   <Text style={styles.primaryButtonText}>Retry</Text>
                 </Pressable>
               ) : (
                 <View style={[styles.primaryButton, { opacity: 0.6 }]}>
-                  <Text style={styles.primaryButtonText}>Scanning...</Text>
+                  <Text style={styles.primaryButtonText}>{state.verified ? 'Capturing…' : 'Scanning…'}</Text>
                 </View>
               )}
             </View>
@@ -340,6 +335,29 @@ export function LivenessScreen({ role = 'homeowner', token, onVerified, onBack, 
 }
 
 const styles = StyleSheet.create({
+  captureErrorCard: {
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: THEME.colors.brandLight,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  captureErrorCopy: { flex: 1 },
+  captureErrorTitle: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: THEME.colors.ink,
+  },
+  captureErrorBody: {
+    marginTop: 4,
+    fontFamily: THEME.typography.fontFamily.body,
+    fontSize: 12,
+    lineHeight: 18,
+    color: THEME.colors.textSecondary,
+  },
   buttonPressed: {
     opacity: 0.78,
   },
@@ -362,12 +380,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     borderRadius: 113,
     overflow: 'hidden',
-  },
-  capturedSelfie: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 113,
-    height: '100%',
-    width: '100%',
   },
   checkCircle: {
     alignItems: 'center',
