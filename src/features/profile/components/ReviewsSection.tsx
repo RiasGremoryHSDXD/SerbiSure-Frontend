@@ -5,28 +5,29 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { profileStyles as styles } from '../styles';
 import type { ProfileController } from '../hooks/useProfile';
+import { ProfileAvatar } from '../../../shared/ui/ProfileAvatar';
 
-export function ReviewsSection({ profile }: { profile: Pick<ProfileController, 't' | 'copy' | 'reviews' | 'isReviewsExpanded' | 'setIsReviewsExpanded' | 'totalReviews'> }) {
+export function ReviewsSection({ profile }: { profile: Pick<ProfileController, 't' | 'copy' | 'reviews' | 'isReviewsExpanded' | 'setIsReviewsExpanded'> }) {
   const {
     t,
     copy,
     reviews,
     isReviewsExpanded,
     setIsReviewsExpanded,
-    totalReviews,
   } = profile;
+  const hasMoreReviews = reviews.length > 3;
+  const visibleReviews = isReviewsExpanded ? reviews : reviews.slice(0, 3);
   return (<>
     <View style={styles.reviewsSection}>
-      <View style={styles.reviewsHeader}>
-        <Text style={styles.reviewsSectionTitle}>{t.recentReviews}</Text>
-        {totalReviews >= 2 ? (
+      {hasMoreReviews ? (
+        <View style={styles.reviewsHeader}>
           <Pressable
             onPress={() => setIsReviewsExpanded((prev) => !prev)}
             hitSlop={15}
             style={({ pressed }) => [styles.viewAllBtnWrap, pressed && { opacity: 0.7 }]}
           >
             <Text style={styles.viewAllPill}>
-              {isReviewsExpanded ? 'Show Less' : `${t.viewAll} (${totalReviews})`}
+              {isReviewsExpanded ? 'Show Less' : t.viewAll}
             </Text>
             <Ionicons
               name={isReviewsExpanded ? 'chevron-up' : 'chevron-down'}
@@ -35,50 +36,54 @@ export function ReviewsSection({ profile }: { profile: Pick<ProfileController, '
               style={{ marginLeft: 3 }}
             />
           </Pressable>
-        ) : null}
-      </View>
+        </View>
+      ) : null}
 
       {reviews.length > 0 ? (
-        <>
-          {(isReviewsExpanded ? reviews : reviews.slice(0, 3)).map((r) => {
-            const badgeBg = r.nlp_sentiment === 'Negative'
-              ? '#FFF1F2'
-              : r.nlp_sentiment === 'Neutral'
-                ? '#F1F5F9'
-                : '#ECFDF5';
-            const badgeColor = r.nlp_sentiment === 'Negative'
+        <View style={styles.reviewsList}>
+          {visibleReviews.map((r, index) => {
+            const reviewerName = r.reviewer_name || copy.reviewer;
+            const sentimentColor = r.nlp_sentiment === 'Negative'
               ? '#BE123C'
               : r.nlp_sentiment === 'Neutral'
-                ? '#475569'
-                : '#065F46';
+                ? '#64748B'
+                : '#059669';
 
             return (
-              <View key={r.review_id} style={styles.reviewCard}>
+              <View
+                key={r.review_id}
+                style={[styles.reviewCard, index < visibleReviews.length - 1 && styles.reviewCardDivider]}
+              >
                 <View style={styles.reviewCardHeader}>
-                  <View style={styles.starsRow}>
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <Ionicons
-                        key={i}
-                        name={i <= (Number(r.rating) || 5) ? 'star' : 'star-outline'}
-                        size={14}
-                        color="#FFB380"
-                        style={{ marginRight: 2 }}
-                      />
-                    ))}
+                  <View style={styles.reviewerIdentity}>
+                    <ProfileAvatar uri={r.reviewer_profile_link} name={reviewerName} size={40} />
+                    <View style={styles.reviewerDetails}>
+                      <Text style={styles.reviewerName} numberOfLines={1}>{reviewerName}</Text>
+                      <View style={styles.reviewerMetaRow}>
+                        <Text style={styles.reviewerDate}>
+                          {r.createdAt
+                            ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                            : 'Verified review'}
+                        </Text>
+                        <View style={styles.sentimentInline}>
+                          <View style={[styles.sentimentDot, { backgroundColor: sentimentColor }]} />
+                          <Text style={[styles.sentimentInlineText, { color: sentimentColor }]}>
+                            {r.nlp_sentiment || 'Positive'}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
                   </View>
-                  <View style={[styles.positiveBadge, { backgroundColor: badgeBg }]}>
-                    <Text style={[styles.positiveBadgeText, { color: badgeColor }]}>{r.nlp_sentiment || 'Positive'}</Text>
+                  <View style={styles.reviewRatingTop}>
+                    <Ionicons name="star" size={16} color="#F2A66F" />
+                    <Text style={styles.reviewRatingValue}>{Number(r.rating || 5).toFixed(1)}</Text>
                   </View>
                 </View>
-                <Text style={styles.reviewText}>"{r.unstructured_feedback}"</Text>
-                <Text style={styles.reviewAuthor}>
-                  — {r.reviewer_name || copy.reviewer}
-                  {r.createdAt ? `, ${new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : ''}
-                </Text>
+                <Text style={styles.reviewText}>{r.unstructured_feedback}</Text>
               </View>
             );
           })}
-        </>
+        </View>
       ) : (
         <View style={styles.emptyReviewsCard}>
           <Ionicons name="chatbubbles-outline" size={32} color="#D1D5DB" />

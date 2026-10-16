@@ -168,6 +168,9 @@ export function AppNavigator({ role = 'homeowner', avatarUri: oldAvatarUri, toke
         </View>
 
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Create a post"
+          accessibilityHint="Open the form to create a new post."
           style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
           onPress={() => setPostJobVisible(true)}
         >
@@ -259,7 +262,7 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: THEME.roundness.pill,
-    backgroundColor: THEME.colors.ink,
+    backgroundColor: THEME.colors.brandDark,
     alignItems: 'center',
     justifyContent: 'center',
   },

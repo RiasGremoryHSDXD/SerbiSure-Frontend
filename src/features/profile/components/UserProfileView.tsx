@@ -243,7 +243,7 @@ export function UserProfileView({
 
           <ProfileTabs activeTab={activeTab} onChange={setActiveTab} postsCount={posts.length} reviewsCount={totalReviews} />
           {activeTab === 'posts' ? <PublicPostsSection key={userId} posts={posts} loading={postsLoading} error={postsError} token={effectiveToken} ownerId={userId} ownerRole={displayRole} onRefresh={refreshPosts} onSubmitted={markSubmitted} /> : (
-            <ReviewsSection profile={{ t, copy: PROFILE_COPY[isWorker ? 'kasambahay' : 'homeowner'], reviews, totalReviews, isReviewsExpanded, setIsReviewsExpanded }} />
+            <ReviewsSection profile={{ t, copy: PROFILE_COPY[isWorker ? 'kasambahay' : 'homeowner'], reviews, isReviewsExpanded, setIsReviewsExpanded }} />
           )}
 
           {/* Open a conversation with this profile. */}
