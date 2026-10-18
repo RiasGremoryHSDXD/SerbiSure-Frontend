@@ -16,9 +16,6 @@ export function PostStep4({ form }: { form: PostFormController }) {
     engagementType,
     setupPreference,
     selectedTime,
-    selectedCity,
-    selectedBarangay,
-    streetAddress,
     offerAmount,
     agreedTerms,
     setAgreedTerms,
@@ -94,10 +91,8 @@ export function PostStep4({ form }: { form: PostFormController }) {
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>{uiText("Location")}</Text>
-            <Text style={[styles.summaryValue, { textAlign: 'right', flex: 1, marginLeft: 20 }]} numberOfLines={2}>
-              {selectedBarangay?.name
-                ? `${selectedBarangay.name}, ${selectedCity?.name || ''}`
-                : streetAddress || 'Cagayan de Oro'}
+            <Text style={[styles.summaryValue, { textAlign: 'right', flex: 1, marginLeft: 20 }]}>
+              {form.getLocationLabel()}
             </Text>
           </View>
         </View>

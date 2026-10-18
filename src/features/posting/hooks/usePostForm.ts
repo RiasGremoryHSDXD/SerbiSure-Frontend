@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Animated, Easing, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { POSTING_CONFIG, engagementRate, buildPostDescription } from '../postingConfig';
+import { POSTING_CONFIG, engagementRate, buildPostDescription, buildPostLocation } from '../postingConfig';
 import { submitPost, type PostingPayload } from '../api/postingApi';
 
 import { useUser } from '../../auth/session/UserContext';
@@ -177,18 +177,22 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
     startDate, endDate, workHours, days: workDays, shift: selectedTime,
   });
 
+  const getLocationLabel = () => buildPostLocation({
+    street: streetAddress,
+    floorUnit,
+    barangay: selectedBarangay?.name,
+    city: selectedCity?.name,
+    zipcode,
+  });
+
   const buildAutoMessage = () => {
     const roleText = getSelectedRoleLabel();
-    const locText = selectedBarangay && selectedCity
-      ? `${selectedBarangay.name}, ${selectedCity.name}`
-      : selectedCity
-        ? selectedCity.name
-        : streetAddress.trim() || 'Cagayan de Oro';
+    const locText = getLocationLabel();
     const setupText = setupPreference === 'stay-in' ? 'stay-in' : 'stay-out';
 
     return buildPostDescription(mode, {
       service: roleText || config.defaultService, location: locText, setup: setupText,
-      time: getTimeLabel(), shortTerm: engagementType === 'short', instructions,
+      time: getTimeLabel(), shortTerm: engagementType === 'short', instructions, rate: offerAmount,
     });
   };
 
@@ -385,6 +389,7 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
     handleClose,
     handleEngagementChange,
     getSelectedRoleLabel,
+    getLocationLabel,
     buildAutoMessage,
     handleNext,
     handleBack,
