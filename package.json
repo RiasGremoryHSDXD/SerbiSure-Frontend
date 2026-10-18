@@ -4,6 +4,8 @@
   "private": true,
   "main": "expo/AppEntry.js",
   "scripts": {
+    "test:profile": "node --test tests/profile-status.test.cjs",
+    "test:session": "node --test tests/remember-session.test.cjs",
     "test:registration": "node --test tests/registration.test.cjs",
     "test:realtime": "node --test tests/chat-realtime.test.cjs tests/chat-session.test.cjs",
     "test:verification": "node --test tests/selfie-upload.test.cjs tests/liveness-flow.test.cjs",
@@ -41,6 +43,7 @@
     "expo-image-picker": "~15.1.0",
     "expo-intent-launcher": "~11.0.1",
     "expo-notifications": "^0.28.19",
+    "expo-secure-store": "~13.0.2",
     "expo-sharing": "~12.0.1",
     "expo-status-bar": "^1.12.1",
     "react": "18.2.0",

@@ -30,6 +30,8 @@ type UserData = {
   religion?: string;
   cancellationStrikes?: number;
   isRestricted?: boolean;
+  isOnJob?: boolean;
+  isUpdatingJobStatus?: boolean;
 };
 
 type UserContextType = {
@@ -100,7 +102,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
 
       if (decoded) {
         const userId = decoded.user_id || decoded.id || decoded.sub || '';
-        setUser({
+        setUser((previous) => ({
           id: userId,
           token: token,
           firstName: decoded.first_name || '',
@@ -125,7 +127,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
           religion: decoded.religion || undefined,
           cancellationStrikes: decoded.cancellation_strikes ?? 0,
           isRestricted: decoded.is_restricted ?? false,
-        });
+          isOnJob: previous.id === userId ? previous.isOnJob : undefined,
+          isUpdatingJobStatus: previous.id === userId ? previous.isUpdatingJobStatus : undefined,
+        }));
 
         // Initialize saved jobs store for this specific user
         savedJobsStore.initForUser(userId, token);

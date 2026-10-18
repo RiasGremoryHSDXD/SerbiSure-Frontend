@@ -12,6 +12,7 @@ modules.set(configPath, {
   API_BASE_URL: 'http://test.local', DEFAULT_TIMEOUT_MS: 15000,
   buildApiUrl: (endpoint) => /^https?:/.test(endpoint) ? endpoint : `http://test.local/${endpoint.replace(/^\/+/, '')}`,
 });
+modules.set(path.join(root, 'src/shared/auth/session.ts'), { getSession: () => null });
 function load(relativePath) {
   const filename = path.resolve(root, relativePath);
   if (modules.has(filename)) return modules.get(filename);

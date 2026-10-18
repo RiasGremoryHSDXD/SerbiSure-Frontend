@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL } from '../../../shared/api/config';
 import { fetchWithTimeout } from '../../../shared/api/httpClient';
 import THEME from '../../../shared/theme/theme';
+import { isSessionTokens, type SessionTokens } from '../../../shared/auth/session';
 
 const logoSource = require('../../../../assets/serbisure_new_clean.png');
 const heroSource = require('../../../../assets/landingpage.png');
@@ -15,7 +16,8 @@ type LandingScreenProps = {
   onGetStarted?: () => void;
   onLoginPress?: () => void;
   onBackToLanding?: () => void;
-  onLoginSuccess?: (token?: string) => void;
+  onLoginSuccess?: (tokens: SessionTokens) => Promise<void>;
+  sessionMessage?: string;
   onSignUp?: () => void;
 };
 
@@ -25,6 +27,7 @@ export function LandingScreen({
   onLoginPress,
   onBackToLanding,
   onLoginSuccess,
+  sessionMessage,
   onSignUp,
 }: LandingScreenProps) {
   const { tr: uiText } = useUiLanguage();
@@ -34,7 +37,6 @@ export function LandingScreen({
   // Login Form States
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -51,7 +53,8 @@ export function LandingScreen({
   const formatDjangoError = (data: any): string => {
     if (!data) return "An unexpected error occurred. Please try again.";
     if (typeof data === 'string') return data;
-    if (data.detail) return String(data.detail);
+    if (typeof data.detail === 'string') return data.detail;
+    if (typeof data.detail?.detail === 'string') return data.detail.detail;
     if (data.message) return String(data.message);
 
     if (typeof data === 'object') {
@@ -106,17 +109,21 @@ export function LandingScreen({
         body: JSON.stringify({ email: identifier, password }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(formatDjangoError(data));
+        throw new Error(response.status >= 500 ? 'Could not sign in. Please try again shortly.' : formatDjangoError(data));
       }
 
+      if (!isSessionTokens(data)) throw new Error('Could not sign in. Please try again.');
       if (onLoginSuccess) {
-        onLoginSuccess(data.access);
+        await onLoginSuccess(data);
       }
     } catch (error: any) {
-      setErrorMsg(error.message || 'Unable to connect to the server.');
+      const message = error?.message || '';
+      setErrorMsg(/network|timed?\s*out|timeout|failed to fetch|could not reach|aborted/i.test(message)
+        ? 'Could not connect. Check your connection and try again.'
+        : message || 'Could not sign in. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -241,10 +248,10 @@ export function LandingScreen({
 
               {/* Form Card */}
               <View style={styles.formCard}>
-                {errorMsg ? (
+                {errorMsg || sessionMessage ? (
                   <View style={styles.errorContainer}>
                     <Ionicons name="alert-circle" size={18} color="#E53935" />
-                    <Text style={styles.errorText}>{errorMsg}</Text>
+                    <Text style={styles.errorText}>{uiText(errorMsg || sessionMessage || '')}</Text>
                   </View>
                 ) : null}
 
@@ -279,18 +286,6 @@ export function LandingScreen({
                       size={18}
                       color="#000000"
                     />
-                  </Pressable>
-                </View>
-
-                {/* Remember Me Row */}
-                <View style={styles.optionsRow}>
-                  <Pressable style={styles.rememberRow} onPress={() => setRememberMe(!rememberMe)}>
-                    <Ionicons
-                      name={rememberMe ? "checkbox-outline" : "square-outline"}
-                      size={18}
-                      color="#000000"
-                    />
-                    <Text style={styles.rememberText}>{uiText("Remember me")}</Text>
                   </Pressable>
                 </View>
 
@@ -498,24 +493,6 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  optionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 20,
-    paddingHorizontal: 4,
-  },
-  rememberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  rememberText: {
-    fontSize: 13,
-    fontFamily: THEME.typography.fontFamily.bodyMedium,
-    color: THEME.colors.textSecondary,
   },
   loginBtn: {
     backgroundColor: THEME.colors.ink,
