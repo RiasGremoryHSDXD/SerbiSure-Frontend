@@ -181,9 +181,13 @@ export default function App() {
         <RegistrationStep1
           role={selectedRole}
           onBack={() => setFlowState('user_selection')}
-          onNext={(token?: string) => {
-            if (token) setAccessToken(token);
-            setFlowState('registration2');
+          onNext={(token, result) => {
+            if (!result.selfiePath) return;
+            const uri = result.selfiePath.startsWith('file:') ? result.selfiePath : `file://${result.selfiePath}`;
+            setAccessToken(token);
+            setAvatarUri(uri);
+            setSelfieUpload(createSelfieUploadTask(() => uploadSelfie(token, uri)));
+            setFlowState('registration3');
           }}
           onCancel={() => setFlowState('landing')}
           onNavigateToLogin={() => setFlowState('login')}

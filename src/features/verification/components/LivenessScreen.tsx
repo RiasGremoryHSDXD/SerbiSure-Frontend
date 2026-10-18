@@ -22,6 +22,9 @@ type LivenessScreenProps = {
   onBack?: () => void;
   onCancel?: () => void;
   onSkip?: () => void;
+  submitting?: boolean;
+  submissionFailed?: boolean;
+  onRetrySubmission?: () => void;
 };
 
 type LivenessRingProps = {
@@ -114,7 +117,7 @@ function getInstruction(state: LivenessState, showTrackerNotice: boolean, countd
   return 'Face forward and stay still';
 }
 
-export function LivenessScreen({ role = 'homeowner', onVerified, onBack }: LivenessScreenProps) {
+export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitting = false, submissionFailed = false, onRetrySubmission }: LivenessScreenProps) {
   const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<FaceCameraHandle | null>(null);
@@ -211,7 +214,8 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack }: Liven
     return Math.max(1, Math.ceil(3 - state.stillnessProgress * 3));
   }, [state.step, state.stillnessProgress, state.verified]);
 
-  const instruction = state.verified ? 'Face check passed. Capturing selfie…' : started
+  const instruction = submitting ? 'Face check passed. Creating your account…' : submissionFailed
+    ? 'Your selfie is ready. Retry or go back to edit your details.' : state.verified ? 'Face check passed. Capturing selfie…' : started
     ? getInstruction(state, showTrackerNotice, countdownValue)
     : 'Make sure your selfie is within the frame and you\'re in a well lit area. Remove anything on your face like a face mask or sunglasses.';
   const ringProgress = started ? getRingProgress(state) : 0;
@@ -242,7 +246,7 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack }: Liven
     <View style={[styles.root, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 14) }]}>
       <View style={styles.header}>
         <View style={styles.headerSide}>
-          <Pressable onPress={onBack}>
+          <Pressable onPress={onBack} disabled={submitting}>
             <Ionicons name="arrow-back" size={26} color="#2A2925" />
           </Pressable>
         </View>
@@ -297,7 +301,15 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack }: Liven
           <View>
             <View style={styles.divider} />
             <View style={styles.buttonRow}>
-              {!started ? (
+              {submitting ? (
+                <View style={[styles.primaryButton, { opacity: 0.6 }]} accessibilityLiveRegion="polite">
+                  <Text style={styles.primaryButtonText}>{uiText('Creating account…')}</Text>
+                </View>
+              ) : submissionFailed ? (
+                <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={onRetrySubmission}>
+                  <Text style={styles.primaryButtonText}>{uiText('Retry')}</Text>
+                </Pressable>
+              ) : !started ? (
                 <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={handleContinue}>
                   <Text style={styles.primaryButtonText}>{uiText("Continue")}</Text>
                 </Pressable>

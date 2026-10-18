@@ -34,7 +34,12 @@ const tick = async () => { await new Promise(resolve => setImmediate(resolve)); 
 function harness(t, extraMocks = {}) {
   const alerts = [];
   const native = { StyleSheet: { create: value => value }, Alert: { alert: (...args) => alerts.push(args) } };
-  for (const type of ['View', 'Text', 'Pressable', 'Image', 'ActivityIndicator']) native[type] = type;
+  for (const type of ['View', 'Text', 'Pressable', 'Image', 'ActivityIndicator', 'TextInput', 'KeyboardAvoidingView', 'ScrollView']) native[type] = type;
+  native.Platform = { OS: 'android', select: values => values.android || values.default };
+  native.ScrollView = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({ scrollTo() {} }));
+    return React.createElement('ScrollView', props);
+  });
   const mocks = {
     'react-native': native,
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
@@ -104,6 +109,103 @@ test('liveness opens documents immediately after capture and stops tracking; no 
   photo.resolve('file:///selfie.jpg'); await tick();
   assert.equal(verified.length, 1);
   assert.equal(verified[0].selfiePath, 'file:///selfie.jpg');
+});
+
+function registrationForm(t, role = 'homeowner') {
+  const requests = [], completed = [], users = [];
+  const h = harness(t, {
+    '../../../shared/localization/LanguageContext': { useLanguage: () => ({ tr: value => value }) },
+    '../session/UserContext': { useUser: () => ({ updateUser: value => users.push(value) }) },
+    '../../../shared/ui/SearchablePickerModal': { SearchablePickerModal: 'LocationPicker' },
+    '../../../shared/ui/DateOfBirthPickerModal': { DateOfBirthPickerModal: 'BirthPicker' },
+    '../../../shared/ui/DemographicPickerModal': { DemographicPickerModal: 'DemographicPicker' },
+    '../../profile/components/PrivacyPolicyModal': { PrivacyPolicyModal: () => null },
+    '../../profile/worker/WorkerCvForm': { WorkerCvForm: 'WorkerForm' },
+    '../components/RegistrationStepper': { RegistrationStepper: () => null },
+    '../components/RegistrationErrorModal': { RegistrationErrorModal: 'RegistrationError' },
+    '../../verification/components/LivenessScreen': { LivenessScreen: 'Liveness' },
+    '../../../shared/services/locationService': {
+      getRegions: async () => [], getProvinces: async () => [], getCities: async () => [], getBarangays: async () => [],
+      getZipCodeForCity: () => '9000',
+    },
+    '../../../shared/api/httpClient': { fetchWithTimeout: (url, options) => {
+      const request = deferred(); requests.push({ ...request, url, options }); return request.promise;
+    } },
+  });
+  const { RegistrationScreen } = h.load('src/features/auth/screens/RegistrationScreen.tsx');
+  h.render(React.createElement(RegistrationScreen, { role, onNext: (...args) => completed.push(args) }));
+  const act = callback => { renderer.flushSync(callback); renderer.flushPassiveEffects(); };
+  const input = (placeholder, value) => act(() => h.nodes().find(node => node.type === 'TextInput' && node.props.placeholder === placeholder).props.onChangeText(value));
+  const node = type => h.nodes().find(node => node.type === type);
+  input('First Name', 'Test'); input('Last Name', 'Resident');
+  input('Email', 'test@example.com'); input('Password (min. 8 characters)', 'password123'); input('Confirm Password', 'password123');
+  // Phone input has a short formatted example as its placeholder.
+  act(() => h.nodes().find(item => item.type === 'TextInput' && item.props.keyboardType === 'phone-pad').props.onChangeText('9123456789'));
+  act(() => node('BirthPicker').props.onSelect('2000-01-01', 26));
+  act(() => h.button('Female').props.onPress());
+  act(() => h.button('Next').props.onPress());
+  if (role === 'kasambahay') {
+    act(() => node('WorkerForm').props.onChange({ ...node('WorkerForm').props.value,
+      service_categories: ['Cleaning'], work_setup: 'stay_out', engagement_preference: 'short_term', desired_daily_rate: '800',
+      experience_level: 'new', civil_status: 'Single', number_of_children: '0', available_from: '2026-11-01', available_days: ['M'], preferred_shifts: ['morning'], languages: ['English'],
+    }));
+    // Visit the four existing CV pages.
+    for (let page = 0; page < 4; page++) act(() => h.button('Next').props.onPress());
+  }
+  for (const [title, value] of [['Select Region', { code: '10', name: 'Northern Mindanao' }], ['Select Province', { code: 'province', name: 'Misamis Oriental' }],
+    ['Select City / Municipality', { code: 'city', name: 'Cagayan de Oro' }], ['Select Barangay', { code: 'barangay', name: 'Agusan' }]]) {
+    act(() => h.nodes().find(item => item.type === 'LocationPicker' && item.props.title === title).props.onSelect(value));
+  }
+  input('House No. / Street / Zone / Subdivision', '123 Street'); input('Zip Code (e.g. 9000)', '9000');
+  act(() => h.nodes().filter(item => item.type === 'Pressable' && item.props.accessibilityRole === 'checkbox').forEach(item => item.props.onPress()));
+  return { ...h, requests, completed, users, act, node, input };
+}
+
+for (const role of ['homeowner', 'kasambahay']) {
+  test(`${role} registration waits for a captured face check and ignores repeated callbacks`, async t => {
+    const h = registrationForm(t, role);
+    assert.equal(h.requests.length, 0);
+    h.act(() => h.button('Continue').props.onPress());
+    assert.ok(h.node('Liveness')); assert.equal(h.requests.length, 0);
+    h.act(() => h.node('Liveness').props.onVerified({ verified: false, selfiePath: '/selfie.jpg' }));
+    h.act(() => h.node('Liveness').props.onVerified({ verified: true }));
+    assert.equal(h.requests.length, 0);
+    const selfie = { verified: true, completedAt: 1000, selfiePath: '/selfie.jpg' };
+    const verified = h.node('Liveness').props.onVerified;
+    h.act(() => { verified(selfie); verified(selfie); });
+    assert.equal(h.requests.length, 1); assert.equal(h.node('Liveness').props.submitting, true);
+    assert.equal(h.node('Liveness').props.onBack, undefined);
+    assert.equal(h.completed.length, 0);
+    h.requests[0].resolve(new Response(JSON.stringify({ access: 'created-token', refresh: 'refresh-token' }), { status: 201 })); await tick();
+    assert.deepEqual(h.completed, [['created-token', selfie]]);
+    h.act(() => verified(selfie)); assert.equal(h.requests.length, 1);
+  });
+}
+
+test('registration retry retains the selfie and request key, while editing preserves form details', async t => {
+  const h = registrationForm(t);
+  h.act(() => h.button('Continue').props.onPress());
+  const selfie = { verified: true, completedAt: 1000, selfiePath: '/selfie.jpg' };
+  h.act(() => h.node('Liveness').props.onVerified(selfie));
+  h.requests[0].reject(new Error('Network request failed')); await tick();
+  assert.equal(h.completed.length, 0); assert.equal(h.users.length, 0);
+  assert.equal(h.node('Liveness').props.submissionFailed, true);
+  assert.ok(h.node('RegistrationError').props.errorData);
+  h.act(() => h.node('RegistrationError').props.onClose());
+  h.act(() => h.node('Liveness').props.onRetrySubmission());
+  assert.equal(h.requests[1].options.headers['Idempotency-Key'], h.requests[0].options.headers['Idempotency-Key']);
+  h.requests[1].resolve(new Response(JSON.stringify({ email: ['Already registered.'] }), { status: 400 })); await tick();
+  assert.equal(h.completed.length, 0);
+  h.act(() => h.node('RegistrationError').props.onGoToStep(1));
+  assert.equal(h.nodes().find(item => item.type === 'TextInput' && item.props.placeholder === 'First Name').props.value, 'Test');
+  h.input('Email', 'corrected@example.com');
+  h.act(() => h.button('Next').props.onPress()); h.act(() => h.button('Continue').props.onPress());
+  assert.equal(h.requests.length, 2);
+  h.act(() => h.node('Liveness').props.onVerified(selfie));
+  assert.notEqual(h.requests[2].options.headers['Idempotency-Key'], h.requests[0].options.headers['Idempotency-Key']);
+  h.unmount();
+  h.requests[2].resolve(new Response(JSON.stringify({ access: 'token', refresh: 'refresh' }), { status: 201 })); await tick();
+  assert.equal(h.completed.length, 0);
 });
 
 test('Skip and Cancel wait for selfie confirmation and cannot bypass a failed save', async t => {
