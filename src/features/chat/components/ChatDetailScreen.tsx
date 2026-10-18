@@ -1436,6 +1436,8 @@ function ChatDetailSession({
                   </View>
                 ) : null;
 
+                // Inverted list cells reverse their direct children. Keep each timestamp
+                // and message inside one View so the timestamp stays above its message.
                 // FB Marketplace Style Listing Closed / Acquired Message
                 if (
                   item.text &&
@@ -1446,7 +1448,7 @@ function ChatDetailSession({
                 ) {
                   const cleanMsg = item.text.replace(/^\[(?:JOB_ACQUIRED|LISTING_?CLOSED)\]:?\s*/i, '');
                   return (
-                    <React.Fragment key={`closed-listing-${item.id}`}>
+                    <View key={`closed-listing-${item.id}`}>
                       {datePillElement}
                       <View style={styles.listingClosedCard}>
                         <View style={styles.listingClosedBadge}>
@@ -1462,7 +1464,7 @@ function ChatDetailSession({
                           <Text style={styles.listingClosedSub}>{cleanMsg}</Text>
                         </View>
                       </View>
-                    </React.Fragment>
+                    </View>
                   );
                 }
 
@@ -1485,7 +1487,7 @@ function ChatDetailSession({
                         : item.bookingInfo.canRespond ? 'Booking offer' : 'Waiting for reply';
 
                   return (
-                    <React.Fragment key={`system-wrap-${item.id}`}>
+                    <View key={`system-wrap-${item.id}`}>
                       {datePillElement}
                       <View
                         style={styles.systemCardContainer}
@@ -1576,7 +1578,7 @@ function ChatDetailSession({
                           </View>
                         ) : null}
                       </View>
-                    </React.Fragment>
+                    </View>
                   );
                 }
 
@@ -1620,7 +1622,7 @@ function ChatDetailSession({
                   }
 
                   return (
-                    <React.Fragment key={`left-frag-${item.id}`}>
+                    <View key={`left-frag-${item.id}`}>
                       {datePillElement}
                       <SwipeableMessageRow
                         key={item.id}
@@ -1725,7 +1727,7 @@ function ChatDetailSession({
                           </View>
                         </View>
                       </SwipeableMessageRow>
-                    </React.Fragment>
+                    </View>
                   );
                 }
 
@@ -1742,7 +1744,7 @@ function ChatDetailSession({
                 }
 
                 return (
-                  <React.Fragment key={`right-frag-${item.id}`}>
+                  <View key={`right-frag-${item.id}`}>
                     {datePillElement}
                     <SwipeableMessageRow
                       key={item.id}
@@ -1828,7 +1830,7 @@ function ChatDetailSession({
                         </View>
                       </View>
                     </SwipeableMessageRow>
-                  </React.Fragment>
+                  </View>
                 );
               }}
             />

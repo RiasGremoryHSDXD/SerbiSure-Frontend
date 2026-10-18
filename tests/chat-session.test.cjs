@@ -115,7 +115,11 @@ function screen(t, options = {}) {
       scrollToIndex(args) { scrolls.push({ type: 'index', ...args }); },
     }), []);
     return React.createElement('FlatList', props, props.ListHeaderComponent,
-      ...props.data.slice(0, props.initialNumToRender).map((item, index) => props.renderItem({ item, index })), props.ListFooterComponent);
+      ...props.data.slice(0, props.initialNumToRender).map((item, index) =>
+        // Native inverted list cells reverse their direct children as well as the item order.
+        React.createElement('View', { key: item.id, testID: `list-cell-${item.id}`,
+          style: { flexDirection: props.inverted ? 'column-reverse' : 'column' } }, props.renderItem({ item, index }))),
+      props.ListFooterComponent);
   });
   const api = {
     fetchChatThreadDetails(token, partnerId) {
@@ -524,6 +528,49 @@ test('a long cached conversation renders only the latest opening batch before ne
   assert.deepEqual(chat.dialogs, []);
   renderer.flushSync(() => chat.entrances[0]()); renderer.flushPassiveEffects();
   assert.equal(chat.requests.length, 1);
+});
+
+test('inverted chat cells display timestamps above incoming, outgoing, photo and system messages', t => {
+  const chat = screen(t, { deferEntrance: true });
+  const today = new Date();
+  const at = (dayOffset, hour, minute) => new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayOffset, hour, minute).toISOString();
+  const history = [
+    { id: 'first', sender: 'other', text: 'Earlier message', createdAtRaw: at(-1, 23, 55) },
+    { id: 'new-day', sender: 'me', text: 'New day message', createdAtRaw: at(0, 0, 1) },
+    { id: 'grouped', sender: 'me', text: 'Same group message', createdAtRaw: at(0, 0, 3) },
+    { id: 'photo', sender: 'other', imageUri: 'https://test.local/photo.jpg', createdAtRaw: at(0, 0, 25) },
+    { id: 'caption', sender: 'me', text: 'Photo caption', imageUri: 'https://test.local/caption.jpg', createdAtRaw: at(0, 0, 50) },
+    { id: 'booking', sender: 'system', bookingInfo: { title: 'BOOKING CONFIRMED', isConfirmed: true, bookedByName: 'Test Worker' }, createdAtRaw: at(0, 1, 15) },
+    { id: 'closed', sender: 'system', text: '[LISTING_CLOSED] Position filled', createdAtRaw: at(0, 1, 40) },
+  ].map(message => ({ ...message, time: message.createdAtRaw }));
+  chat.threadCache.cacheThread(JSON.stringify(['account-one', 'A']), history, chat.threadCache.threadCacheGeneration());
+  chat.update('A');
+
+  // Read top-to-bottom within each native cell, respecting column-reverse layout.
+  const visualTokens = node => {
+    if (node.text !== undefined) return [node.text];
+    if (node.type === 'Image' && node.props.source?.uri?.startsWith('https://test.local/')) return [node.props.source.uri];
+    const children = node.props?.style?.flexDirection === 'column-reverse' ? [...node.children].reverse() : node.children;
+    return children.flatMap(visualTokens);
+  };
+  const expected = [
+    ['first', 'Yesterday 11:55 PM', 'Earlier message'],
+    ['new-day', 'Today 12:01 AM', 'New day message'],
+    ['photo', 'Today 12:25 AM', 'https://test.local/photo.jpg'],
+    ['caption', 'Today 12:50 AM', 'https://test.local/caption.jpg'],
+    ['booking', 'Today 1:15 AM', 'Test Worker'],
+    ['closed', 'Today 1:40 AM', 'Job Position Acquired'],
+  ];
+  for (const [id, timestamp, content] of expected) {
+    const cell = chat.nodes().find(node => node.props?.testID === `list-cell-${id}`);
+    const tokens = visualTokens(cell);
+    assert.equal(tokens[0], timestamp, `${id}: timestamp must precede the message`);
+    assert.ok(tokens.indexOf(content) > 0, `${id}: content follows the timestamp`);
+  }
+  const groupedCell = chat.nodes().find(node => node.props?.testID === 'list-cell-grouped');
+  assert.deepEqual(visualTokens(groupedCell), ['Same group message']);
+  const list = chat.nodes().find(node => node.type === 'FlatList');
+  assert.deepEqual(list.props.data.map(message => message.id), history.map(message => message.id).reverse());
 });
 
 test('closing or switching contacts during entrance cancels the previous opening work', t => {
