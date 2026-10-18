@@ -1,6 +1,6 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Canvas, Circle, Path, Skia } from '@shopify/react-native-skia';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -238,21 +238,6 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack }: Liven
     setCaptureAttempt(value => value + 1);
   }, []);
 
-  const handleCancel = useCallback(() => {
-    Alert.alert(
-      'Biometric Verification Required',
-      'Camera face verification is mandatory to establish your verified profile and ensure community safety under RA 10361. This step cannot be skipped.',
-      [
-        { text: 'Continue Scanning', style: 'default' },
-        {
-          text: 'Back to Account Step',
-          style: 'destructive',
-          onPress: () => onBack?.(),
-        },
-      ]
-    );
-  }, [onBack]);
-
   return (
     <View style={[styles.root, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 14) }]}>
       <View style={styles.header}>
@@ -312,9 +297,6 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack }: Liven
           <View>
             <View style={styles.divider} />
             <View style={styles.buttonRow}>
-              <Pressable style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]} onPress={handleCancel}>
-                <Text style={styles.secondaryButtonText}>{uiText("Cancel")}</Text>
-              </Pressable>
               {!started ? (
                 <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={handleContinue}>
                   <Text style={styles.primaryButtonText}>{uiText("Continue")}</Text>
@@ -473,19 +455,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: THEME.typography.fontFamily.display,
     letterSpacing: THEME.typography.tracking.tight,
-  },
-  secondaryButton: {
-    flex: 1,
-    alignItems: 'center',
-    backgroundColor: THEME.colors.canvas,
-    borderRadius: THEME.roundness.pill,
-    height: 48,
-    justifyContent: 'center',
-  },
-  secondaryButtonText: {
-    color: THEME.colors.ink,
-    fontSize: 14,
-    fontFamily: THEME.typography.fontFamily.display,
   },
   instruction: {
     color: THEME.colors.ink,
