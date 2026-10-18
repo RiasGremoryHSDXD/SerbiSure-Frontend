@@ -15,7 +15,6 @@ import {
 
 import {
   LandingScreen,
-  LoginScreen,
   UserSelectionScreen,
   RegistrationStep1,
   RegistrationStep2,

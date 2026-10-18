@@ -282,7 +282,7 @@ export function LandingScreen({
                   </Pressable>
                 </View>
 
-                {/* Remember Me + Forgot Password Row */}
+                {/* Remember Me Row */}
                 <View style={styles.optionsRow}>
                   <Pressable style={styles.rememberRow} onPress={() => setRememberMe(!rememberMe)}>
                     <Ionicons
@@ -291,10 +291,6 @@ export function LandingScreen({
                       color="#000000"
                     />
                     <Text style={styles.rememberText}>{uiText("Remember me")}</Text>
-                  </Pressable>
-
-                  <Pressable style={styles.forgotBtn}>
-                    <Text style={styles.forgotText}>{uiText("Forgot Password?")}</Text>
                   </Pressable>
                 </View>
 
@@ -520,14 +516,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: THEME.typography.fontFamily.bodyMedium,
     color: THEME.colors.textSecondary,
-  },
-  forgotBtn: {
-    paddingVertical: 2,
-  },
-  forgotText: {
-    fontSize: 13,
-    fontFamily: THEME.typography.fontFamily.bodyBold,
-    color: THEME.colors.brandDark,
   },
   loginBtn: {
     backgroundColor: THEME.colors.ink,
