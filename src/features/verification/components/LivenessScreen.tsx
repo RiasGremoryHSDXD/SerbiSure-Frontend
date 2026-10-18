@@ -4,6 +4,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Canvas, Circle, Path, Skia } from '@shopify/react-native-skia';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as FileSystem from 'expo-file-system';
 
 import { FaceCamera, type FaceCameraHandle } from '../camera/FaceCamera';
 import type { LandmarkFrame } from '../face/types';
@@ -14,6 +15,11 @@ import { RegistrationStepper } from '../../auth/components/RegistrationStepper';
 
 const logoSource = require('../../../../assets/serbisure_new_clean.png');
 const faceSource = require('../../../../assets/face-placeholder.png');
+
+function discardSelfie(path: string) {
+  const uri = path.startsWith('file://') ? path : `file://${path}`;
+  void FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+}
 
 type LivenessScreenProps = {
   role?: 'homeowner' | 'kasambahay';
@@ -86,10 +92,10 @@ function getRingProgress(state: LivenessState) {
     return 0.25;
   }
 
-  return state.completedSteps.includes('face') ? 0.25 : 0;
+  return 0;
 }
 
-function getInstruction(state: LivenessState, showTrackerNotice: boolean, countdownValue: number | null) {
+function getInstruction(state: LivenessState, showTrackerNotice: boolean) {
   if (state.verified) {
     return 'Verification Complete!';
   }
@@ -98,23 +104,13 @@ function getInstruction(state: LivenessState, showTrackerNotice: boolean, countd
     return 'Position your face\ninside the frame';
   }
 
+  if (state.retryMessage) return state.retryMessage;
+
   if (state.step === 'face') {
     return 'Position your face\ninside the frame';
   }
 
-  if (state.step === 'turnLeft') {
-    return 'Look Left';
-  }
-
-  if (state.step === 'turnRight') {
-    return 'Look Right';
-  }
-
-  if (state.step === 'still' && countdownValue !== null) {
-    return countdownValue > 0 ? `Face forward and stay still` : 'Face forward and stay still';
-  }
-
-  return 'Face forward and stay still';
+  return state.instruction;
 }
 
 export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitting = false, submissionFailed = false, onRetrySubmission }: LivenessScreenProps) {
@@ -132,12 +128,23 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
   verifiedCallback.current = onVerified;
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [captureAttempt, setCaptureAttempt] = useState(0);
+  const [selfie, setSelfie] = useState<LivenessResult | null>(null);
+  const pendingSelfie = useRef<LivenessResult | null>(null);
+  const [photoReady, setPhotoReady] = useState(false);
+  const [previewError, setPreviewError] = useState(false);
+  const [photoAccepted, setPhotoAccepted] = useState(false);
   const [showTrackerNotice, setShowTrackerNotice] = useState(false);
   const [showCenterCheck, setShowCenterCheck] = useState(false);
 
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
+    return () => {
+      mounted.current = false;
+      if (pendingSelfie.current) {
+        discardSelfie(pendingSelfie.current.selfiePath);
+        pendingSelfie.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -155,11 +162,11 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
   }, [started]);
 
   useEffect(() => {
-    if (!state.completedSteps.length) return;
+    if (!state.completedSteps.length || state.step === 'still') { setShowCenterCheck(false); return; }
     setShowCenterCheck(true);
     const timer = setTimeout(() => setShowCenterCheck(false), 650);
     return () => clearTimeout(timer);
-  }, [state.completedSteps.length]);
+  }, [state.completedSteps.length, state.step]);
 
   const handleLandmarks = useCallback((frame: LandmarkFrame) => {
     if (captureStartedRef.current || !mounted.current) return;
@@ -191,13 +198,17 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
       try {
         const selfiePath = await cameraRef.current?.captureSelfie();
         if (!selfiePath) throw new Error('The camera could not capture your selfie. Please retry.');
-        if (!mounted.current) return;
+        if (!mounted.current) { discardSelfie(selfiePath); return; }
         console.info('[Liveness timing]', {
-          stage: 'documents_ready', captureMs: Date.now() - captureStartedAt,
+          stage: 'selfie_review', captureMs: Date.now() - captureStartedAt,
           durationMs: Date.now() - startedAt.current,
         });
-        // Registration owns the upload; document selection starts immediately.
-        verifiedCallback.current?.({ verified: true, completedAt: Date.now(), selfiePath });
+        const captured: LivenessResult = { verified: true, completedAt: Date.now(), selfiePath };
+        pendingSelfie.current = captured;
+        setPhotoReady(false);
+        setPreviewError(false);
+        setSelfie(captured);
+        setShowCenterCheck(false);
       } catch (error) {
         const code = error && typeof error === 'object' && 'code' in error ? error.code : 'capture-failed';
         console.warn('[Liveness] Selfie capture failed', { code });
@@ -206,22 +217,22 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
     })();
   }, [started, state.verified, captureAttempt]);
 
-  const countdownValue = useMemo(() => {
-    if (state.step !== 'still' || state.verified) {
-      return null;
-    }
-
-    return Math.max(1, Math.ceil(3 - state.stillnessProgress * 3));
-  }, [state.step, state.stillnessProgress, state.verified]);
-
   const instruction = submitting ? 'Face check passed. Creating your account…' : submissionFailed
-    ? 'Your selfie is ready. Retry or go back to edit your details.' : state.verified ? 'Face check passed. Capturing selfie…' : started
-    ? getInstruction(state, showTrackerNotice, countdownValue)
+    ? 'Your selfie is ready. Retry or go back to edit your details.' : selfie
+    ? previewError ? 'We couldn’t display your selfie. Retake the photo.' : 'Is your face clear and well-lit? Make sure your face is visible and not blurry.'
+    : state.verified ? 'Face check passed. Capturing selfie…' : started
+    ? getInstruction(state, showTrackerNotice)
     : 'Make sure your selfie is within the frame and you\'re in a well lit area. Remove anything on your face like a face mask or sunglasses.';
   const ringProgress = started ? getRingProgress(state) : 0;
   const showFaceIcon = !started;
 
   const handleContinue = useCallback(() => {
+    if (pendingSelfie.current) discardSelfie(pendingSelfie.current.selfiePath);
+    pendingSelfie.current = null;
+    setSelfie(null);
+    setPhotoReady(false);
+    setPreviewError(false);
+    setPhotoAccepted(false);
     setStarted(true);
     startedAt.current = Date.now();
     stateRef.current = initialLivenessState;
@@ -232,6 +243,21 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
     setCaptureError(null);
     captureStartedRef.current = false;
   }, []);
+
+  const handleUsePhoto = () => {
+    const captured = pendingSelfie.current;
+    if (!captured || !photoReady || previewError || submitting || photoAccepted) return;
+    // Transfer ownership before registration navigates away: its background
+    // upload still needs this file. Repeated taps cannot submit it twice.
+    pendingSelfie.current = null;
+    setPhotoAccepted(true);
+    verifiedCallback.current?.(captured);
+  };
+
+  const handleRetakePhoto = () => {
+    if (!pendingSelfie.current || submitting || photoAccepted) return;
+    handleContinue();
+  };
 
   const handleRetry = useCallback(() => {
     stateRef.current = retryCurrentStep(stateRef.current);
@@ -270,17 +296,24 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
         <View style={styles.cardContent}>
           <View>
             <View style={styles.verificationFrame}>
-              {started ? (
+              {selfie ? (
+                <View style={styles.cameraCircle}>
+                  <Image
+                    source={{ uri: selfie.selfiePath }}
+                    style={styles.previewImage}
+                    resizeMode="cover"
+                    fadeDuration={0}
+                    accessibilityLabel={uiText('Your captured selfie')}
+                    onLoad={() => setPhotoReady(true)}
+                    onError={() => { setPreviewError(true); setPhotoReady(false); }}
+                  />
+                </View>
+              ) : started ? (
                 <View style={styles.cameraCircle}>
                   <FaceCamera ref={cameraRef} onLandmarks={handleLandmarks} detecting={!state.verified} />
                 </View>
               ) : null}
-              <LivenessRing progress={ringProgress} showFaceIcon={showFaceIcon} showCheck={started && showCenterCheck} />
-              {started && countdownValue !== null ? (
-                <View style={styles.countdownBadge}>
-                  <Text style={styles.countdownText}>{countdownValue}</Text>
-                </View>
-              ) : null}
+              <LivenessRing progress={ringProgress} showFaceIcon={showFaceIcon} showCheck={!selfie && started && showCenterCheck} />
             </View>
 
             {captureError ? (
@@ -309,6 +342,23 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
                 <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={onRetrySubmission}>
                   <Text style={styles.primaryButtonText}>{uiText('Retry')}</Text>
                 </Pressable>
+              ) : selfie ? (
+                <>
+                  <Pressable
+                    style={({ pressed }) => [styles.primaryButton, styles.retakeButton, pressed && styles.buttonPressed, photoAccepted && { opacity: 0.6 }]}
+                    disabled={photoAccepted}
+                    onPress={handleRetakePhoto}
+                  >
+                    <Text style={[styles.primaryButtonText, styles.reviewButtonText, styles.retakeButtonText]}>{uiText('Retake Photo')}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, (!photoReady || previewError || photoAccepted) && { opacity: 0.6 }]}
+                    disabled={!photoReady || previewError || photoAccepted}
+                    onPress={handleUsePhoto}
+                  >
+                    <Text style={[styles.primaryButtonText, styles.reviewButtonText]}>{uiText('Use This Photo')}</Text>
+                  </Pressable>
+                </>
               ) : !started ? (
                 <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={handleContinue}>
                   <Text style={styles.primaryButtonText}>{uiText("Continue")}</Text>
@@ -377,6 +427,10 @@ const styles = StyleSheet.create({
     borderRadius: 113,
     overflow: 'hidden',
   },
+  previewImage: { width: '100%', height: '100%' },
+  retakeButton: { backgroundColor: THEME.colors.canvas },
+  retakeButtonText: { color: THEME.colors.ink },
+  reviewButtonText: { fontSize: 13, textAlign: 'center', paddingHorizontal: 6 },
   checkCircle: {
     alignItems: 'center',
     backgroundColor: '#14A11C',
@@ -405,22 +459,6 @@ const styles = StyleSheet.create({
     top: 22,
     transform: [{ rotate: '-45deg' }],
     width: 5,
-  },
-  countdownText: {
-    color: '#FFFFFF',
-    fontSize: 46,
-    fontWeight: '900',
-    lineHeight: 52,
-    textAlign: 'center',
-  },
-  countdownBadge: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.44)',
-    borderRadius: 44,
-    height: 88,
-    justifyContent: 'center',
-    position: 'absolute',
-    width: 88,
   },
   faceIcon: {
     height: 128,
