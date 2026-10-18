@@ -130,7 +130,7 @@ export async function fetchChatThreadDetails(token: string, partnerId: string): 
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Failed to load messages (${res.status})`);
+    throw new ApiError(errorData.detail || 'Could not load messages. Please retry.', res.status, errorData);
   }
 
   const json = await res.json();
@@ -146,6 +146,8 @@ export async function fetchChatThreadDetails(token: string, partnerId: string): 
   } else if (Array.isArray(json?.results)) {
     messages = json.results;
     partnerIsTyping = Boolean(json.partner_is_typing);
+  } else {
+    throw new Error('Could not load messages. Please retry.');
   }
 
   if (!partnerIsTyping && res.headers.get('x-partner-is-typing') === 'true') {

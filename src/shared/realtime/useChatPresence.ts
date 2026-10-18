@@ -1,41 +1,32 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { realtime } from './index';
 
 /** Presence belongs to this signed-in account and expires if the connection goes stale. */
 export function useChatPresence(account: string | null, partnerIds: string[]) {
   const key = JSON.stringify([...new Set(partnerIds)].slice(0, 100).sort());
-  const [snapshot, setSnapshot] = useState<{
-    account: string | null;
-    statuses: Record<string, { online: boolean; expires: number }>;
-  }>({ account: null, statuses: {} });
-  const [now, setNow] = useState(Date.now());
+  const ids: string[] = useMemo(() => JSON.parse(key), [key]);
+  const [, render] = useState(0);
+  const snapshot = useRef('');
 
   useEffect(() => {
-    setSnapshot({ account, statuses: {} });
     if (!account) return;
-    const ids: string[] = JSON.parse(key);
     if (!ids.length) return;
+    const update = () => {
+      const next = JSON.stringify(ids.map(id => realtime.getPresence(account, id) ?? null));
+      if (next !== snapshot.current) { snapshot.current = next; render(value => value + 1); }
+    };
     const offEvent = realtime.subscribe(event => {
       if (event.type !== 'presence.changed' || !event.partner_id || !ids.includes(event.partner_id)) return;
-      const id = event.partner_id;
-      setSnapshot(previous => {
-        const statuses = { ...(previous.account === account ? previous.statuses : {}) };
-        if (typeof event.is_online !== 'boolean') delete statuses[id];
-        else statuses[id] = { online: event.is_online, expires: Date.now() + 65000 };
-        return { account, statuses };
-      });
-      setNow(Date.now());
+      update();
     });
-    const offStatus = realtime.subscribeStatus(status => {
-      if (status !== 'connected') setSnapshot({ account, statuses: {} });
-    });
+    const offStatus = realtime.subscribeStatus(update);
     const unwatch = realtime.watchPresence(ids);
-    const timer = setInterval(() => setNow(Date.now()), 1000);
+    update();
+    const timer = setInterval(update, 1000);
     return () => { offEvent(); offStatus(); unwatch(); clearInterval(timer); };
-  }, [account, key]);
+  }, [account, ids]);
 
   return (partnerId?: string): boolean | undefined => {
-    const value = partnerId && snapshot.account === account ? snapshot.statuses[partnerId] : undefined;
-    return value && value.expires > now ? value.online : undefined;
+    return partnerId && ids.includes(partnerId) ? realtime.getPresence(account, partnerId) : undefined;
   };
 }

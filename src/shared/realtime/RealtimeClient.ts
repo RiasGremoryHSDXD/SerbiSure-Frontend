@@ -27,9 +27,25 @@ export class RealtimeClient {
   private events = new Set<(event: RealtimeEvent) => void>();
   private statuses = new Set<(status: RealtimeStatus) => void>();
   private presenceWatches = new Map<symbol, string[]>();
+  private account: string | null = null;
+  private presence = new Map<string, { online: boolean; expires: number }>();
+  private presenceRevision = 0;
   constructor(private baseUrl: string, private factory: (url: string) => SocketLike = url => new WebSocket(url)) {}
   subscribe(listener: (event: RealtimeEvent) => void) { this.events.add(listener); return () => { this.events.delete(listener); }; }
   subscribeStatus(listener: (status: RealtimeStatus) => void) { this.statuses.add(listener); return () => { this.statuses.delete(listener); }; }
+  getPresence(account: string | null, partnerId: string): boolean | undefined {
+    if (!account || account !== this.account || !this.active) return undefined;
+    const value = this.presence.get(partnerId);
+    return value && value.expires > Date.now() ? value.online : undefined;
+  }
+  getPresenceRevision(): number { return this.presenceRevision; }
+  recordPresence(account: string | null, partnerId: string, online: unknown, expectedRevision = this.presenceRevision): void {
+    if (!account || account !== this.account || !this.active || !partnerId || expectedRevision !== this.presenceRevision) return;
+    this.presenceRevision++;
+    if (typeof online === 'boolean') this.presence.set(partnerId, { online, expires: Date.now() + 65000 });
+    else this.presence.delete(partnerId);
+    this.events.forEach(listener => listener({ type: 'presence.changed', partner_id: partnerId, is_online: typeof online === 'boolean' ? online : null }));
+  }
   watchPresence(partnerIds: string[]) {
     const key = Symbol();
     this.presenceWatches.set(key, partnerIds);
@@ -41,13 +57,16 @@ export class RealtimeClient {
     const partner_ids = [...new Set([...this.presenceWatches.values()].flat())].slice(-100);
     try { this.socket.send(JSON.stringify({ type: 'presence.watch', partner_ids })); } catch { /* Heartbeat reconnects. */ }
   }
-  private setStatus(status: RealtimeStatus) { this.status = status; this.statuses.forEach(listener => listener(status)); }
-  start(token: string | null) {
-    if (token === this.token && this.socket) return;
-    this.dispose(); this.token = token; this.attempt = 0;
+  private setStatus(status: RealtimeStatus) {
+    if (status !== 'connected') { this.presence.clear(); this.presenceRevision++; }
+    this.status = status; this.statuses.forEach(listener => listener(status));
+  }
+  start(token: string | null, account: string | null = token) {
+    if (token === this.token && account === this.account && this.socket) return;
+    this.dispose(); this.token = token; this.account = account; this.attempt = 0;
     if (token && this.active) this.connect(); else this.setStatus('idle');
   }
-  stop() { this.dispose(); this.token = null; this.setStatus('idle'); }
+  stop() { this.dispose(); this.token = null; this.account = null; this.setStatus('idle'); }
   setActive(active: boolean) {
     if (active === this.active) return;
     this.active = active; this.dispose();
@@ -94,7 +113,8 @@ export class RealtimeClient {
           try { socket.send(JSON.stringify({ type: 'ping' })); } catch { reconnect(); }
         }, 25000);
       } else if (this.status === 'connected' && ['chat.changed', 'chat.typing', 'presence.changed', 'booking.changed', 'notifications.changed', 'moderation.changed'].includes(data.type)) {
-        this.events.forEach(listener => listener(data as RealtimeEvent));
+        if (data.type === 'presence.changed' && typeof data.partner_id === 'string') this.recordPresence(this.account, data.partner_id, data.is_online);
+        else this.events.forEach(listener => listener(data as RealtimeEvent));
       }
     };
     socket.onclose = event => {

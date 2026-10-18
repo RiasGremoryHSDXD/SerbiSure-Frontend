@@ -130,6 +130,15 @@ test('chat presence requires an explicit boolean or recognized header; missing a
   }
 });
 
+test('malformed thread responses stay errors and permission failures retain their HTTP status', async () => {
+  await withFetch(async () => response({ unexpected: [] }), async () => {
+    await assert.rejects(chatApi.fetchChatThreadDetails('token', 'partner'), /Could not load messages/);
+  });
+  await withFetch(async () => response({ detail: 'Not allowed' }, 403), async () => {
+    await assert.rejects(chatApi.fetchChatThreadDetails('token', 'partner'), error => error.status === 403);
+  });
+});
+
 test('account roles select the correct posting mode and verification documents', () => {
   assert.equal(roles.resolveRole('Kasambahay'), 'kasambahay');
   assert.equal(roles.resolveRole('Homeowner'), 'homeowner');

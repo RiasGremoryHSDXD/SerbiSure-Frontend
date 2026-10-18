@@ -24,6 +24,7 @@ import {
 import { clearExploreFeedCache } from './src/features/feed/feedCache';
 import { chatStore } from './src/features/chat/store/chatStore';
 import { clearSupportContactsCache } from './src/features/chat/supportContactsCache';
+import { clearThreadCache } from './src/features/chat/threadCache';
 import { AppNavigator, type Role } from './src/app/AppNavigator';
 import { preloadPostLoginAssets } from './src/app/services/preloadAssets';
 import { realtime } from './src/shared/realtime';
@@ -70,6 +71,7 @@ export default function App() {
     clearExploreFeedCache();
     chatStore.clearCache();
     clearSupportContactsCache();
+    clearThreadCache();
     setAccessToken(null);
     setAvatarUri(null);
     setSelfieUpload(undefined);

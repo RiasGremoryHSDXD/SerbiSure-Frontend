@@ -22,10 +22,10 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       if (state === 'active') sync();
     });
     realtime.setActive(AppState.currentState === 'active');
-    realtime.start(token);
+    realtime.start(token, user.id || token);
     sync();
     const timer = setInterval(() => { if (realtime.status !== 'connected') sync(); }, 30000);
     return () => { off(); offStatus(); appState.remove(); clearInterval(timer); realtime.stop(); chatStore.clearCache(); };
-  }, [user.token]);
+  }, [user.token, user.id]);
   return <>{children}</>;
 }
