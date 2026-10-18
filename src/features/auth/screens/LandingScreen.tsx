@@ -215,7 +215,7 @@ export function LandingScreen({
 
               <View style={styles.loginContainer}>
                 <Text style={styles.loginText}>{uiText("Already have an account?")}</Text>
-                <Pressable onPress={onLoginPress}>
+                <Pressable onPress={onLoginPress} style={styles.authLinkPressable}>
                   <Text style={styles.loginLink}>{uiText("Log in")}</Text>
                 </Pressable>
               </View>
@@ -314,7 +314,7 @@ export function LandingScreen({
                 {/* Sign Up Link */}
                 <View style={styles.signupRow}>
                   <Text style={styles.signupText}>{uiText("Don't have an account?")}</Text>
-                  <Pressable onPress={onSignUp}>
+                  <Pressable onPress={onSignUp} style={styles.authLinkPressable}>
                     <Text style={styles.signupLink}>{uiText("Sign up")}</Text>
                   </Pressable>
                 </View>
@@ -437,6 +437,9 @@ const styles = StyleSheet.create({
     color: THEME.colors.brandDark,
     fontSize: 13,
     fontFamily: THEME.typography.fontFamily.bodyBold,
+  },
+  authLinkPressable: {
+    marginLeft: 4,
   },
   loginViewWrapper: {
     flex: 1,
