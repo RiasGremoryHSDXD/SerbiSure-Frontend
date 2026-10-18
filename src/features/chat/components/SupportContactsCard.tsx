@@ -1,49 +1,58 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { fetchSupportContacts, SupportContact, SupportContacts } from '../api/chatApi';
+import type { SupportContact, SupportContacts } from '../api/chatApi';
+import { getCachedSupportContacts, loadSupportContacts } from '../supportContactsCache';
 import THEME from '../../../shared/theme/theme';
 
-export function SupportContactsCard({ token, profileKey, refreshKey, onContact }: {
+export function SupportContactsCard({ accountId, token, profileKey, refreshKey, onContact }: {
+  accountId: string;
   token?: string | null;
   profileKey: string;
   refreshKey: number;
   onContact: (contact: SupportContact) => void;
 }) {
   const { tr: uiText } = useUiLanguage();
-  const [data, setData] = useState<SupportContacts | null>(null);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
+  const cacheKey = JSON.stringify([accountId, profileKey]);
+  const [state, setState] = useState<{ key: string; data: SupportContacts | null; error: string; loading: boolean }>(() => {
+    const data = token && accountId ? getCachedSupportContacts(cacheKey) : null;
+    return { key: cacheKey, data, error: '', loading: !!token && !!accountId && !data };
+  });
   const [retry, setRetry] = useState(0);
+  const previous = useRef({ cacheKey, refreshKey, retry });
+  const { data, error, loading } = state.key === cacheKey && token && accountId ? state
+    : { data: null, error: '', loading: !!token && !!accountId };
 
   useEffect(() => {
     let active = true;
     let version = 0;
-    setData(null);
-    const load = async () => {
+    const forceRefresh = previous.current.cacheKey === cacheKey &&
+      (previous.current.refreshKey !== refreshKey || previous.current.retry !== retry);
+    previous.current = { cacheKey, refreshKey, retry };
+    const load = async (force = false) => {
       const requestVersion = ++version;
-      setLoading(true);
-      setError('');
-      if (!token) { setLoading(false); return; }
+      const saved = token && accountId ? getCachedSupportContacts(cacheKey) : null;
+      setState({ key: cacheKey, data: saved, error: '', loading: !!token && !!accountId && !saved });
+      if (!token || !accountId) return;
       try {
-        const contacts = await fetchSupportContacts(token);
-        if (active && requestVersion === version) setData(contacts);
+        const contacts = await loadSupportContacts(cacheKey, token, force);
+        if (active && requestVersion === version) setState({ key: cacheKey, data: contacts, error: '', loading: false });
       } catch {
         if (active && requestVersion === version) {
-          setData(null);
-          setError('Could not load contacts.');
+          setState({ key: cacheKey, data: saved, loading: false,
+            error: saved ? 'Could not refresh contacts.' : 'Could not load contacts.' });
         }
-      } finally {
-        if (active && requestVersion === version) setLoading(false);
       }
     };
-    void load();
+    void load(forceRefresh);
+    let appState = AppState.currentState;
     const subscription = AppState.addEventListener('change', state => {
-      if (state === 'active') void load();
+      if (state === 'active' && appState !== 'active') void load();
+      appState = state;
     });
     return () => { active = false; subscription.remove(); };
-  }, [token, profileKey, refreshKey, retry]);
+  }, [token, accountId, cacheKey, refreshKey, retry]);
 
   const contactButton = (contact: SupportContact, local: boolean) => (
     <Pressable key={contact.id} accessibilityRole="button"
@@ -65,7 +74,7 @@ export function SupportContactsCard({ token, profileKey, refreshKey, onContact }
       <Text style={styles.title}>{uiText("Need help?")}</Text>
       {loading && <View style={styles.loading}><ActivityIndicator color="#A44913" /><Text style={styles.description}>{uiText("Loading contacts…")}</Text></View>}
       {!loading && error ? <View accessibilityLiveRegion="polite">
-        <Text style={styles.notice}>{error}</Text>
+        <Text style={styles.notice}>{uiText(error)}</Text>
         <Pressable accessibilityRole="button" onPress={() => setRetry(value => value + 1)} style={styles.retry}>
           <Text style={styles.label}>{uiText("Try again")}</Text>
         </Pressable>

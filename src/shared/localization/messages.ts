@@ -126,6 +126,7 @@ export const UI_MESSAGES = {
   'Need help?': ['Kailangan ng tulong?', 'Kinahanglan og tabang?'],
   'Loading contacts…': ['Kinukuha ang mga contact…', 'Gikarga ang mga kontak…'],
   'Could not load contacts.': ['Hindi makuha ang mga contact.', 'Dili makarga ang mga kontak.'],
+  'Could not refresh contacts.': ['Hindi ma-refresh ang mga contact.', 'Dili ma-refresh ang mga kontak.'],
   'SerbiSure Support': ['Tulong ng SerbiSure', 'Tabang sa SerbiSure'],
   'Support is unavailable. Try again later.': ['Hindi available ang tulong. Subukan muli mamaya.', 'Dili magamit ang tabang. Sulayi pag-usab unya.'],
   'Not available yet. Message support.': ['Hindi pa available. Mag-message sa support.', 'Wala pa magamit. Pag-message sa support.'],
