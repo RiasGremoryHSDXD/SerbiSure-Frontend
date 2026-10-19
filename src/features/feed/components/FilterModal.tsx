@@ -511,7 +511,7 @@ export function FilterModal({
 
               <Pressable style={styles.applyButton} onPress={handleApply}>
                 <Text style={styles.applyButtonText}>
-                  {uiText("Apply Filters")}{activeFilterCount > 0 ? `(${activeFilterCount})` : ''}
+                  {uiText("Apply Filters")}{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
                 </Text>
               </Pressable>
             </View>

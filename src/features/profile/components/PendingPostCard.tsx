@@ -25,7 +25,7 @@ export function PendingPostCard({ post, note, children }: Readonly<{ post: Booki
       <Text style={styles.pendingPostRate}>₱{Number(post.rate_amount || 0).toLocaleString()}</Text>
       <Text style={styles.pendingPostRateUnit}> {post.rate_needs_review ? '(unit needs confirmation)' : '/ ' + post.rate_period} · {post.booking_type === 'long_term' ? uiText("Long-term") : uiText("Short-term")}</Text>
     </View>
-    <Text style={styles.pendingPostDetailText}>{uiText("Work setup:")}{workSetupLabel(post.work_setup)}</Text>
+    <Text style={styles.pendingPostDetailText}>{uiText("Work setup:")} {workSetupLabel(post.work_setup)}</Text>
     <View style={styles.pendingPostDetails}>
       <View style={styles.pendingPostDetailItem}><Ionicons name="location-outline" size={13} color="#6B7280" style={{ marginRight: 4 }} /><Text style={styles.pendingPostDetailText} numberOfLines={2}>{formatBookingAddress(post)}</Text></View>
       <View style={styles.pendingPostDetailItem}><Ionicons name="calendar-outline" size={13} color="#6B7280" style={{ marginRight: 4 }} /><Text style={styles.pendingPostDetailText}>{uiText("Starts:")} {safeStartDate}</Text></View>

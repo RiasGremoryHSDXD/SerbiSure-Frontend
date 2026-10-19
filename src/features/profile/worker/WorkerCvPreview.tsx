@@ -36,7 +36,7 @@ export function WorkerCvPreview({ cv }: { cv: WorkerCv }) {
     <View style={styles.trust}>
       {model.trust.map(item => <Text style={styles.trustLine} key={item}>{item}</Text>)}
       <Text style={styles.notice}>{model.notice}</Text>
-      <Text style={styles.notice}>{uiText("Based on your latest saved profile ·")}{model.generated_date}</Text>
+      <Text style={styles.notice}>{uiText("Based on your latest saved profile ·")} {model.generated_date}</Text>
     </View>
   </>;
 }

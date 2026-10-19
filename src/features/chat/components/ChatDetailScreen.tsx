@@ -1880,7 +1880,7 @@ function ChatDetailSession({
                   <View style={styles.replyBannerHeaderLeft}>
                     <Ionicons name="arrow-undo" size={13} color="#8E8E93" style={{ marginRight: 5 }} />
                     <Text style={styles.replyBannerAuthor}>
-                      {uiText("Replying to")}<Text style={styles.replyBannerAuthorName}>{replyingTo.author}</Text>
+                      {uiText("Replying to")}{' '}<Text style={styles.replyBannerAuthorName}>{replyingTo.author}</Text>
                     </Text>
                   </View>
                   <Pressable
@@ -1901,7 +1901,7 @@ function ChatDetailSession({
 
           {/* Messenger Style Input Footer */}
           {!!safety?.restricted_until && !isSupportConversation && <View style={{ paddingHorizontal: 20, paddingVertical: 12 }}>
-            <Text style={{ color: '#6B7280', fontSize: 13 }}>{uiText("Messaging paused until")}{new Date(safety.restricted_until).toLocaleString()}{uiText(". Contact your Barangay desk or SerbiSure Support for help.")}</Text>
+            <Text style={{ color: '#6B7280', fontSize: 13 }}>{uiText("Messaging paused until")} {new Date(safety.restricted_until).toLocaleString()}{uiText(". Contact your Barangay desk or SerbiSure Support for help.")}</Text>
           </View>}
           {isUploadingImage && (
             <View style={styles.uploadingBar}>

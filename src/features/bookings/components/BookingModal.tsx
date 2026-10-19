@@ -338,7 +338,7 @@ export function BookingModal({
 
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         {!readOnly && <View style={styles.progressContainer}>
-          <View style={styles.progressMeta}><Text style={styles.progressText}>{uiText("Step")}{offerStep} {uiText("of")}{OFFER_STEPS.length}</Text>
+          <View style={styles.progressMeta}><Text style={styles.progressText}>{uiText("Step")} {offerStep} {uiText("of")} {OFFER_STEPS.length}</Text>
             <Text style={styles.progressHint}>{currentStep.label}</Text></View>
           <View style={styles.progressRow}>{OFFER_STEPS.map((item, index) => <Pressable key={item.label}
             accessibilityRole="button" accessibilityLabel={`Step ${index + 1}: ${item.label}`}
@@ -496,7 +496,7 @@ export function BookingModal({
               <View style={styles.pendingBanner}>
                 <Ionicons name="time-outline" size={18} color="#D97706" style={{ marginRight: 6 }} />
                 <Text style={styles.pendingBannerText}>
-                  {uiText("Offer Sent • Waiting for")}{contactName || uiText("Kasambahay")} {uiText("to accept or decline")}</Text>
+                  {uiText("Offer Sent • Waiting for")} {contactName || uiText("Kasambahay")} {uiText("to accept or decline")}</Text>
               </View>
             )
           ) : (

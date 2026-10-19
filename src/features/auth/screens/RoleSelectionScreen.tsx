@@ -33,7 +33,7 @@ export function RoleSelectionScreen({ onSelectRole, onBack }: RoleSelectionScree
 
       <View style={styles.titleContainer}>
         <Text style={styles.title}>
-          {uiText("How would")}<Text style={styles.titleHighlight}>{uiText("you")}</Text>{'\n'}{uiText("like to join?")}</Text>
+          {uiText("How would")}{' '}<Text style={styles.titleHighlight}>{uiText("you")}</Text>{'\n'}{uiText("like to join?")}</Text>
         <Text style={styles.subtitle}>{uiText("Choose your path to get started")}</Text>
       </View>
 

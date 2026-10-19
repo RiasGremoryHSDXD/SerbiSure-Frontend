@@ -433,7 +433,7 @@ export function RegistrationErrorModal({
                   onPress={handleFixDetails}
                 >
                   <Text style={styles.darkButtonText}>
-                    {uiText("Review & Fix (Step")}{parsed.suggestedStep})
+                    {uiText("Review & Fix (Step")} {parsed.suggestedStep})
                   </Text>
                 </Pressable>
 

@@ -262,7 +262,7 @@ export function MyBookingsModal({
               <View style={{ flex: 1 }}>
                 <Text style={styles.mandatoryFeedbackTitle}>{uiText("Mandatory Service Feedback")}</Text>
                 <Text style={styles.mandatoryFeedbackSub} numberOfLines={2}>
-                  {uiText("You have a completed booking with")}{targetName} {uiText("awaiting required review. Tap to complete.")}</Text>
+                  {uiText("You have a completed booking with")} {targetName} {uiText("awaiting required review. Tap to complete.")}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color="#D97706" />
             </Pressable>
@@ -450,7 +450,7 @@ export function MyBookingsModal({
                     >
                       <Ionicons name="pricetag-outline" size={14} color="#4B5563" style={{ marginRight: 4 }} />
                       <Text style={styles.actionBtnOutlineText}>
-                        {uiText("Offers")}{booking.proposals_count ? `(${booking.proposals_count})` : ''}
+                        {uiText("Offers")}{booking.proposals_count ? ` (${booking.proposals_count})` : ''}
                       </Text>
                     </Pressable>
 

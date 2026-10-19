@@ -273,6 +273,8 @@ export const UI_MESSAGES = {
   'Booking not updated': ['Hindi na-update ang booking', 'Wala ma-update ang booking'],
   'Please try again.': ['Pakisubukan muli.', 'Palihog sulayi pag-usab.'],
   'Send': ['Ipadala', 'Ipadala'],
+  'Send Application': ['Ipadala ang Aplikasyon', 'Ipadala ang Aplikasyon'],
+  'Send Offer': ['Ipadala ang Alok', 'Ipadala ang Tanyag'],
   'Photo': ['Larawan', 'Litrato'],
   'You': ['Ikaw', 'Ikaw'],
   'Filter & Sort': ['Salain at Ayusin', 'Sala ug Han-aya'],

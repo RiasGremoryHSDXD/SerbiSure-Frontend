@@ -94,7 +94,7 @@ export function PublicPostsSection({ posts, loading, error, token, ownerId, owne
           <TextInput accessibilityLabel="Proposal message" value={message} onChangeText={setMessage} multiline maxLength={450} editable={!submitting} placeholder={isJob ? 'Tell the homeowner why you are a good fit...' : 'Describe the work you would like help with...'} style={[styles.bioTextInput, { marginTop: 8, marginBottom: 16 }]} />
           <View style={styles.modalActionButtons}>
             <Pressable style={styles.cancelModalBtn} disabled={submitting} onPress={() => setSelected(null)}><Text style={styles.cancelModalBtnText}>{uiText("Cancel")}</Text></Pressable>
-            <Pressable style={styles.saveModalBtn} disabled={submitting} onPress={submit}>{submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.saveModalBtnText}>{uiText("Send")}{isJob ? 'Application' : 'Offer'}</Text>}</Pressable>
+            <Pressable style={styles.saveModalBtn} disabled={submitting} onPress={submit}>{submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.saveModalBtnText}>{uiText(isJob ? 'Send Application' : 'Send Offer')}</Text>}</Pressable>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

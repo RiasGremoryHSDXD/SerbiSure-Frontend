@@ -14,8 +14,8 @@ export function ContractDownloadCard({ summary }: Readonly<{ summary: NonNullabl
   return <View style={styles.card}>
     <Text style={styles.title}>{uiText("Long-term engagement terms")}</Text>
     <Text style={styles.terms}>{summary.service_category.map(value => value.replace(/_/g, ' ')).join(', ')} · {summary.rate_needs_review ? 'Confirm the amount from the original agreement' : 'PHP ' + Number(summary.rate_amount).toLocaleString() + '/month'}</Text>
-    <Text style={styles.terms}>{uiText("Work setup:")}{workSetupLabel(summary.work_setup)}</Text>
-    <Text style={styles.terms}>{uiText("Starts:")}{new Date(summary.start_date).toLocaleDateString()}</Text>
+    <Text style={styles.terms}>{uiText("Work setup:")} {workSetupLabel(summary.work_setup)}</Text>
+    <Text style={styles.terms}>{uiText("Starts:")} {new Date(summary.start_date).toLocaleDateString()}</Text>
     <Text style={styles.terms}>{summary.end_date ? `${uiText('End date')}: ${formatDate(summary.end_date, 'full')}` : uiText('No end date')}</Text>
     <Text style={styles.terms}>{summary.location}</Text>
     <Text style={styles.notice}>{summary.notice}</Text>
