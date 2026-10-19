@@ -22,6 +22,7 @@ import { fetchChatThreadDetails, generateUUID, sendChatMessage, sendChatImage, t
 import { chatStore } from '../store/chatStore';
 import { createThreadRefreshQueue } from '../threadRefreshQueue';
 import { cacheThread, forgetCachedThread, getCachedThread, threadCacheGeneration } from '../threadCache';
+import { getReplyRelationship, isGenericPhotoReply } from '../replyRelationships';
 import { savedJobsStore } from '../../bookings/store/savedJobsStore';
 import { API_BASE_URL } from '../../../shared/api/config';
 import { fetchWithTimeout } from '../../../shared/api/httpClient';
@@ -468,6 +469,10 @@ function ChatDetailSession({
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [reactingMessageId, setReactingMessageId] = useState<string | null>(null);
   const [activeActionMenuMsg, setActiveActionMenuMsg] = useState<ChatMessage | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<ChatMessage | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
+  const removalPending = useRef(false);
   const [activeMenuLayout, setActiveMenuLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const messageRefs = useRef<{ [id: string]: View | null }>({});
   const reactionScaleAnim = useRef(new Animated.Value(0.3)).current;
@@ -1244,38 +1249,29 @@ function ChatDetailSession({
     }
   };
 
-  const handleDeleteOrUnsend = async (msg: ChatMessage, actionType: 'unsend' | 'delete_for_me') => {
-    setActiveActionMenuMsg(null);
-
-    // Track ID in chatStore so background polling never resurrects it
-    if (msg.id) {
-      chatStore.markMessageDeleted(msg.id);
-    }
-
-    // Optimistic removal from message list
-    setMessages((prev) => prev.filter((m) => m.id !== msg.id));
-
-    if (actionType === 'delete_for_me') {
-      if (Platform.OS === 'android') {
-        ToastAndroid.show('Message deleted for you', ToastAndroid.SHORT);
-      }
+  const handleRemoveForYou = async () => {
+    if (!removeTarget || removalPending.current || !effectiveToken) return;
+    const msg = removeTarget;
+    if (msg.isUploading || !isValidUUID(msg.id)) {
+      setRemoveError('Wait for this message to finish sending.');
       return;
     }
-
-    // For unsend: delete for everyone on the server
-    if (actionType === 'unsend') {
-      if (Platform.OS === 'android') {
-        ToastAndroid.show('Message unsent', ToastAndroid.SHORT);
-      }
-
-      if (effectiveToken && msg.id && isValidUUID(msg.id) && !msg.id.startsWith('temp-')) {
-        try {
-          await deleteChatMessage(effectiveToken, msg.id);
-        } catch (err) {
-          // Log softly to prevent yellow LogBox popup on user device
-          console.log('[ChatDetailScreen] unsend background sync:', err);
-        }
-      }
+    removalPending.current = true;
+    setIsRemoving(true); setRemoveError(null);
+    try {
+      await deleteChatMessage(effectiveToken, msg.id);
+      if (!sessionActive.current) return;
+      chatStore.markMessageDeleted(msg.id);
+      setMessages(previous => previous.filter(message => message.id !== msg.id));
+      setReplyingTo(reply => reply?.messageId === msg.id || reply?.id === msg.id ? null : reply);
+      setRemoveTarget(null);
+      void chatStore.loadInbox(effectiveToken, true);
+      if (Platform.OS === 'android') ToastAndroid.show('Message removed for you', ToastAndroid.SHORT);
+    } catch {
+      if (sessionActive.current) setRemoveError('Could not remove the message. Try again.');
+    } finally {
+      removalPending.current = false;
+      if (sessionActive.current) setIsRemoving(false);
     }
   };
 
@@ -1604,6 +1600,19 @@ function ChatDetailSession({
                 const isSameGroupAsPrev = isSameSenderAsPrev && prevMsg.time === item.time;
                 const isSameGroupAsNext = isSameSenderAsNext && nextMsg.time === item.time;
 
+                const quotedMessage = item.replyTo?.messageId
+                  ? messages.find(message => message.id === item.replyTo?.messageId)
+                  : undefined;
+                const replyRelationship = item.replyTo ? getReplyRelationship({
+                  currentIsMine: item.sender === 'me',
+                  quotedIsMine: quotedMessage ? quotedMessage.sender === 'me' : undefined,
+                  quotedAuthor: item.replyTo.author,
+                  partnerName: contactName,
+                }) : '';
+                const replyShowsPhotoOnly = item.replyTo
+                  ? isGenericPhotoReply(item.replyTo.text, item.replyTo.imageUri)
+                  : false;
+
                 const hasReaction = !!item.reaction || Object.values(item.reactionSummary || {}).some((c) => c > 0);
                 const rowSpacingStyle = isSameGroupAsNext
                   ? (hasReaction ? styles.messageRowGroupedWithReaction : styles.messageRowGrouped)
@@ -1649,27 +1658,31 @@ function ChatDetailSession({
                             {/* Instagram / Messenger Style Quoted Reply Stack */}
                             {item.replyTo ? (
                               <View style={styles.replyQuoteStackLeft}>
-                                <Text style={styles.replyQuoteLabelLeft}>
-                                  {item.replyTo.author === 'You' ? `${contactName} replied to you` : `${contactName} replied`}
-                                </Text>
+                                <View style={styles.replyQuoteLabelRowLeft}>
+                                  <Ionicons name="arrow-undo" size={12} color="#8E8E93" />
+                                  <Text testID={`reply-relationship-${item.id}`} style={styles.replyQuoteLabelLeft} numberOfLines={1}>
+                                    {replyRelationship}
+                                  </Text>
+                                </View>
                                 <Pressable
                                   onPress={() => scrollToMessage(item.replyTo?.messageId, item.replyTo?.imageUri)}
                                   style={({ pressed }) => [
                                     styles.replyQuoteBubbleLeft,
                                     item.replyTo?.imageUri ? styles.replyQuoteBubbleWithPhoto : null,
+                                    replyShowsPhotoOnly ? styles.replyQuotePhotoOnly : null,
                                     pressed && { opacity: 0.75 },
                                   ]}
                                 >
                                   {item.replyTo.imageUri ? (
                                     <Image
                                       source={{ uri: item.replyTo.imageUri }}
-                                      style={styles.replyQuotePhotoThumb}
+                                      style={replyShowsPhotoOnly ? styles.replyQuotePhotoOnlyThumb : styles.replyQuotePhotoThumb}
                                       resizeMode="cover"
                                     />
                                   ) : null}
-                                  <Text style={styles.replyQuoteBubbleText} numberOfLines={2}>
+                                  {!replyShowsPhotoOnly ? <Text style={styles.replyQuoteBubbleText} numberOfLines={2}>
                                     {item.replyTo.text}
-                                  </Text>
+                                  </Text> : null}
                                 </Pressable>
                               </View>
                             ) : null}
@@ -1755,27 +1768,31 @@ function ChatDetailSession({
                         {/* Instagram / Messenger Style Quoted Reply Stack */}
                         {item.replyTo ? (
                           <View style={styles.replyQuoteStackRight}>
-                            <Text style={styles.replyQuoteLabelRight}>
-                              {item.replyTo.author === 'You' ? 'You replied' : `You replied to ${item.replyTo.author}`}
-                            </Text>
+                            <View style={styles.replyQuoteLabelRowRight}>
+                              <Ionicons name="arrow-undo" size={12} color="#8E8E93" />
+                              <Text testID={`reply-relationship-${item.id}`} style={styles.replyQuoteLabelRight} numberOfLines={1}>
+                                {replyRelationship}
+                              </Text>
+                            </View>
                             <Pressable
                               onPress={() => scrollToMessage(item.replyTo?.messageId, item.replyTo?.imageUri)}
                               style={({ pressed }) => [
                                 styles.replyQuoteBubbleRight,
                                 item.replyTo?.imageUri ? styles.replyQuoteBubbleWithPhoto : null,
+                                replyShowsPhotoOnly ? styles.replyQuotePhotoOnly : null,
                                 pressed && { opacity: 0.75 },
                               ]}
                             >
                               {item.replyTo.imageUri ? (
                                 <Image
                                   source={{ uri: item.replyTo.imageUri }}
-                                  style={styles.replyQuotePhotoThumb}
+                                  style={replyShowsPhotoOnly ? styles.replyQuotePhotoOnlyThumb : styles.replyQuotePhotoThumb}
                                   resizeMode="cover"
                                 />
                               ) : null}
-                              <Text style={styles.replyQuoteBubbleText} numberOfLines={2}>
+                              {!replyShowsPhotoOnly ? <Text style={styles.replyQuoteBubbleText} numberOfLines={2}>
                                 {item.replyTo.text}
-                              </Text>
+                              </Text> : null}
                             </Pressable>
                           </View>
                         ) : null}
@@ -1863,9 +1880,9 @@ function ChatDetailSession({
                     <Ionicons name="close" size={17} color="#8E8E93" />
                   </Pressable>
                 </View>
-                <Text style={styles.replyBannerText} numberOfLines={1}>
+                {!isGenericPhotoReply(replyingTo.text, replyingTo.imageUri) ? <Text style={styles.replyBannerText} numberOfLines={1}>
                   {replyingTo.text}
-                </Text>
+                </Text> : null}
               </View>
             </View>
           ) : null}
@@ -2153,50 +2170,61 @@ function ChatDetailSession({
                     }}
                   >
                     <Ionicons name="copy-outline" size={19} color="#1A1A1A" style={styles.actionMenuIcon} />
-                    <Text style={styles.actionMenuText}>{uiText("Copy")}</Text>
+                    <Text style={styles.actionMenuText}>{uiText("Copy Text")}</Text>
                   </Pressable>
                 ) : null}
 
 
-                {/* Unsend (if message sender is 'me') */}
-                {isSender ? (
+                {/* Removal is private to this account for either message direction. */}
                   <Pressable
                     style={({ pressed }) => [
                       styles.actionMenuItem,
                       styles.actionMenuItemLast,
                       pressed && styles.actionMenuItemPressed,
                     ]}
-                    onPress={() => handleDeleteOrUnsend(activeActionMenuMsg, 'unsend')}
+                    accessibilityLabel="Remove message"
+                    onPress={() => { setRemoveError(null); setRemoveTarget(activeActionMenuMsg); setActiveActionMenuMsg(null); }}
                   >
                     <Ionicons name="trash-outline" size={19} color="#EF4444" style={styles.actionMenuIcon} />
-                    <Text style={[styles.actionMenuText, { color: '#EF4444' }]}>{uiText("Unsend")}</Text>
+                    <Text style={[styles.actionMenuText, { color: '#EF4444' }]}>Remove for you</Text>
                   </Pressable>
-                ) : null}
-
-                {/* Delete for me (if message sender is 'other') */}
-                {!isSender ? (
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.actionMenuItem,
-                      styles.actionMenuItemLast,
-                      pressed && styles.actionMenuItemPressed,
-                    ]}
-                    onPress={() => handleDeleteOrUnsend(activeActionMenuMsg, 'delete_for_me')}
-                  >
-                    <Ionicons name="trash-outline" size={19} color="#EF4444" style={styles.actionMenuIcon} />
-                    <Text style={[styles.actionMenuText, { color: '#EF4444' }]}>{uiText("Delete for me")}</Text>
-                  </Pressable>
-                ) : null}
               </Animated.View>
             </View>
           );
         })() : null}
+        <Modal visible={!!removeTarget} transparent animationType="fade" onRequestClose={() => { if (!removalPending.current) setRemoveTarget(null); }}>
+          <View style={styles.removeBackdrop}>
+            <View accessibilityViewIsModal style={styles.removeDialog}>
+              <Text accessibilityRole="header" style={styles.removeTitle}>Remove for you?</Text>
+              <Text style={styles.removeDescription}>This message will be removed from your screen. Other participants will still be able to see it.</Text>
+              {removeError ? <Text accessibilityRole="alert" style={styles.removeError}>{removeError}</Text> : null}
+              <View style={styles.removeButtons}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Cancel removal" disabled={isRemoving} onPress={() => setRemoveTarget(null)} style={styles.removeButton}>
+                  <Text style={styles.removeCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Confirm removal" disabled={isRemoving} onPress={() => void handleRemoveForYou()} style={[styles.removeButton, styles.removeConfirmButton, isRemoving && { opacity: 0.5 }]}>
+                  <Text style={styles.removeConfirmText}>{isRemoving ? 'Removing…' : 'Remove'}</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </Animated.View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  removeBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', padding: 24 },
+  removeDialog: { width: '100%', maxWidth: 420, borderRadius: 20, backgroundColor: '#FFFFFF', padding: 24 },
+  removeTitle: { fontSize: 18, fontWeight: '700', color: '#0D0D11' },
+  removeDescription: { marginTop: 16, fontSize: 14, lineHeight: 22, color: '#52525B' },
+  removeError: { marginTop: 12, fontSize: 13, color: '#DC2626' },
+  removeButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 24 },
+  removeButton: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 24 },
+  removeConfirmButton: { backgroundColor: '#0D0D11' },
+  removeCancelText: { fontSize: 14, fontWeight: '600', color: '#3F3F46' },
+  removeConfirmText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
   modalScreenContainer: {
     flex: 1,
     backgroundColor: '#F9F8F6',
@@ -3013,12 +3041,20 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     maxWidth: '100%',
   },
+  replyQuoteLabelRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    maxWidth: '100%',
+    marginBottom: 2,
+    marginRight: 6,
+  },
   replyQuoteLabelRight: {
     fontSize: 11,
     fontWeight: '600',
     color: '#8E8E93',
-    marginBottom: 2,
-    marginRight: 6,
+    flexShrink: 1,
   },
   replyQuoteBubbleRight: {
     backgroundColor: 'rgba(0, 0, 0, 0.08)',
@@ -3044,12 +3080,19 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     maxWidth: '100%',
   },
+  replyQuoteLabelRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    maxWidth: '100%',
+    marginBottom: 2,
+    marginLeft: 6,
+  },
   replyQuoteLabelLeft: {
     fontSize: 11,
     fontWeight: '600',
     color: '#8E8E93',
-    marginBottom: 2,
-    marginLeft: 6,
+    flexShrink: 1,
   },
   replyQuoteBubbleLeft: {
     backgroundColor: 'rgba(0, 0, 0, 0.08)',
@@ -3066,6 +3109,18 @@ const styles = StyleSheet.create({
   replyQuoteBubbleWithPhoto: {
     paddingLeft: 6,
     paddingVertical: 5,
+  },
+  replyQuotePhotoOnly: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    backgroundColor: 'transparent',
+    overflow: 'hidden',
+    borderRadius: 16,
+  },
+  replyQuotePhotoOnlyThumb: {
+    width: 84,
+    height: 84,
+    borderRadius: 16,
   },
   replyQuotePhotoThumb: {
     width: 32,

@@ -350,7 +350,7 @@ export const toggleChatReaction = reactToChatMessage;
 
 /**
  * DELETE /api/v1/chat/message/<message_id>/
- * Deletes or unsends a message in the conversation.
+ * Removes a message from the authenticated user's view across their devices.
  */
 export async function deleteChatMessage(
   token: string,
@@ -367,7 +367,7 @@ export async function deleteChatMessage(
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const msg = data.detail || `Failed to delete message (${res.status})`;
+    const msg = data.detail || 'Could not remove the message. Try again.';
     throw new Error(msg);
   }
 

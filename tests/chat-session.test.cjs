@@ -57,6 +57,7 @@ const payload = text => ({ messages: [{ chat_message_id: text, message_payload: 
 const tick = async () => { await new Promise(resolve => setImmediate(resolve)); renderer.flushPassiveEffects(); };
 const localizationMessages = compile('src/shared/localization/messages.ts', {});
 const languageContext = compile('src/shared/localization/LanguageContext.tsx', { './messages': localizationMessages });
+const replyRelationships = compile('src/features/chat/replyRelationships.ts', {});
 
 function presenceClient(t) {
   const { RealtimeClient } = compile('src/shared/realtime/RealtimeClient.ts', {
@@ -86,7 +87,7 @@ function presenceClient(t) {
 
 function screen(t, options = {}) {
   let user = { id: 'account-one', token: 'token-one', accountType: 'Homeowner' };
-  const requests = [], sends = [], previews = [], alerts = [], deleted = new Set(), entrances = [], scrolls = [], dialogs = [];
+  const requests = [], sends = [], removals = [], previews = [], alerts = [], deleted = new Set(), entrances = [], scrolls = [], dialogs = [];
   const live = presenceClient(t); live.start(user.id, user.token);
   const presenceHook = compile('src/shared/realtime/useChatPresence.ts', { './index': { realtime: live.client } });
   const realtimeStatus = compile('src/shared/realtime/useRealtimeStatus.ts', { './index': { realtime: live.client } });
@@ -133,6 +134,7 @@ function screen(t, options = {}) {
       });
     },
     sendChatMessage() { const request = deferred(); sends.push(request); return request.promise; },
+    deleteChatMessage(token, id) { const request = { ...deferred(), token, id }; removals.push(request); return request.promise; },
     sendChatTyping() {},
   };
   const { createThreadRefreshQueue } = compile('src/features/chat/threadRefreshQueue.ts', {});
@@ -154,6 +156,7 @@ function screen(t, options = {}) {
     '../hooks/useChatSafety': { useChatSafety: () => null },
     '../api/chatApi': api, '../threadRefreshQueue': { createThreadRefreshQueue },
     '../threadCache': threadCache,
+    '../replyRelationships': replyRelationships,
     '../store/chatStore': { chatStore: { isMessageDeleted: id => deleted.has(id), markMessageDeleted: id => deleted.add(id), loadInbox: async () => [], addOrUpdateChat: entry => previews.push(entry) } },
     '../../bookings/store/savedJobsStore': {}, '../../../shared/api/config': {}, '../../../shared/api/httpClient': {},
   });
@@ -176,7 +179,7 @@ function screen(t, options = {}) {
     renderer.flushSync(() => renderer.updateContainer(null, root, null));
     renderer.flushPassiveEffects(); global.requestAnimationFrame = originalFrame;
   });
-  return { update, requests, sends, previews, alerts, nodes, threadCache, deleted, entrances, scrolls, dialogs, live,
+  return { update, requests, sends, removals, previews, alerts, nodes, threadCache, deleted, entrances, scrolls, dialogs, live,
     unmount() { renderer.flushSync(() => renderer.updateContainer(null, root, null)); renderer.flushPassiveEffects(); },
     event(event) { renderer.flushSync(() => live.event(event)); },
     texts: () => nodes().filter(node => node.text !== undefined).map(node => node.text).join(' '),
@@ -184,6 +187,88 @@ function screen(t, options = {}) {
     renewToken() { user = { ...user, token: 'renewed-token' }; live.start(user.id, user.token); },
   };
 }
+
+test('reply relationships cover incoming, outgoing and self replies', () => {
+  const relationship = replyRelationships.getReplyRelationship;
+  assert.equal(relationship({ currentIsMine: false, quotedIsMine: true, partnerName: 'Chrislyn Jewel' }), 'Chrislyn Jewel replied to you');
+  assert.equal(relationship({ currentIsMine: false, quotedIsMine: false, partnerName: 'Chrislyn Jewel' }), 'Chrislyn Jewel replied to themself');
+  assert.equal(relationship({ currentIsMine: true, quotedIsMine: false, partnerName: 'Chrislyn Jewel' }), 'You replied to Chrislyn Jewel');
+  assert.equal(relationship({ currentIsMine: true, quotedIsMine: true, partnerName: 'Chrislyn Jewel' }), 'You replied to yourself');
+  assert.equal(relationship({ currentIsMine: false, quotedAuthor: 'You', partnerName: 'Chrislyn Jewel' }), 'Chrislyn Jewel replied to themself');
+  assert.equal(replyRelationships.isGenericPhotoReply('📷 Photo', 'https://test.local/photo.jpg'), true);
+  assert.equal(replyRelationships.isGenericPhotoReply('Receipt photo', 'https://test.local/photo.jpg'), false);
+  assert.equal(replyRelationships.isGenericPhotoReply('📷 Photo'), false);
+});
+
+test('photo-only replies render the picture without a camera-and-Photo label', t => {
+  const chat = screen(t, { deferEntrance: true });
+  const history = [
+    { id: 'photo-original', sender: 'other', imageUri: 'https://test.local/original.jpg', time: 'Now' },
+    { id: 'photo-reply', sender: 'me', text: 'Looks good', time: 'Now', replyTo: { author: 'Photo User', text: '📷 Photo', imageUri: 'https://test.local/original.jpg', messageId: 'photo-original' } },
+  ];
+  chat.threadCache.cacheThread(JSON.stringify(['account-one', 'Photo User']), history, chat.threadCache.threadCacheGeneration());
+  chat.update('Photo User');
+  assert.ok(chat.nodes().some(node => node.type === 'Image' && node.props.source?.uri === 'https://test.local/original.jpg' && node.props.style?.width === 84));
+  assert.doesNotMatch(chat.texts(), /📷 Photo/);
+});
+
+for (const sender of ['me', 'other']) {
+  test(`mobile removal confirms and saves privately for ${sender} messages, retaining the message on failure`, async t => {
+    const chat = screen(t, { deferEntrance: true });
+    const id = 'c348ce19-1000-4000-8000-000000000001';
+    const history = [{ id, sender, text: 'Keep this evidence', time: 'Now' }];
+    chat.threadCache.cacheThread(JSON.stringify(['account-one', 'A']), history, chat.threadCache.threadCacheGeneration());
+    chat.update('A');
+    const press = label => renderer.flushSync(() => chat.nodes().find(node => node.props?.accessibilityLabel === label).props.onPress());
+    const start = () => {
+      renderer.flushSync(() => chat.nodes().find(node => node.type === 'Pressable' && node.props.onLongPress).props.onLongPress());
+      assert.doesNotMatch(chat.texts(), /Unsend|Delete for everyone/);
+      assert.match(chat.texts(), /Reply/);
+      assert.match(chat.texts(), /Copy Text/);
+      press('Remove message');
+      assert.match(chat.texts(), /Remove for you\?/);
+      assert.match(chat.texts(), /This message will be removed from your screen. Other participants will still be able to see it./);
+    };
+    start(); press('Cancel removal');
+    assert.equal(chat.removals.length, 0); assert.equal(chat.deleted.has(id), false);
+    start(); press('Confirm removal'); press('Confirm removal');
+    assert.equal(chat.removals.length, 1);
+    assert.equal(chat.deleted.has(id), false, 'Do not hide evidence before server success');
+    chat.removals[0].reject(new Error('Offline')); await tick();
+    assert.match(chat.texts(), /Could not remove the message. Try again./);
+    assert.match(chat.texts(), /Keep this evidence/);
+    press('Confirm removal');
+    chat.removals[1].resolve({ message: 'Message removed for you.' }); await tick();
+    assert.equal(chat.deleted.has(id), true);
+    assert.doesNotMatch(chat.texts(), /Keep this evidence/);
+    assert.deepEqual(chat.alerts, [], 'Use in-app confirmation and error text');
+  });
+}
+
+test('mobile chat renders all four Messenger reply headers for every shared chat role', t => {
+  const chat = screen(t, { deferEntrance: true });
+  const history = [
+    { id: 'mine-original', sender: 'me', text: 'My original', time: 'Now' },
+    { id: 'incoming-to-me', sender: 'other', text: 'Incoming answer', time: 'Now', replyTo: { author: 'Mobile User', text: 'My original', messageId: 'mine-original' } },
+    { id: 'other-original', sender: 'other', text: 'Their original', time: 'Now' },
+    { id: 'incoming-self', sender: 'other', text: 'Their follow-up', time: 'Now', replyTo: { author: 'You', text: 'Their original', messageId: 'other-original' } },
+    { id: 'outgoing-to-user', sender: 'me', text: 'My answer', time: 'Now', replyTo: { author: 'Chrislyn Jewel', text: 'Their original', messageId: 'other-original' } },
+    { id: 'outgoing-self', sender: 'me', text: 'My follow-up', time: 'Now', replyTo: { author: 'You', text: 'My original', messageId: 'mine-original' } },
+  ];
+  chat.threadCache.cacheThread(JSON.stringify(['account-one', 'Chrislyn Jewel']), history, chat.threadCache.threadCacheGeneration());
+  chat.update('Chrislyn Jewel');
+  const expected = {
+    'incoming-to-me': 'Chrislyn Jewel replied to you',
+    'incoming-self': 'Chrislyn Jewel replied to themself',
+    'outgoing-to-user': 'You replied to Chrislyn Jewel',
+    'outgoing-self': 'You replied to yourself',
+  };
+  for (const [id, label] of Object.entries(expected)) {
+    const node = chat.nodes().find(item => item.props?.testID === `reply-relationship-${id}`);
+    assert.ok(node, `${id} relationship label should render`);
+    assert.equal(node.children.map(child => child.text || '').join(''), label);
+  }
+});
 
 test('switching from a loaded chat immediately removes its history and draft before the next fetch resolves', async t => {
   const chat = screen(t);
