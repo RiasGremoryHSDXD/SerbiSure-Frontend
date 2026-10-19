@@ -51,6 +51,7 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
   const [postedSuccess, setPostedSuccess] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [showVerificationRequired, setShowVerificationRequired] = useState(false);
+  const [showBookingRestricted, setShowBookingRestricted] = useState(false);
   const [verificationStatus, setVerificationStatus] = useState<string>('Unverified');
   const requestVersion = useRef(0);
   const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -60,6 +61,7 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
       setIsPosting(false);
       setPostedSuccess(false);
       setShowVerificationRequired(false);
+      setShowBookingRestricted(false);
     }
     return () => {
       requestVersion.current++;
@@ -121,6 +123,7 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
     setPostedSuccess(false);
     setIsPosting(false);
     setShowVerificationRequired(false);
+    setShowBookingRestricted(false);
     setStep(1);
     setSelectedServices([]);
     setEngagementType(null);
@@ -262,6 +265,8 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
       }
 
       setIsPosting(true);
+      setShowVerificationRequired(false);
+      setShowBookingRestricted(false);
       const request = ++requestVersion.current;
 
       try {
@@ -294,13 +299,13 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
           if (request !== requestVersion.current) return;
           console.log('[PostJob] Server response:', errorData);
 
-          const rawStr = typeof errorData === 'string' ? errorData : JSON.stringify(errorData);
-          const isVerificationError =
-            response.status === 403 ||
-            /verified|verification/i.test(rawStr) ||
-            errorData?.code === 'account_not_verified';
+          if (errorData?.code === 'booking_restricted' || errorData?.is_restricted === true) {
+            setIsPosting(false);
+            setShowBookingRestricted(true);
+            return;
+          }
 
-          if (isVerificationError) {
+          if (errorData?.code === 'account_not_verified') {
             setIsPosting(false);
             setVerificationStatus(errorData?.verification_status || (mode === 'service' ? user?.verificationStatus : null) || 'Unverified');
             setShowVerificationRequired(true);
@@ -380,6 +385,8 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
     isPosting,
     showVerificationRequired,
     setShowVerificationRequired,
+    showBookingRestricted,
+    setShowBookingRestricted,
     verificationStatus,
     applyUserProfileAddress,
     scaleAnim,

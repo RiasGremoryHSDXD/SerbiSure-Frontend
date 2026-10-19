@@ -5,6 +5,7 @@ import { Text, View, Image, Pressable, Modal, KeyboardAvoidingView, Platform, An
 import { Ionicons } from '@expo/vector-icons';
 
 import { VerificationRequiredModal } from '../../verification/components/VerificationRequiredModal';
+import { BookingRestrictionModal } from '../../bookings/components/BookingRestrictionModal';
 
 const logoSource = require('../../../../assets/serbisure-logo.png');
 
@@ -31,6 +32,8 @@ export function PostScreen(props: PostScreenProps) {
     isPosting,
     showVerificationRequired,
     setShowVerificationRequired,
+    showBookingRestricted,
+    setShowBookingRestricted,
     verificationStatus,
     scaleAnim,
     spin,
@@ -149,6 +152,11 @@ export function PostScreen(props: PostScreenProps) {
             </Animated.View>
           </View>
         )}
+
+        <BookingRestrictionModal
+          visible={showBookingRestricted}
+          onClose={() => setShowBookingRestricted(false)}
+        />
 
         {/* Verification Required Modal */}
         <VerificationRequiredModal
