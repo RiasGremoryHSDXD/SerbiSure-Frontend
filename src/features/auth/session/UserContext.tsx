@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { AppState } from 'react-native';
 import { savedJobsStore } from '../../bookings/store/savedJobsStore';
+import { fetchVerificationStatus } from '../../verification/api/verificationApi';
 
 type UserData = {
   id?: string;
@@ -38,6 +40,7 @@ type UserContextType = {
   user: UserData;
   setUser: React.Dispatch<React.SetStateAction<UserData>>;
   updateUser: (data: Partial<UserData>) => void;
+  refreshVerificationStatus: () => Promise<string | null>;
   getFirstNameOnly: () => string;
   getFullName: () => string;
 };
@@ -95,13 +98,36 @@ function parseJWT(token: string) {
 
 export const UserProvider: React.FC<{ children: React.ReactNode, token?: string | null }> = ({ children, token }) => {
   const [user, setUser] = useState<UserData>(defaultUser);
+  const session = useMemo(() => {
+    const claims = token ? parseJWT(token) : null;
+    return { token, claims, userId: String(claims?.user_id || claims?.id || claims?.sub || '') };
+  }, [token]);
+  const activeSession = useRef<typeof session | null>(session);
+  activeSession.current = session;
+  const verificationRequest = useRef<{ session: typeof session; promise: Promise<string | null> } | null>(null);
+
+  const refreshVerificationStatus = useCallback((): Promise<string | null> => {
+    if (!session.token || !session.userId || activeSession.current !== session) return Promise.resolve(null);
+    if (verificationRequest.current?.session === session) return verificationRequest.current.promise;
+    const promise = fetchVerificationStatus(session.token).then(data => {
+      if (activeSession.current !== session) return null;
+      const status = data?.overall_status;
+      if (!['Verified', 'Pending', 'Rejected', 'Unverified'].includes(status)) return null;
+      setUser(previous => previous.id === session.userId ? { ...previous, verificationStatus: status } : previous);
+      return status;
+    }).catch(() => null).finally(() => {
+      if (verificationRequest.current?.session === session) verificationRequest.current = null;
+    });
+    verificationRequest.current = { session, promise };
+    return promise;
+  }, [session]);
 
   useEffect(() => {
     if (token) {
-      const decoded = parseJWT(token)
+      const decoded = session.claims
 
       if (decoded) {
-        const userId = decoded.user_id || decoded.id || decoded.sub || '';
+        const userId = session.userId;
         setUser((previous) => ({
           id: userId,
           token: token,
@@ -114,6 +140,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
           userTags: Array.isArray(decoded.user_tags) ? decoded.user_tags : [],
           profileLink: decoded.profile_link || null,
           accountType: decoded.account_type || '',
+          verificationStatus: previous.id === userId && previous.verificationStatus
+            ? previous.verificationStatus : decoded.verification_status || undefined,
           region: decoded.region || '',
           province: decoded.province || '',
           city: decoded.city || '',
@@ -145,6 +173,18 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
     }
   }, [token])
 
+  useEffect(() => {
+    activeSession.current = session;
+    void refreshVerificationStatus();
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') void refreshVerificationStatus();
+    });
+    return () => {
+      if (activeSession.current === session) activeSession.current = null;
+      subscription.remove();
+    };
+  }, [session, refreshVerificationStatus]);
+
   const updateUser = (data: Partial<UserData>) => {
     setUser((prev) => ({ ...prev, ...data }));
   };
@@ -169,7 +209,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
   };
 
   return (
-    <UserContext.Provider value={{ user, setUser, updateUser, getFirstNameOnly, getFullName }}>
+    <UserContext.Provider value={{ user, setUser, updateUser, refreshVerificationStatus, getFirstNameOnly, getFullName }}>
       {children}
     </UserContext.Provider>
   );

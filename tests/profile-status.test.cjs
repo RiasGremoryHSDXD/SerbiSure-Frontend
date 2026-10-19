@@ -44,6 +44,8 @@ function profile(t) {
   const requests = [], updates = [], alerts = [];
   const context = load('src/features/auth/session/UserContext.tsx', {
     '../../bookings/store/savedJobsStore': { savedJobsStore: { initForUser() {}, clearStore() {} } },
+    'react-native': { AppState: { addEventListener: () => ({ remove() {} }) } },
+    '../../verification/api/verificationApi': { fetchVerificationStatus: async () => ({ overall_status: 'Verified' }) },
   });
   const language = { useLanguage: () => ({ tr: text => text }) };
   const { useWorkerProfile } = load('src/features/profile/worker/useWorkerProfile.ts', {

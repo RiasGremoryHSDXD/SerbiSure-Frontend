@@ -1,5 +1,5 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,30 +14,57 @@ export function PublicPostsSection({ posts, loading, error, token, ownerId, owne
   onSubmitted: (postId: string, proposal: NonNullable<PublicPendingPost['viewer_proposal']>) => void;
 }>) {
   const { tr: uiText } = useUiLanguage();
-  const { user } = useUser();
+  const { user, refreshVerificationStatus } = useUser();
   const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState<PublicPendingPost | null>(null);
   const [rate, setRate] = useState('');
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  const [checkingPostId, setCheckingPostId] = useState<string | null>(null);
+  const checkingRef = useRef<object | null>(null);
+  const sessionKey = JSON.stringify([user.id, user.token]);
+  const activeSession = useRef(sessionKey);
+  activeSession.current = sessionKey;
+  useEffect(() => {
+    activeSession.current = sessionKey;
+    checkingRef.current = null; setCheckingPostId(null); setSelected(null);
+    return () => { if (activeSession.current === sessionKey) activeSession.current = ''; };
+  }, [sessionKey]);
   const isJob = ownerRole === 'Homeowner';
   const allowedRole = isJob ? 'Kasambahay' : ownerRole === 'Kasambahay' ? 'Homeowner' : null;
   const canRespond = user.id !== ownerId && user.accountType === allowedRole;
   const action = isJob ? 'Apply' : 'Offer to Hire';
 
-  const openProposal = (post: PublicPendingPost) => {
+  const openProposal = async (post: PublicPendingPost) => {
+    if (checkingRef.current) return;
     if (post.rate_needs_review) {
       Alert.alert('Rate Awaiting Confirmation', 'The poster must confirm the monthly amount before this post can receive new proposals.');
       return;
     }
-    if (user.verificationStatus !== 'Verified') {
-      Alert.alert('Verification Required', 'Verify your account before sending an application or hiring offer.');
-      return;
+    const check = {};
+    checkingRef.current = check;
+    setCheckingPostId(post.booking_id);
+    try {
+      const status = await refreshVerificationStatus();
+      if (activeSession.current !== sessionKey || checkingRef.current !== check) return;
+      if (!status) {
+        Alert.alert(uiText('Verification check unavailable'), uiText('Could not check your verification status. Check your connection and try again.'));
+        return;
+      }
+      if (status !== 'Verified') {
+        Alert.alert(uiText('Verification Required'), uiText('Verify your account before sending an application or hiring offer.'));
+        return;
+      }
+      setRate(post.rate_amount);
+      setMessage('');
+      setSelected(post);
+    } finally {
+      if (checkingRef.current === check) {
+        checkingRef.current = null;
+        if (activeSession.current === sessionKey) setCheckingPostId(null);
+      }
     }
-    setRate(post.rate_amount);
-    setMessage('');
-    setSelected(post);
   };
 
   const submit = async () => {
@@ -80,7 +107,7 @@ export function PublicPostsSection({ posts, loading, error, token, ownerId, owne
         const note = status === 'Pending' ? (isJob ? 'Your application is awaiting a response' : 'Your hiring offer is awaiting a response')
           : status === 'Accepted' ? 'Your proposal was accepted' : isJob ? 'Waiting for worker applications' : 'Available for hiring offers';
         return <PendingPostCard key={post.booking_id} post={post} note={note}>
-          {canRespond && token ? <Pressable accessibilityRole="button" style={[styles.pendingPostManageBtn, { backgroundColor: pending ? '#F3F4F6' : '#FFB380', minHeight: 44 }]} disabled={pending} onPress={() => openProposal(post)}><Text style={styles.pendingPostManageBtnText}>{pending ? (status === 'Accepted' ? 'Accepted' : isJob ? 'Application Sent' : 'Offer Sent') : action}</Text></Pressable> : null}
+          {canRespond && token ? <Pressable accessibilityRole="button" style={[styles.pendingPostManageBtn, { backgroundColor: pending ? '#F3F4F6' : '#FFB380', minHeight: 44 }]} disabled={pending || checkingPostId !== null} onPress={() => { void openProposal(post); }}>{checkingPostId === post.booking_id ? <ActivityIndicator color="#0D0D11" /> : <Text style={styles.pendingPostManageBtnText}>{pending ? (status === 'Accepted' ? 'Accepted' : isJob ? 'Application Sent' : 'Offer Sent') : action}</Text>}</Pressable> : null}
         </PendingPostCard>;
       })}</View>}
     <Modal visible={!!selected} transparent animationType="slide" onRequestClose={() => !submitting && setSelected(null)}>

@@ -1,6 +1,10 @@
 // English source text -> Tagalog, Bisaya. Keep stored API values in English;
 // translate only their presentation. User-authored content is never passed here.
 export const UI_MESSAGES = {
+  'Verification check unavailable': ['Hindi masuri ang beripikasyon', 'Dili masusi ang beripikasyon'],
+  'Verification Required': ['Kailangan ang Beripikasyon', 'Gikinahanglan ang Beripikasyon'],
+  'Could not check your verification status. Check your connection and try again.': ['Hindi masuri ang iyong beripikasyon. Suriin ang koneksyon at subukan muli.', 'Dili masusi ang imong beripikasyon. Susiha ang koneksyon ug sulayi pag-usab.'],
+  'Verify your account before sending an application or hiring offer.': ['Iberipika ang iyong account bago magpadala ng aplikasyon o alok sa pagkuha.', 'Iberipikar ang imong account sa dili pa magpadala og aplikasyon o tanyag sa pagkuha.'],
   'Job type & schedule': ['Uri at iskedyul ng trabaho', 'Matang ug iskedyul sa trabaho'],
   'Previous month': ['Nakaraang buwan', 'Miaging bulan'],
   'Next month': ['Susunod na buwan', 'Sunod nga bulan'],
