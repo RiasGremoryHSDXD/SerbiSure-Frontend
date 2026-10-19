@@ -55,6 +55,86 @@ function mount(t) {
 const content = node => node.text || node.children.map(content).join('');
 const participant = (id, role) => ({ id, name: id + ' Name', account_type: role, profile_link: null, rating: 0 });
 
+function bookingDetails(t, role, bookingType, ongoing = false) {
+  const screen = mount(t), alerts = [], actions = [], closed = [];
+  let language = 'English';
+  const native = surfaces();
+  native.Platform = { OS: 'android' };
+  native.Dimensions = { get: () => ({ width: 390 }) };
+  native.Animated.Value = class { setValue() {} };
+  native.Animated.spring = native.Animated.timing = () => ({ start: callback => callback?.() });
+  native.Alert.alert = (...args) => alerts.push(args);
+  native.ScrollView = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({ scrollTo() {} }), []);
+    return React.createElement('ScrollView', props, props.children);
+  });
+  for (const name of ['KeyboardAvoidingView', 'TextInput']) native[name] = name;
+  const address = { streetAddress: '', floorUnit: '', zipcode: '' };
+  const initialDetails = { bookingType, startDate: '10/20/2026', endDate: ongoing ? '' : bookingType === 'short_term' ? '10/20/2026' : '11/20/2026',
+    salary: bookingType === 'short_term' ? '600' : '6500', serviceCategory: ['Cleaning'], workSetup: 'stay_out', workHours: '08:00 AM - 12:00 PM', days: [], region: 'Region X', location: 'Agusan' };
+  const { BookingModal } = load('src/features/bookings/components/BookingModal.tsx', {
+    'react-native': native, 'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) }, '@expo/vector-icons': { Ionicons: 'Icon' },
+    '../../../shared/localization/LanguageContext': { useLanguage: () => ({ tr: text => localization.translateMessage(language, text) }) },
+    '../workSetup': { workSetupLabel: value => value }, '../engagementForm': load('src/features/bookings/engagementForm.ts'),
+    '../bookingAcceptance': load('src/features/bookings/bookingAcceptance.ts', { 'react-native': native }),
+    './BookingOfferReview': { BookingOfferReview: 'BookingOfferReview' }, './WorkScheduleFields': { WorkScheduleFields: () => null },
+    './WorkLocationFields': { WorkLocationFields: () => null }, '../workLocation': { workLocationError: () => null },
+    '../hooks/useWorkLocation': { useWorkLocation: () => address }, '../../posting/validation': { validatePostingRate: () => null },
+    '../../../shared/ui/ProfileAvatar': { ProfileAvatar: 'ProfileAvatar' }, '../api/bookingApi': { fetchMinimumWage: async () => null },
+    '../../../shared/theme/theme': { default: { colors: {}, typography: { fontFamily: {} } } }, '../../../../assets/serbisure-logo.png': 1,
+  });
+  const render = (status = {}) => screen.render(React.createElement(BookingModal, {
+    visible: true, readOnly: true, canRespond: true, userRole: role, contactName: 'Other Participant', initialDetails,
+    onClose: () => closed.push(true), onKasambahayConfirm: () => { const request = deferred(); actions.push(request); return request.promise; }, ...status,
+  }));
+  const pressAccept = () => screen.act(() => screen.all('Pressable').find(node => content(node) === localization.translateMessage(language, 'Agree & Accept')).props.onPress());
+  render();
+  return { ...screen, render, pressAccept, alerts, actions, closed, language(value) { language = value; render(); } };
+}
+
+for (const role of ['homeowner', 'kasambahay']) {
+  for (const type of ['short_term', 'fixed_long_term', 'ongoing_long_term']) {
+    test(`${role}: ${type} acceptance uses the correct translated prompt and waits for confirmation`, async t => {
+      const screen = bookingDetails(t, role, type === 'short_term' ? 'short_term' : 'long_term', type === 'ongoing_long_term');
+      for (const language of ['English', 'Tagalog', 'Bisaya']) {
+        screen.language(language); screen.pressAccept();
+        const [title, message, buttons] = screen.alerts.at(-1);
+        assert.equal(title, localization.translateMessage(language, type === 'short_term' ? 'Accept booking?' : 'Confirm Contract Agreement'));
+        assert.equal(message, localization.translateMessage(language, type === 'short_term'
+          ? 'Accept this short-term booking with the dates, hours, and pay shown?'
+          : 'Accept this long-term booking? Sign the contract and register it at the Barangay separately.'));
+        assert.equal(buttons[0].style, 'cancel');
+        assert.equal(buttons[0].text, localization.translateMessage(language, 'Review Details'));
+        assert.equal(buttons[1].text, localization.translateMessage(language, 'Agree & Accept'));
+        assert.equal(screen.actions.length, 0);
+      }
+      const confirm = screen.alerts.at(-1)[2][1].onPress;
+      screen.act(() => { confirm(); confirm(); }); await tick();
+      assert.equal(screen.actions.length, 1);
+      assert.equal(screen.closed.length, 0);
+      screen.actions[0].resolve(); await tick();
+      assert.equal(screen.closed.length, 1);
+    });
+  }
+}
+
+test('failed booking acceptance stays open with a concise translated connection error and allows retry', async t => {
+  const screen = bookingDetails(t, 'kasambahay', 'short_term');
+  screen.language('Bisaya'); screen.pressAccept();
+  screen.act(() => screen.alerts.at(-1)[2][1].onPress()); await tick();
+  screen.actions[0].reject(new Error('Request timed out (15s). Could not reach server at http://private-server/api/v1/booking/id/accept/')); await tick();
+  assert.equal(screen.closed.length, 0);
+  assert.deepEqual(screen.alerts.at(-1), [localization.translateMessage('Bisaya', 'Booking not updated'),
+    localization.translateMessage('Bisaya', 'Could not connect. Check your connection and try again.')]);
+  screen.pressAccept(); screen.act(() => screen.alerts.at(-1)[2][1].onPress()); await tick();
+  assert.equal(screen.actions.length, 2);
+  screen.actions[1].reject(null); await tick();
+  assert.equal(screen.alerts.at(-1)[1], localization.translateMessage('Bisaya', 'Please try again.'));
+  screen.pressAccept(); screen.act(() => screen.alerts.at(-1)[2][1].onPress()); await tick();
+  screen.actions[2].resolve(); await tick();
+  assert.equal(screen.closed.length, 1);
+});
+
 function browse(t, role) {
   const screen = mount(t), requests = [], saves = [], chats = [], refreshes = [];
   const native = surfaces();

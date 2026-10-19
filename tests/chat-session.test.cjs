@@ -86,8 +86,9 @@ function presenceClient(t) {
 }
 
 function screen(t, options = {}) {
-  let user = { id: 'account-one', token: 'token-one', accountType: 'Homeowner' };
+  let user = { id: 'account-one', token: 'token-one', accountType: options.accountType || 'Homeowner' };
   const requests = [], sends = [], removals = [], previews = [], alerts = [], deleted = new Set(), entrances = [], scrolls = [], dialogs = [];
+  const bookingResponses = [], bookingModals = [], closedBookings = [];
   const live = presenceClient(t); live.start(user.id, user.token);
   const presenceHook = compile('src/shared/realtime/useChatPresence.ts', { './index': { realtime: live.client } });
   const realtimeStatus = compile('src/shared/realtime/useRealtimeStatus.ts', { './index': { realtime: live.client } });
@@ -149,8 +150,11 @@ function screen(t, options = {}) {
     '../../../shared/realtime': { realtime: live.client },
     '../../../shared/realtime/useRealtimeStatus': realtimeStatus,
     '../../../shared/realtime/useChatPresence': presenceHook,
-    '../bookingCards': { mapBookingCard: () => null }, '../api/bookingOffersApi': {},
-    '../../bookings/components/BookingModal': { BookingModal: () => { dialogs.push('booking'); return null; } },
+    '../bookingCards': { mapBookingCard: () => null }, '../api/bookingOffersApi': {
+      respondToBookingOffer: (...args) => { const request = { ...deferred(), args }; bookingResponses.push(request); return request.promise; },
+    },
+    '../../bookings/bookingAcceptance': compile('src/features/bookings/bookingAcceptance.ts', { 'react-native': native }),
+    '../../bookings/components/BookingModal': { BookingModal: props => { dialogs.push('booking'); bookingModals.push(props); return null; } },
     '../../profile/components/UserProfileView': { UserProfileView: () => { dialogs.push('profile'); return null; } },
     '../../profile/components/OfficialProfileModal': { OfficialProfileModal: () => { dialogs.push('official'); return null; } },
     '../hooks/useChatSafety': { useChatSafety: () => null },
@@ -158,7 +162,7 @@ function screen(t, options = {}) {
     '../threadCache': threadCache,
     '../replyRelationships': replyRelationships,
     '../store/chatStore': { chatStore: { isMessageDeleted: id => deleted.has(id), markMessageDeleted: id => deleted.add(id), loadInbox: async () => [], addOrUpdateChat: entry => previews.push(entry) } },
-    '../../bookings/store/savedJobsStore': {}, '../../../shared/api/config': {}, '../../../shared/api/httpClient': {},
+    '../../bookings/store/savedJobsStore': { savedJobsStore: { markJobClosed: id => closedBookings.push(id) } }, '../../../shared/api/config': {}, '../../../shared/api/httpClient': {},
   });
   const originalFrame = global.requestAnimationFrame;
   global.requestAnimationFrame = callback => { callback(); return 0; };
@@ -179,7 +183,7 @@ function screen(t, options = {}) {
     renderer.flushSync(() => renderer.updateContainer(null, root, null));
     renderer.flushPassiveEffects(); global.requestAnimationFrame = originalFrame;
   });
-  return { update, requests, sends, removals, previews, alerts, nodes, threadCache, deleted, entrances, scrolls, dialogs, live,
+  return { update, requests, sends, removals, previews, alerts, nodes, threadCache, deleted, entrances, scrolls, dialogs, live, bookingResponses, bookingModals, closedBookings,
     unmount() { renderer.flushSync(() => renderer.updateContainer(null, root, null)); renderer.flushPassiveEffects(); },
     event(event) { renderer.flushSync(() => live.event(event)); },
     texts: () => nodes().filter(node => node.text !== undefined).map(node => node.text).join(' '),
@@ -187,6 +191,56 @@ function screen(t, options = {}) {
     renewToken() { user = { ...user, token: 'renewed-token' }; live.start(user.id, user.token); },
   };
 }
+
+for (const accountType of ['Homeowner', 'Kasambahay']) {
+  for (const duration of ['short_term', 'fixed_long_term', 'ongoing_long_term']) {
+    test(`${accountType}: chat details and quick acceptance use the saved ${duration} booking type`, async t => {
+      const role = accountType === 'Homeowner' ? 'homeowner' : 'kasambahay';
+      const chat = screen(t, { accountType, deferEntrance: true });
+      const bookingType = duration === 'short_term' ? 'short_term' : 'long_term';
+      const card = { bookingId: 'booking-one', proposalId: 'proposal-one', title: 'BOOKING OFFER', bookedByName: 'Offer Sender', canRespond: true,
+        bookingType, startDate: '10/20/2026', endDate: duration === 'ongoing_long_term' ? '' : duration === 'short_term' ? '10/20/2026' : '11/20/2026' };
+      chat.threadCache.cacheThread(JSON.stringify(['account-one', 'Other Person']), [{ id: 'offer-message', sender: 'system', bookingInfo: card, time: 'Now' }], chat.threadCache.threadCacheGeneration());
+      chat.update('Other Person', true, { contactRole: accountType === 'Homeowner' ? 'Kasambahay' : 'Homeowner', userRole: role });
+      const content = node => node.text || node.children.map(content).join('');
+      renderer.flushSync(() => chat.nodes().find(node => node.type === 'Pressable' && content(node).includes('Offer Sender')).props.onPress());
+      assert.equal(chat.bookingModals.at(-1).userRole, role);
+      assert.equal(chat.bookingModals.at(-1).bookingType, bookingType);
+      assert.equal(chat.bookingModals.at(-1).initialDetails.bookingType, bookingType);
+      assert.equal(chat.bookingModals.at(-1).canRespond, true);
+      renderer.flushSync(() => chat.bookingModals.at(-1).onClose());
+      const accept = () => renderer.flushSync(() => chat.nodes().find(node => node.type === 'Pressable' && content(node) === 'Agree & Accept').props.onPress({ stopPropagation() {} }));
+      accept();
+      assert.equal(chat.bookingResponses.length, 0);
+      assert.equal(chat.alerts.at(-1)[0], bookingType === 'short_term' ? 'Accept booking?' : 'Confirm Contract Agreement');
+      if (bookingType === 'short_term') assert.doesNotMatch(chat.alerts.at(-1)[1], /contract|long-term|registration/i);
+      const confirm = chat.alerts.at(-1)[2][1].onPress;
+      renderer.flushSync(() => { confirm(); confirm(); });
+      assert.equal(chat.bookingResponses.length, 1);
+      assert.equal(chat.bookingResponses[0].args[0], 'token-one');
+      assert.equal(chat.bookingResponses[0].args[1].bookingType, bookingType);
+      assert.equal(chat.bookingResponses[0].args[2], 'accept');
+      assert.equal(chat.closedBookings.length, 0);
+      chat.bookingResponses[0].resolve(); await tick();
+      assert.deepEqual(chat.closedBookings, ['booking-one']);
+      assert.ok(!chat.nodes().some(node => node.type === 'Pressable' && content(node) === 'Agree & Accept'));
+    });
+  }
+}
+
+test('quick booking acceptance keeps the offer available after a connection failure', async t => {
+  const chat = screen(t, { accountType: 'Homeowner', deferEntrance: true });
+  const card = { bookingId: 'booking-one', title: 'BOOKING OFFER', bookedByName: 'Offer Sender', canRespond: true, bookingType: 'short_term', startDate: '10/20/2026' };
+  chat.threadCache.cacheThread(JSON.stringify(['account-one', 'Other Person']), [{ id: 'offer', sender: 'system', bookingInfo: card, time: 'Now' }], chat.threadCache.threadCacheGeneration());
+  chat.update('Other Person', true, { contactRole: 'Kasambahay' });
+  const content = node => node.text || node.children.map(content).join('');
+  renderer.flushSync(() => chat.nodes().find(node => node.type === 'Pressable' && content(node) === 'Agree & Accept').props.onPress({ stopPropagation() {} }));
+  renderer.flushSync(() => chat.alerts.at(-1)[2][1].onPress());
+  chat.bookingResponses[0].reject(new Error('Network request failed')); await tick();
+  assert.deepEqual(chat.alerts.at(-1), ['Booking not updated', 'Could not connect. Check your connection and try again.']);
+  assert.deepEqual(chat.closedBookings, []);
+  assert.ok(chat.nodes().some(node => node.type === 'Pressable' && content(node) === 'Agree & Accept'));
+});
 
 test('reply relationships cover incoming, outgoing and self replies', () => {
   const relationship = replyRelationships.getReplyRelationship;

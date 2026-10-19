@@ -1,6 +1,7 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import type { WorkSetup } from '../workSetup';
 import { workSetupLabel } from '../workSetup';
+import { confirmBookingAcceptance, bookingResponseMessage } from '../bookingAcceptance';
 import { buildEngagementSchedule, normalizeServices, toggleService, SERVICE_CHOICES, WORK_SHIFTS, type WorkShift } from '../engagementForm';
 import { BookingOfferReview, type BookingOfferStep } from './BookingOfferReview';
 import { WorkScheduleFields } from './WorkScheduleFields';
@@ -288,7 +289,7 @@ export function BookingModal({
     submittingRef.current = true; setSubmitting(true);
     void Promise.resolve().then(action).then(handleClose).catch(error => {
       submittingRef.current = false; setSubmitting(false);
-      Alert.alert('Cannot Confirm', error instanceof Error ? error.message : 'Please try again.');
+      Alert.alert(uiText('Booking not updated'), uiText(bookingResponseMessage(error)));
     });
   };
 
@@ -485,21 +486,7 @@ export function BookingModal({
 
                 <Pressable
                   disabled={submitting} style={({ pressed }) => [styles.agreeBtn, { flex: 1 }, pressed && styles.pressedBtn]}
-                  onPress={() => {
-                    Alert.alert(
-                      'Confirm Contract Agreement',
-                      'Accept these saved booking terms? Long-term signing and registration remain separate.',
-                      [
-                        { text: 'Review Details', style: 'cancel' },
-                        {
-                          text: 'Agree & Accept',
-                          onPress: () => {
-                            runResponse(onKasambahayConfirm);
-                          },
-                        },
-                      ]
-                    );
-                  }}
+                  onPress={() => confirmBookingAcceptance(selectedBookingType, uiText, () => runResponse(onKasambahayConfirm))}
                 >
                   <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
                   <Text style={styles.agreeBtnText}>{uiText("Agree & Accept")}</Text>

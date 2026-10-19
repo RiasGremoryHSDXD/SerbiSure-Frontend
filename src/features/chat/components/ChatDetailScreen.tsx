@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { BookingModal } from '../../bookings/components/BookingModal';
+import { confirmBookingAcceptance, bookingResponseMessage } from '../../bookings/bookingAcceptance';
 import { UserProfileView } from '../../profile/components/UserProfileView';
 import { OfficialProfileModal } from '../../profile/components/OfficialProfileModal';
 import { useChatSafety } from '../hooks/useChatSafety';
@@ -693,9 +694,16 @@ function ChatDetailSession({
   const handleKasambahayConfirm = (id: string) => handleOfferResponse(id, 'accept');
   const handleKasambahayDecline = (id: string) => handleOfferResponse(id, 'reject');
   const confirmFromCard = (id: string, action: 'accept' | 'reject') => {
-    void handleOfferResponse(id, action).catch(error => {
-      if (sessionActive.current) Alert.alert('Cannot Confirm', error instanceof Error ? error.message : 'Please try again.');
-    });
+    const card = messages.find(message => message.id === id)?.bookingInfo;
+    if (!card?.canRespond || responseBusyRef.current) return;
+    const respond = () => {
+      if (!sessionActive.current) return;
+      void handleOfferResponse(id, action).catch(error => {
+        if (sessionActive.current) Alert.alert(uiText('Booking not updated'), uiText(bookingResponseMessage(error)));
+      });
+    };
+    if (action === 'accept') confirmBookingAcceptance(card.bookingType, uiText, respond);
+    else respond();
   };
 
   const handleSendOffer = async (details: BookingConfirmData) => {
@@ -1979,7 +1987,7 @@ function ChatDetailSession({
           userRole={isHomeowner ? 'homeowner' : 'kasambahay'}
           initialDetails={activeBookingDetails}
           token={effectiveToken}
-          bookingType="long_term"
+          bookingType={activeBookingDetails?.bookingType}
           onConfirm={handleSendOffer}
           onKasambahayConfirm={() => {
             if (activeBookingMsgId) {

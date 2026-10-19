@@ -279,6 +279,11 @@ test('chat offers use durable request keys and acceptance waits for authoritativ
   }, () => assert.rejects(offersApi.respondToBookingOffer('session', { ...card, proposalId: 'proposal-1' }, 'accept'), /below the minimum/));
   await withFetch(async () => response({ booking: { booking_status: 'Pending' } }),
     () => assert.rejects(offersApi.respondToBookingOffer('session', card, 'accept'), /did not confirm/));
+  await withFetch(async () => response({ detail: { code: 'booking_restricted', detail: 'Booking and posting are restricted until next month.' } }, 403),
+    () => assert.rejects(offersApi.respondToBookingOffer('session', card, 'accept'), error => {
+      assert.equal(error.message, 'Booking and posting are restricted until next month.');
+      return true;
+    }));
 });
 
 test('booking lists distinguish empty results from server failures and malformed responses', async () => {

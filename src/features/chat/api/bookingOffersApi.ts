@@ -11,11 +11,19 @@ export interface ChatOfferPayload extends PostingPayload {
   daily_end_time: string;
 }
 
+function errorMessages(data: unknown): string[] {
+  if (typeof data === 'string') return data.trim() ? [data.trim()] : [];
+  if (Array.isArray(data)) return data.flatMap(errorMessages);
+  if (data && typeof data === 'object') return Object.entries(data)
+    .filter(([key]) => key !== 'code').flatMap(([, value]) => errorMessages(value));
+  return [];
+}
+
 async function result<T>(path: string, token: string, method: string, body: unknown, key?: string): Promise<T> {
   const res = await requestResponse(path, { token, method, headers: key ? { 'Idempotency-Key': key } : undefined, body: JSON.stringify(body) });
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    const errors = data && typeof data === 'object' ? Object.values(data).flat().filter(value => typeof value === 'string').join(' ') : '';
+    const errors = errorMessages(data).join(' ');
     throw new Error(errors || 'Unable to save this booking. Please try again.');
   }
   if (!data) throw new Error('Unexpected booking response. Refresh the conversation before retrying.');
