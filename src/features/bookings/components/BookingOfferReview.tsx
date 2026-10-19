@@ -29,7 +29,8 @@ export function BookingOfferReview(props: Props) {
   const days = WORK_DAYS.filter(day => props.days.includes(day.value)).map(day => uiText(day.label)).join(', ');
   const sections = [
     { title: 'Service & setup', icon: 'briefcase-outline' as const, step: 1 as const, rows: [
-      ['Services', services], ['Engagement', short ? 'Short-term' : 'Long-term'], ['Work setup', workSetupLabel(props.workSetup)],
+      ['Services', services], ['Engagement', short ? 'Short-term' : 'Long-term'],
+      ...(!short ? [['Work setup', workSetupLabel(props.workSetup)]] : []),
     ] },
     { title: 'Schedule', icon: 'calendar-outline' as const, step: 2 as const, rows: [
       [short ? 'Service date' : 'Starts', props.startDate],

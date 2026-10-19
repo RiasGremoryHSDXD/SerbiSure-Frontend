@@ -1,4 +1,5 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
+import { useUser } from '../../auth/session/UserContext';
 import type { WorkSetup } from '../workSetup';
 import { workSetupLabel } from '../workSetup';
 import { confirmBookingAcceptance, bookingResponseMessage } from '../bookingAcceptance';
@@ -109,6 +110,7 @@ export function BookingModal({
   isAcquired = false,
 }: BookingModalProps) {
   const { tr: uiText } = useUiLanguage();
+  const { user } = useUser();
   const insets = useSafeAreaInsets();
 
   // Slide animation: Right to Left
@@ -149,7 +151,7 @@ export function BookingModal({
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   };
   useEffect(() => { scrollRef.current?.scrollTo({ y: 0, animated: false }); }, [offerStep]);
-  useEffect(() => { setFormError(null); }, [serviceCategory.join(','), workSetup, selectedBookingType, startDate, endDate,
+  useEffect(() => { setFormError(null); }, [serviceCategory.join(','), workSetup, selectedBookingType, startDate, endDate, ongoing,
     workHours, selectedShift, selectedDays.join(','), region, address.selectedProvince?.code, address.selectedCity?.code,
     address.selectedBarangay?.code, address.streetAddress, address.zipcode, salary]);
 
@@ -210,10 +212,10 @@ export function BookingModal({
     setSelectedDays(initialDetails?.days || []);
     setSalary(initialDetails?.salary || '');
     setServiceCategory(normalizeServices(initialDetails?.serviceCategory || []));
-    setWorkSetup(initialDetails?.workSetup || null);
+    setWorkSetup(defaultType === 'short_term' && !readOnly ? 'stay_out' : initialDetails?.workSetup || null);
     setSavedRegion(initialDetails?.region || '');
 
-  }, [visible, initialDetails, effectiveJobPost, bookingType]);
+  }, [visible, readOnly, initialDetails, effectiveJobPost, bookingType]);
 
   useEffect(() => {
     let current = true;
@@ -233,7 +235,7 @@ export function BookingModal({
   const stepError = (step: BookingOfferStep): string | null => {
     if (step === 1) {
       if (!serviceCategory.length) return 'Choose at least one service to continue.';
-      if (!workSetup) return 'Choose Stay-in or Stay-out to continue.';
+      if (selectedBookingType === 'long_term' && !workSetup) return 'Choose Stay-in or Stay-out to continue.';
     } else if (step === 2) {
       try { getSchedule(); }
       catch (error) { return error instanceof Error ? error.message : 'Choose a valid work schedule.'; }
@@ -274,12 +276,12 @@ export function BookingModal({
       workHours: selectedBookingType === 'short_term' && selectedShift !== 'custom' ? WORK_SHIFTS.find(item => item.value === selectedShift)!.hours : workHours,
       location: location.trim(), days: schedule.work_days,
       salary: salary.trim(), bookingType: selectedBookingType, jobPost: effectiveJobPost,
-      serviceCategory: normalizeServices(serviceCategory), workSetup: workSetup!, region,
+      serviceCategory: normalizeServices(serviceCategory), workSetup: selectedBookingType === 'short_term' ? 'stay_out' : workSetup!, region,
       province: address.selectedProvince!.name, city: address.selectedCity!.name, barangay: address.selectedBarangay!.name,
       street: address.streetAddress.trim(), floorUnit: address.floorUnit.trim(), zipCode: address.zipcode.trim(),
     })).then(handleClose).catch(error => {
       submittingRef.current = false; setSubmitting(false);
-      Alert.alert(uiText('Cannot Send Offer'), uiText(error instanceof Error ? error.message : 'Please try again.'));
+      Alert.alert(uiText('Cannot Send Offer'), uiText(bookingResponseMessage(error)));
     });
 
   };
@@ -377,15 +379,15 @@ export function BookingModal({
               })}</View>
               <Text style={styles.helperText}>{serviceCategory.includes('All-around') ? 'All-around includes all five services.' : 'Select one or more services. All five become All-around.'}</Text>
             </View>
-            <View style={styles.formGroup}>
+            {selectedBookingType === 'long_term' && <View style={styles.formGroup}>
               <Text style={styles.fieldLabel}>{uiText("WORK SETUP")}</Text>
               <View style={styles.typeSelectorRow}>{(['stay_in', 'stay_out'] as const).map(value => <Pressable key={value}
                 accessibilityRole="button" accessibilityState={{ selected: workSetup === value }} disabled={submitting}
                 style={[styles.setupChoice, workSetup === value && styles.choiceActive]} onPress={() => setWorkSetup(value)}>
                 <Ionicons name={value === 'stay_in' ? 'home-outline' : 'walk-outline'} size={20} color="#9A3412" />
-                <Text style={styles.choiceText}>{workSetupLabel(value)}</Text>
+                <Text style={styles.choiceText}>{uiText(workSetupLabel(value))}</Text>
               </Pressable>)}</View>
-            </View>
+            </View>}
             <View style={styles.formGroup}>
               <Text style={styles.fieldLabel}>{uiText("ENGAGEMENT TYPE")}</Text>
               <View style={styles.typeSelectorRow}>{(['short_term', 'long_term'] as const).map(value => <Pressable key={value}
@@ -394,6 +396,7 @@ export function BookingModal({
                 onPress={() => {
                   if (value !== selectedBookingType) { setSalary(''); setWorkHours(''); setSelectedShift(null); setSelectedDays([]); setEndDate(''); setOngoing(false); }
                   setSelectedBookingType(value);
+                  if (value === 'short_term') setWorkSetup('stay_out');
                 }}>
                 <Text style={styles.choiceText}>{value === 'short_term' ? uiText("Short-term") : uiText("Long-term")}</Text>
                 <Text style={styles.helperText}>{value === 'short_term' ? 'A dated shift · daily pay' : 'Ongoing work · monthly pay'}</Text>
@@ -408,7 +411,16 @@ export function BookingModal({
             disabled={!visible || submitting} />}
           {!readOnly && offerStep === 3 && <>
             <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>{uiText("WORK ADDRESS")}</Text>
+              <View style={styles.locationHeaderRow}>
+                <Text style={styles.fieldLabel}>{uiText("WORK ADDRESS")}</Text>
+                {user && (user.barangay || user.city) ? <Pressable accessibilityRole="button"
+                  disabled={submitting || address.loadingLocations}
+                  style={[styles.useProfileAddressBtn, (submitting || address.loadingLocations) && styles.disabledBtn]}
+                  onPress={() => { if (!submittingRef.current && !address.loadingLocations) address.applyProfileAddress(user); }}>
+                  <Ionicons name="location" size={13} color="#EA580C" />
+                  <Text style={styles.useProfileAddressText}>{uiText('Use Profile Address')}</Text>
+                </Pressable> : null}
+              </View>
               <WorkLocationFields form={address} disabled={submitting} />
             </View>
             <View style={styles.formGroup}>
@@ -630,6 +642,16 @@ const styles = StyleSheet.create({
   formGroup: {
     marginBottom: 16,
   },
+  locationHeaderRow: {
+    flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8,
+  },
+  useProfileAddressBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 20, maxWidth: '100%',
+    paddingVertical: 7, paddingHorizontal: 10, backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FED7AA',
+  },
+  useProfileAddressText: {
+    flexShrink: 1, color: '#EA580C', fontSize: 11, fontFamily: THEME.typography.fontFamily.mainBold,
+  },
   fieldLabel: {
     fontSize: 11,
     fontWeight: '800',
@@ -764,14 +786,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#FFFBEB',
     borderRadius: 16,
+    paddingHorizontal: 12,
     paddingVertical: 14,
     borderWidth: 1,
     borderColor: '#FDE68A',
   },
   pendingBannerText: {
+    flex: 1,
+    flexShrink: 1,
     color: '#B45309',
     fontSize: 13,
+    lineHeight: 18,
     fontWeight: '700',
+    textAlign: 'center',
   },
   policyCard: {
     flexDirection: 'row',

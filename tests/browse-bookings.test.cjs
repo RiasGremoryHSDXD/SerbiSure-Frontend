@@ -55,11 +55,12 @@ function mount(t) {
 const content = node => node.text || node.children.map(content).join('');
 const participant = (id, role) => ({ id, name: id + ' Name', account_type: role, profile_link: null, rating: 0 });
 
-function bookingDetails(t, role, bookingType, ongoing = false) {
+function bookingDetails(t, role, bookingType, ongoing = false, options = {}) {
   const screen = mount(t), alerts = [], actions = [], closed = [];
   let language = 'English';
   const native = surfaces();
   native.Platform = { OS: 'android' };
+  native.Keyboard = { dismiss() {} };
   native.Dimensions = { get: () => ({ width: 390 }) };
   native.Animated.Value = class { setValue() {} };
   native.Animated.spring = native.Animated.timing = () => ({ start: callback => callback?.() });
@@ -69,27 +70,187 @@ function bookingDetails(t, role, bookingType, ongoing = false) {
     return React.createElement('ScrollView', props, props.children);
   });
   for (const name of ['KeyboardAvoidingView', 'TextInput']) native[name] = name;
-  const address = { streetAddress: '', floorUnit: '', zipcode: '' };
-  const initialDetails = { bookingType, startDate: '10/20/2026', endDate: ongoing ? '' : bookingType === 'short_term' ? '10/20/2026' : '11/20/2026',
+  const address = options.edit ? { selectedRegion: { name: 'Region X' }, selectedProvince: { name: 'Misamis Oriental' },
+    selectedCity: { name: 'Cagayan de Oro' }, selectedBarangay: { name: 'Agusan' }, streetAddress: 'Lot 3', floorUnit: '', zipcode: '9000' }
+    : { streetAddress: '', floorUnit: '', zipcode: '' };
+  const initialDetails = options.initialDetails === null ? null : options.initialDetails || { bookingType, startDate: '10/20/2026', endDate: ongoing ? '' : bookingType === 'short_term' ? '10/20/2026' : '11/20/2026',
     salary: bookingType === 'short_term' ? '600' : '6500', serviceCategory: ['Cleaning'], workSetup: 'stay_out', workHours: '08:00 AM - 12:00 PM', days: [], region: 'Region X', location: 'Agusan' };
+  const engagement = load('src/features/bookings/engagementForm.ts');
+  const languageApi = { useLanguage: () => ({ tr: text => localization.translateMessage(language, text), formatDate: (date, style) => localization.formatLocalizedDate(language, date, style) }) };
+  const theme = { default: { colors: {}, typography: { fontFamily: {} } } };
+  const review = load('src/features/bookings/components/BookingOfferReview.tsx', { 'react-native': native, '@expo/vector-icons': { Ionicons: 'Icon' },
+    '../../../shared/localization/LanguageContext': languageApi, '../../../shared/theme/theme': theme,
+    '../engagementForm': engagement, '../workSetup': load('src/features/bookings/workSetup.ts') });
+  const scheduleFields = load('src/features/bookings/components/WorkScheduleFields.tsx', { 'react-native': native, '@expo/vector-icons': { Ionicons: 'Icon' },
+    '../../../shared/localization/LanguageContext': languageApi, '../engagementForm': engagement });
+  const realLocation = options.locationService && load('src/features/bookings/hooks/useWorkLocation.ts', {
+    'react-native': native, '../../../shared/services/locationService': options.locationService,
+  });
+  const locationFields = options.locationService ? load('src/features/bookings/components/WorkLocationFields.tsx', {
+    'react-native': native, '@expo/vector-icons': { Ionicons: 'Icon' }, '../../../shared/localization/LanguageContext': languageApi,
+    '../../../shared/ui/SearchablePickerModal': { SearchablePickerModal: () => null },
+  }) : { WorkLocationFields: () => null };
   const { BookingModal } = load('src/features/bookings/components/BookingModal.tsx', {
     'react-native': native, 'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) }, '@expo/vector-icons': { Ionicons: 'Icon' },
-    '../../../shared/localization/LanguageContext': { useLanguage: () => ({ tr: text => localization.translateMessage(language, text) }) },
-    '../workSetup': { workSetupLabel: value => value }, '../engagementForm': load('src/features/bookings/engagementForm.ts'),
+    '../../../shared/localization/LanguageContext': languageApi,
+    '../../auth/session/UserContext': { useUser: () => ({ user: options.user || {} }) },
+    '../workSetup': load('src/features/bookings/workSetup.ts'), '../engagementForm': engagement,
     '../bookingAcceptance': load('src/features/bookings/bookingAcceptance.ts', { 'react-native': native }),
-    './BookingOfferReview': { BookingOfferReview: 'BookingOfferReview' }, './WorkScheduleFields': { WorkScheduleFields: () => null },
-    './WorkLocationFields': { WorkLocationFields: () => null }, '../workLocation': { workLocationError: () => null },
-    '../hooks/useWorkLocation': { useWorkLocation: () => address }, '../../posting/validation': { validatePostingRate: () => null },
-    '../../../shared/ui/ProfileAvatar': { ProfileAvatar: 'ProfileAvatar' }, '../api/bookingApi': { fetchMinimumWage: async () => null },
-    '../../../shared/theme/theme': { default: { colors: {}, typography: { fontFamily: {} } } }, '../../../../assets/serbisure-logo.png': 1,
+    './BookingOfferReview': review, './WorkScheduleFields': scheduleFields,
+    './WorkLocationFields': locationFields, '../workLocation': load('src/features/bookings/workLocation.ts'),
+    '../hooks/useWorkLocation': realLocation || { useWorkLocation: () => address }, '../../posting/validation': load('src/features/posting/validation.ts', { './postingConfig': load('src/features/posting/postingConfig.ts') }),
+    '../../../shared/ui/ProfileAvatar': { ProfileAvatar: 'ProfileAvatar' }, '../api/bookingApi': { fetchMinimumWage: async (_token, type) => ({ booking_type: type, rate_period: type === 'long_term' ? 'month' : 'day', minimum_rate: type === 'long_term' ? '6500' : '600' }) },
+    '../../../shared/theme/theme': theme, '../../../../assets/serbisure-logo.png': 1,
   });
   const render = (status = {}) => screen.render(React.createElement(BookingModal, {
-    visible: true, readOnly: true, canRespond: true, userRole: role, contactName: 'Other Participant', initialDetails,
-    onClose: () => closed.push(true), onKasambahayConfirm: () => { const request = deferred(); actions.push(request); return request.promise; }, ...status,
+    visible: true, readOnly: !options.edit, canRespond: !options.edit, userRole: role, bookingType, contactName: 'Other Participant', initialDetails,
+    onClose: () => closed.push(true), onKasambahayConfirm: () => { const request = deferred(); actions.push(request); return request.promise; },
+    onConfirm: details => { const request = { ...deferred(), details }; actions.push(request); return request.promise; }, ...status,
   }));
   const pressAccept = () => screen.act(() => screen.all('Pressable').find(node => content(node) === localization.translateMessage(language, 'Agree & Accept')).props.onPress());
   render();
-  return { ...screen, render, pressAccept, alerts, actions, closed, language(value) { language = value; render(); } };
+  const press = label => {
+    screen.act(() => {
+      const node = screen.all('Pressable').find(node => node.props.accessibilityLabel === label || content(node) === label || node.children.some(child => child.type === 'Text' && content(child) === label));
+      assert.ok(node, 'Missing button: ' + label); assert.ok(!node.props.disabled, 'Disabled button: ' + label); node.props.onPress();
+    });
+    renderer.flushPassiveEffects();
+  };
+  return { ...screen, render, pressAccept, press, text: () => content(screen.find('Modal')), alerts, actions, closed, language(value) { language = value; render(); } };
+}
+
+for (const role of ['homeowner', 'kasambahay']) {
+  test(`${role}: chat offer uses the signed-in profile address, allows edits and sends the chosen address`, async t => {
+    const profile = { city: 'City of Cagayan De Oro', barangay: 'Brgy. Pagatpat', region: 'Northern Mindanao - Region X',
+      province: 'Misamis Oriental', street: 'Lot 5555', zipcode: '9000' };
+    const screen = bookingDetails(t, role, 'short_term', false, { edit: true, user: profile,
+      initialDetails: { bookingType: 'short_term', startDate: '12/31/2099', workHours: '08:00 AM - 12:00 PM', serviceCategory: ['Cleaning'], salary: '800' },
+      locationService: {
+        getRegions: async () => [{ code: '10', name: 'Region X', displayName: profile.region }],
+        getProvinces: async () => [{ code: '1043', name: profile.province }],
+        getCities: async () => [{ code: '104305', name: profile.city }],
+        getBarangays: async () => [{ code: '104305001', name: 'Pagatpat' }],
+        getZipCodeForCity: () => '9000',
+      },
+    }); await tick(); screen.press('Next'); screen.press('Next');
+    for (const language of ['English', 'Tagalog', 'Bisaya']) {
+      screen.language(language); assert.ok(screen.text().includes(localization.translateMessage(language, 'Use Profile Address')));
+    }
+    screen.language('English'); screen.press('Use Profile Address'); await tick();
+    for (const value of ['Northern Mindanao - Region X', 'Misamis Oriental', profile.city, 'Pagatpat']) assert.ok(screen.text().includes(value));
+    const street = () => screen.all('TextInput').find(node => node.props.accessibilityLabel === 'Work street address');
+    assert.equal(street().props.value, profile.street);
+    assert.equal(screen.all('TextInput').find(node => node.props.accessibilityLabel === 'Work ZIP code').props.value, profile.zipcode);
+    screen.act(() => street().props.onChangeText('Lot 77')); screen.press('Review Offer');
+    assert.match(screen.text(), /Lot 77, Pagatpat, City of Cagayan De Oro/);
+    screen.press('Send Offer'); await tick();
+    assert.equal(screen.actions[0].details.street, 'Lot 77');
+    assert.equal(screen.actions[0].details.barangay, 'Pagatpat');
+    assert.equal(screen.actions[0].details.zipCode, '9000');
+    assert.equal(screen.actions[0].details.salary, '800');
+    screen.actions[0].resolve(); await tick();
+  });
+}
+
+test('chat offer hides the address shortcut when no profile address is saved and on saved offer details', async t => {
+  const screen = bookingDetails(t, 'homeowner', 'short_term', false, { edit: true, initialDetails: {
+    bookingType: 'short_term', startDate: '12/31/2099', workHours: '08:00 AM - 12:00 PM', serviceCategory: ['Cleaning'],
+  } }); await tick(); screen.press('Next'); screen.press('Next');
+  assert.doesNotMatch(screen.text(), /Use Profile Address/);
+  screen.render({ readOnly: true }); assert.doesNotMatch(screen.text(), /Use Profile Address/);
+});
+
+for (const role of ['homeowner', 'kasambahay']) {
+  test(`${role}: new short-term chat offers use Stay-out without a setup choice and support custom hours`, async t => {
+    const screen = bookingDetails(t, role, 'short_term', false, { edit: true, initialDetails: null }); await tick();
+    assert.doesNotMatch(screen.text(), /WORK SETUP|Stay-in|Stay-out/);
+    screen.press('Cleaning'); screen.press('Next');
+    assert.match(screen.text(), /AVAILABILITY DATE/);
+    assert.doesNotMatch(screen.text(), /With an end date|No end date|WORK SCHEDULE/);
+    screen.press('Service date'); screen.press('Next month'); screen.press('1');
+    for (const label of ['Morning', 'Afternoon', 'Night']) {
+      screen.press(label);
+      assert.equal(screen.all('Pressable').find(node => node.children.some(child => content(child) === label)).props.accessibilityState.selected, true);
+    }
+    screen.press('Set my own time');
+    const change = (label, value) => screen.act(() => screen.all('TextInput').find(node => node.props.accessibilityLabel === label).props.onChangeText(value));
+    change('Start time', '09:00'); change('End time', '09:00');
+    screen.act(() => screen.all('Pressable').filter(node => content(node) === 'AM')[0].props.onPress());
+    screen.act(() => screen.all('Pressable').filter(node => content(node) === 'AM').at(-1).props.onPress()); screen.press('Set Working Hours');
+    assert.match(screen.text(), /End time must be after start time/);
+    change('End time', '02:00');
+    screen.act(() => screen.all('Pressable').filter(node => content(node) === 'PM').at(-1).props.onPress()); screen.press('Set Working Hours');
+    assert.match(screen.text(), /09:00 AM - 02:00 PM/);
+    screen.press('Next');
+    change('Daily rate', '800'); screen.press('Review Offer');
+    assert.match(screen.text(), /09:00 AM - 02:00 PM/);
+    assert.doesNotMatch(screen.text(), /Work setup|Stay-in|Stay-out/);
+    screen.press('Send Offer'); await tick();
+    const details = screen.actions[0].details;
+    assert.equal(details.workSetup, 'stay_out'); assert.equal(details.bookingType, 'short_term');
+    assert.equal(details.endDate, details.startDate); assert.equal(details.ongoing, false);
+    assert.equal(details.workHours, '09:00 AM - 02:00 PM'); assert.equal(details.days.length, 1);
+    screen.actions[0].reject(new Error('Failed to fetch')); await tick();
+    assert.equal(screen.closed.length, 0);
+    assert.equal(screen.alerts.at(-1)[1], 'Could not connect. Check your connection and try again.');
+    screen.press('Send Offer'); await tick(); screen.actions[1].resolve(); await tick();
+    assert.equal(screen.closed.length, 1);
+  });
+
+  test(`${role}: switching a Stay-in chat offer to short-term clears long-term terms and sends Stay-out`, async t => {
+    const screen = bookingDetails(t, role, 'long_term', false, { edit: true, initialDetails: {
+      bookingType: 'long_term', startDate: '12/31/2099', endDate: '01/30/2100', salary: '8000',
+      serviceCategory: ['Cleaning'], workSetup: 'stay_in', workHours: '09:00 AM - 02:00 PM', days: ['Th'],
+    } }); await tick();
+    assert.match(screen.text(), /WORK SETUP/);
+    screen.press('Short-term'); await tick();
+    assert.doesNotMatch(screen.text(), /WORK SETUP|Stay-in|Stay-out/);
+    screen.press('Next'); screen.press('Next');
+    assert.match(screen.text(), /Choose a preset or set your own working hours/);
+    assert.doesNotMatch(screen.text(), /No end date|WORK SCHEDULE/);
+    screen.press('Morning'); screen.press('Next');
+    assert.equal(screen.all('TextInput').find(node => node.props.accessibilityLabel === 'Daily rate').props.value, '');
+    screen.act(() => screen.all('TextInput').find(node => node.props.accessibilityLabel === 'Daily rate').props.onChangeText('800'));
+    screen.press('Review Offer'); screen.press('Send Offer'); await tick();
+    assert.equal(screen.actions[0].details.workSetup, 'stay_out');
+    assert.equal(screen.actions[0].details.endDate, '12/31/2099');
+    assert.equal(screen.actions[0].details.ongoing, false);
+    assert.equal(screen.actions[0].details.workHours, '08:00 AM - 12:00 PM');
+    screen.actions[0].resolve(); await tick();
+  });
+
+  for (const ongoing of [false, true]) test(`${role}: ${ongoing ? 'ongoing' : 'fixed'} long-term chat offers share posting duration rules and review`, async t => {
+    const screen = bookingDetails(t, role, 'long_term', false, { edit: true, initialDetails: {
+      bookingType: 'long_term', startDate: '12/31/2099', endDate: '01/30/2100', salary: '8000',
+      serviceCategory: ['Cleaning'], workSetup: 'stay_in', workHours: '09:00 AM - 02:00 PM', days: ['Th'],
+    } }); await tick(); screen.press('Next');
+    for (const language of ['English', 'Tagalog', 'Bisaya']) {
+      screen.language(language);
+      for (const label of ['With an end date', 'No end date']) assert.ok(screen.text().includes(localization.translateMessage(language, label)));
+    }
+    screen.language('English'); screen.press('No end date');
+    assert.equal(screen.all('Pressable').some(node => node.props.accessibilityLabel === 'End date'), false);
+    screen.press('With an end date'); screen.press('Next');
+    assert.match(screen.text(), /Choose an end date or select No end date/);
+    if (ongoing) {
+      screen.press('No end date');
+      assert.doesNotMatch(screen.text(), /Choose an end date or select No end date/);
+    } else {
+      screen.press('End date');
+      assert.equal(screen.all('Pressable').find(node => content(node) === '29').props.disabled, true);
+      assert.equal(screen.all('Pressable').find(node => content(node) === '30').props.disabled, false);
+      screen.press('30');
+    }
+    screen.press('Next'); screen.press('Review Offer');
+    assert.match(screen.text(), /Work setupStay-in/);
+    assert.match(screen.text(), ongoing ? /EndsNo end date/ : /Ends01\/30\/2100/);
+    screen.press('Send Offer'); await tick();
+    assert.equal(screen.actions[0].details.ongoing, ongoing);
+    assert.equal(screen.actions[0].details.endDate, ongoing ? '' : '01/30/2100');
+    assert.equal(screen.actions[0].details.workSetup, 'stay_in');
+    assert.deepEqual(screen.actions[0].details.days, ['Th']);
+    screen.actions[0].resolve(); await tick();
+  });
 }
 
 for (const role of ['homeowner', 'kasambahay']) {
