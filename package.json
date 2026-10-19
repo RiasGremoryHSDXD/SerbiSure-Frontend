@@ -6,6 +6,7 @@
   "scripts": {
     "test:support": "node --test tests/support-contacts.test.cjs",
     "test:profile": "node --test tests/profile-status.test.cjs",
+    "test:cancellation": "node --test tests/booking-cancellation.test.cjs",
     "test:session": "node --test tests/remember-session.test.cjs",
     "test:registration": "node --test tests/registration.test.cjs",
     "test:realtime": "node --test tests/chat-realtime.test.cjs tests/chat-session.test.cjs",

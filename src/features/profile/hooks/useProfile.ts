@@ -9,7 +9,7 @@ import { fetchUserAbout, fetchUserTags, updateUserTags, fetchContactPrivacy, upd
 import { fetchVerificationStatus, type VerificationStatusResponse } from '../../verification/api/verificationApi';
 import { fetchNotifications } from '../../notifications/api/notificationsApi';
 
-import { BookingItem, fetchMyBookings, cancelBooking } from '../../bookings/api/bookingApi';
+import { BookingItem, fetchMyBookings } from '../../bookings/api/bookingApi';
 
 import { resolveRole, ROLE_CONFIG } from '../../../app/roleConfig';
 import { localizeProfileCopy } from '../profileConfig';
@@ -63,7 +63,6 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
   const [isLoadingPendingPosts, setIsLoadingPendingPosts] = useState(false);
   const [pendingPostsError, setPendingPostsError] = useState<string | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<'posts' | 'reviews'>('posts');
-  const [isCancellingPostId, setIsCancellingPostId] = useState<string | null>(null);
   const [bookingsModalInitialTab, setBookingsModalInitialTab] = useState<'active' | 'pending' | 'completed' | 'cancelled'>('active');
 
   const openMyBookings = (initialTab: 'active' | 'pending' | 'completed' | 'cancelled' = 'active') => {
@@ -86,36 +85,6 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
     }
   };
 
-  const handleCancelPendingPost = (bookingId: string) => {
-    if (!user.token || isCancellingPostId) return;
-    Alert.alert(
-      'Cancel Pending Post',
-      'Are you sure you want to cancel this pending post? This action cannot be undone.',
-      [
-        { text: 'Keep Post', style: 'cancel' },
-        {
-          text: 'Yes, Cancel',
-          style: 'destructive',
-          onPress: async () => {
-            setIsCancellingPostId(bookingId);
-            try {
-              const res = await cancelBooking(user.token!, bookingId, { reason: 'Cancelled by poster from profile' });
-              if (res.success) {
-                setPendingPosts((prev) => prev.filter((p) => p.booking_id !== bookingId));
-                Alert.alert('Post Cancelled', 'Your pending post has been cancelled successfully.');
-              } else {
-                Alert.alert('Error', res.error || 'Failed to cancel post. Please try again.');
-              }
-            } catch (err: any) {
-              Alert.alert('Error', err?.message || 'An error occurred while cancelling.');
-            } finally {
-              setIsCancellingPostId(null);
-            }
-          },
-        },
-      ]
-    );
-  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -322,6 +291,7 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
 
   return {
     avatarUri,
+    returnToDashboard: () => { setIsMyBookingsModalVisible(false); onBack?.(); },
     onLogout,
     insets,
     language,
@@ -385,11 +355,9 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
     pendingPostsError,
     activeProfileTab,
     setActiveProfileTab,
-    isCancellingPostId,
     bookingsModalInitialTab,
     openMyBookings,
     loadPendingPosts,
-    handleCancelPendingPost,
     handleRefresh,
     loadVerificationStatus,
     effectiveVerificationStatus,

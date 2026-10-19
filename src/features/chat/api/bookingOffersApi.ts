@@ -30,6 +30,6 @@ export async function respondToBookingOffer(token: string, card: BookingCardInfo
   if (!card.bookingId || !card.canRespond) throw new Error('This offer is not available for you to confirm.');
   const path = card.proposalId ? '/api/v1/booking/proposals/' + card.proposalId + '/respond/'
     : '/api/v1/booking/' + card.bookingId + (action === 'accept' ? '/accept/' : '/cancel/');
-  const data = await result<{ booking?: BookingItem; proposal?: { status: string } }>(path, token, 'PATCH', { action });
+  const data = await result<{ booking?: BookingItem; proposal?: { status: string } }>(path, token, 'PATCH', { action, ...(action === 'reject' && !card.proposalId ? { reason: 'Other', expected_points: 0 } : {}) });
   if (action === 'accept' && data.booking?.booking_status !== 'Accepted') throw new Error('The server did not confirm this booking. Refresh and check its status.');
 }
