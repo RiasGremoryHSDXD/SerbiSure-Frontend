@@ -54,13 +54,15 @@ export function PostStep4({ form }: { form: PostFormController }) {
               {engagementType === 'short' ? uiText("Part-time (Short-term)") : uiText("Long-term")}
             </Text>
           </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>{uiText("Setup")}</Text>
-            <Text style={styles.summaryValue}>
-              {setupPreference === 'stay-in' ? uiText("Stay-in") : uiText("Stay-out")}
-            </Text>
-          </View>
+          {engagementType === 'long' && <>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>{uiText("Setup")}</Text>
+              <Text style={styles.summaryValue}>
+                {setupPreference === 'stay-in' ? uiText("Stay-in") : uiText("Stay-out")}
+              </Text>
+            </View>
+          </>}
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>{uiText(config.rateLabel)}</Text>
@@ -70,18 +72,18 @@ export function PostStep4({ form }: { form: PostFormController }) {
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>{engagementType === 'short' ? 'Availability Date' : 'Dates'}</Text>
-            <Text style={styles.summaryValue}>{form.startDate}{engagementType === 'long' ? ` – ${form.endDate}` : ''}</Text>
+            <Text style={styles.summaryLabel}>{uiText(engagementType === 'short' ? 'Availability Date' : 'Dates')}</Text>
+            <Text style={styles.summaryValue}>{form.startDate}{engagementType === 'long' ? ` – ${form.ongoing ? uiText('No end date') : form.endDate}` : ''}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>{uiText("Work Hours (PH)")}</Text>
-            <Text style={styles.summaryValue}>{engagementType === 'short' ? WORK_SHIFTS.find(item => item.value === selectedTime)?.hours : form.workHours}</Text>
+            <Text style={styles.summaryValue}>{engagementType === 'short' && selectedTime !== 'custom' ? WORK_SHIFTS.find(item => item.value === selectedTime)?.hours : form.workHours}</Text>
           </View>
           {engagementType === 'long' && <>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryRow}><Text style={styles.summaryLabel}>{uiText("Working Days")}</Text>
-              <Text style={styles.summaryValue}>{WORK_DAYS.filter(item => form.workDays.includes(item.value)).map(item => item.label).join(', ')}</Text>
+              <Text style={styles.summaryValue}>{WORK_DAYS.filter(item => form.workDays.includes(item.value)).map(item => uiText(item.label)).join(', ')}</Text>
             </View>
           </>}
           <View style={styles.summaryDivider} />

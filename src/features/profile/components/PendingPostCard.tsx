@@ -7,8 +7,13 @@ import { formatBookingAddress, type BookingItem } from '../../bookings/api/booki
 import { profileStyles as styles } from '../styles';
 
 export function PendingPostCard({ post, note, children }: Readonly<{ post: BookingItem; note: string; children?: React.ReactNode }>) {
-  const { tr: uiText } = useUiLanguage();
-  const startDate = post.start_time ? new Date(post.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Flexible';
+  const { tr: uiText, formatDate } = useUiLanguage();
+  const startDate = post.start_time ? formatDate(post.start_time, 'compact') : '';
+  const safeStartDate = startDate || uiText('Date unavailable');
+  const endDate = post.end_time ? formatDate(post.end_time, 'compact') : '';
+  const safeEndDate = endDate || (post.booking_type === 'long_term'
+    ? uiText('No end date')
+    : startDate ? uiText('Same day') : uiText('Date unavailable'));
   return <View style={styles.pendingPostCard}>
     <View style={styles.pendingPostTopRow}>
       <View style={styles.categoryChipsWrap}>{post.service_category.map((category, index) =>
@@ -23,7 +28,8 @@ export function PendingPostCard({ post, note, children }: Readonly<{ post: Booki
     <Text style={styles.pendingPostDetailText}>{uiText("Work setup:")}{workSetupLabel(post.work_setup)}</Text>
     <View style={styles.pendingPostDetails}>
       <View style={styles.pendingPostDetailItem}><Ionicons name="location-outline" size={13} color="#6B7280" style={{ marginRight: 4 }} /><Text style={styles.pendingPostDetailText} numberOfLines={2}>{formatBookingAddress(post)}</Text></View>
-      <View style={styles.pendingPostDetailItem}><Ionicons name="calendar-outline" size={13} color="#6B7280" style={{ marginRight: 4 }} /><Text style={styles.pendingPostDetailText}>{uiText("Starts:")}{startDate}</Text></View>
+      <View style={styles.pendingPostDetailItem}><Ionicons name="calendar-outline" size={13} color="#6B7280" style={{ marginRight: 4 }} /><Text style={styles.pendingPostDetailText}>{uiText("Starts:")} {safeStartDate}</Text></View>
+      <View style={styles.pendingPostDetailItem}><Ionicons name="calendar-outline" size={13} color="#6B7280" style={{ marginRight: 4 }} /><Text style={styles.pendingPostDetailText}>{uiText('Ends')}: {safeEndDate}</Text></View>
     </View>
     {post.special_instruction ? <View style={styles.pendingPostInstructionBox}><Text style={styles.pendingPostInstructionText}>{post.special_instruction}</Text></View> : null}
     <View style={styles.pendingPostProposalsRow}><Ionicons name="people-outline" size={13} color="#D97706" style={{ marginRight: 5 }} /><Text style={styles.pendingPostProposalsText}>{note}</Text></View>

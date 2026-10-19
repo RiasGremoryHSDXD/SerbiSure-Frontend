@@ -22,7 +22,7 @@ const renderer = Reconciler({
   scheduleTimeout: setTimeout, cancelTimeout: clearTimeout, noTimeout: -1, detachDeletedInstance() {},
 });
 const native = { StyleSheet: { create: value => value }, Platform: { OS: 'android' } };
-for (const name of ['Text', 'View', 'Pressable', 'Image', 'ScrollView', 'TextInput', 'Switch', 'ActivityIndicator']) native[name] = name;
+for (const name of ['Text', 'View', 'Pressable', 'Image', 'ScrollView', 'TextInput', 'Switch', 'ActivityIndicator', 'Modal', 'KeyboardAvoidingView']) native[name] = name;
 const modules = new Map();
 function load(filename) {
   filename = path.resolve(__dirname, '..', filename);
@@ -44,6 +44,49 @@ const { HomeFeedFilters, HomeFeedHeader, HomeFeedEmptyState } = load('src/featur
 const { SettingsSection } = load('src/features/profile/components/SettingsSection.tsx');
 const { ReviewsSection } = load('src/features/profile/components/ReviewsSection.tsx');
 const { browseHeaderCopy, quickBrowseFilters } = load('src/features/feed/browsePresentation.ts');
+const { WorkScheduleFields } = load('src/features/bookings/components/WorkScheduleFields.tsx');
+const { FeedPostCard } = load('src/features/feed/components/FeedPostCard.tsx');
+
+test('job and service feed cards share the full layout, actions and live translations', t => {
+  const container = { children: [] };
+  const root = renderer.createContainer(container, 0, null, false, null, '', error => { throw error; }, null);
+  const render = element => renderer.flushSync(() => renderer.updateContainer(element, root, null));
+  t.after(() => render(null));
+  let changeLanguage;
+  const calls = [];
+  const content = node => node.text || node.children.map(content).join('');
+  const nodes = () => { const found = []; const visit = node => { found.push(node); node.children.forEach(visit); }; container.children.forEach(visit); return found; };
+  function Screen({ kind, applied, saved }) {
+    changeLanguage = useLanguage().setLanguage;
+    return React.createElement(FeedPostCard, {
+      post: { kind, employerName: 'Poster Name', roleTag: 'Cleaning', time: 'Posted 3h ago', avatar: 'https://test.local/avatar.png',
+        location: 'Agusan, Cagayan de Oro', termTag: 'Long-term', price: '₱8000', unit: '/ month', aboutText: 'Original listing description.' },
+      applied, saved, onViewProfile: () => calls.push('profile'), onDetails: () => calls.push('details'), onToggleSave: () => calls.push('save'),
+    });
+  }
+  const show = (kind, applied = false, saved = false) => render(React.createElement(LanguageProvider, null, React.createElement(Screen, { kind, applied, saved })));
+  let serviceLayout;
+  for (const kind of ['service', 'job']) {
+    show(kind);
+    for (const language of ['English', 'Tagalog', 'Bisaya']) {
+      renderer.flushSync(() => changeLanguage(language));
+      const text = content(container);
+      for (const source of ['View Profile', 'See Details', 'Long-term']) assert.ok(text.includes(translateMessage(language, source)), `${kind}: ${language}: ${source}`);
+      for (const value of ['Poster Name', 'Agusan, Cagayan de Oro', '₱8000', 'Original listing description.']) assert.ok(text.includes(value));
+    }
+    renderer.flushSync(() => changeLanguage('English'));
+    const layout = nodes().map(node => node.type || node.text);
+    if (kind === 'service') serviceLayout = layout;
+    else assert.deepEqual(layout, serviceLayout);
+    const press = label => nodes().find(node => node.type === 'Pressable' && content(node) === label).props.onPress();
+    press('View Profile'); press('See Details');
+    nodes().find(node => node.type === 'Pressable' && node.children.some(child => child.type === 'Icon' && child.props.name === 'bookmark-outline')).props.onPress();
+  }
+  assert.deepEqual(calls, ['profile', 'details', 'save', 'profile', 'details', 'save']);
+  show('job', true, true);
+  assert.ok(content(container).includes('Applied'));
+  assert.ok(nodes().some(node => node.type === 'Icon' && node.props.name === 'bookmark'));
+});
 
 test('every UI message has both translations and preserves the same interpolation fields', () => {
   const fields = value => [...value.matchAll(/\{(\w+)\}/g)].map(match => match[1]).sort();
@@ -115,4 +158,55 @@ test('browse counts translate without changing canonical filter values', () => {
   const tr = (source, params) => translateMessage('Bisaya', source, params);
   assert.deepEqual(browseHeaderCopy('kasambahay', 'saved', 2, false, null, tr), { title: 'Mga Na-save nga Trabaho', subtitle: '2 na-save nga post' });
   assert.equal(quickBrowseFilters({ categories: [] }, 'Child Care').categories[0], 'Child Care');
+});
+
+test('schedule duration choices and custom hours translate live and preserve the chosen terms', t => {
+  const container = { children: [] };
+  const root = renderer.createContainer(container, 0, null, false, null, '', error => { throw error; }, null);
+  const render = element => renderer.flushSync(() => renderer.updateContainer(element, root, null));
+  t.after(() => render(null));
+  let language, setType, terms;
+  function Screen() {
+    const context = useLanguage(); language = context.setLanguage;
+    const [bookingType, changeType] = React.useState('long_term'); setType = changeType;
+    const [ongoing, onOngoing] = React.useState(false);
+    const [endDate, onEndDate] = React.useState('');
+    const [workHours, onWorkHours] = React.useState('');
+    const [shift, onShift] = React.useState(null);
+    terms = { ongoing, endDate, workHours, shift };
+    return React.createElement(WorkScheduleFields, { bookingType, ongoing, onOngoing, startDate: '12/01/2099', onStartDate() {},
+      endDate, onEndDate, workHours, onWorkHours, days: ['T'], onDays() {}, shift, onShift });
+  }
+  const nodes = () => { const result = []; const visit = node => {
+    if (node.type === 'Modal' && !node.props.visible) return;
+    result.push(node); node.children.forEach(visit);
+  }; container.children.forEach(visit); return result; };
+  const text = () => nodes().filter(node => node.text !== undefined).map(node => node.text).join(' ');
+  const content = node => node.text || node.children.map(content).join('');
+  const press = label => renderer.flushSync(() => nodes().find(node => node.type === 'Pressable' && content(node) === label).props.onPress());
+  render(React.createElement(LanguageProvider, null, React.createElement(Screen)));
+  for (const name of ['English', 'Tagalog', 'Bisaya']) {
+    renderer.flushSync(() => language(name));
+    for (const source of ['How long will the work continue?', 'With an end date', 'No end date', 'Select daily working hours']) {
+      assert.ok(text().includes(translateMessage(name, source)), `${name}: ${source}`);
+    }
+  }
+  renderer.flushSync(() => nodes().find(node => node.type === 'Pressable' && node.props.accessibilityLabel === translateMessage('Bisaya', 'End date')).props.onPress());
+  assert.equal(nodes().find(node => node.type === 'Pressable' && content(node) === '30').props.disabled, true);
+  assert.equal(nodes().find(node => node.type === 'Pressable' && content(node) === '31').props.disabled, false);
+  press('31');
+  assert.equal(terms.endDate, '12/31/2099');
+  press(translateMessage('Bisaya', 'No end date'));
+  assert.equal(terms.ongoing, true);
+  assert.equal(terms.endDate, '');
+  renderer.flushSync(() => { setType('short_term'); language('Tagalog'); });
+  press(translateMessage('Tagalog', 'Set my own time'));
+  const changeTime = (label, value) => renderer.flushSync(() => nodes().find(node => node.type === 'TextInput' && node.props.accessibilityLabel === label).props.onChangeText(value));
+  changeTime(translateMessage('Tagalog', 'Start time'), '09:00'); changeTime(translateMessage('Tagalog', 'End time'), '02:00');
+  press(translateMessage('Tagalog', 'Set Working Hours'));
+  assert.equal(terms.shift, 'custom');
+  assert.equal(terms.workHours, '09:00 AM - 02:00 PM');
+  renderer.flushSync(() => language('Bisaya'));
+  assert.ok(text().includes(translateMessage('Bisaya', 'Set my own time')));
+  assert.ok(text().includes('09:00 AM - 02:00 PM'));
 });

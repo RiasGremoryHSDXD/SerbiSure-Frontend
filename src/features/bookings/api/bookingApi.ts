@@ -60,7 +60,7 @@ export interface BookingItem {
   completed_at?: string | null;
   contract_summary?: {
     booking_id: string; service_category: string[]; rate_amount: string | null; rate_period: 'month'; rate_needs_review: boolean;
-    work_setup: WorkSetup | null; start_date: string; location: string; contract_pdf_url: string; source_url: string; notice: string;
+    work_setup: WorkSetup | null; start_date: string; end_date?: string | null; location: string; contract_pdf_url: string; source_url: string; notice: string;
   } | null;
   createdAt: string;
   poster?: BookingParticipant;

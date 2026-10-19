@@ -35,7 +35,15 @@ export const WORK_SHIFTS = [
   { value: 'afternoon', label: 'Afternoon', hours: '12:00 PM - 05:00 PM' },
   { value: 'night', label: 'Night', hours: '05:00 PM - 09:00 PM' },
 ] as const;
-export type WorkShift = typeof WORK_SHIFTS[number]['value'];
+export type WorkShift = typeof WORK_SHIFTS[number]['value'] | 'custom';
+
+export const LONG_TERM_MINIMUM_MESSAGE = 'SerbiSure requires at least 30 days for long-term posts. Choose a later end date.';
+
+export function earliestLongTermEnd(startDate: string): string {
+  const start = bookingSchedule(startDate, '12:00 PM');
+  const date = new Date(Date.parse(start.iso) + 30 * 86400000);
+  return `${String(date.getUTCMonth() + 1).padStart(2, '0')}/${String(date.getUTCDate()).padStart(2, '0')}/${date.getUTCFullYear()}`;
+}
 
 export function bookingSchedule(date: string, clockText: string): { iso: string; clock: string } {
   const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(date);
@@ -63,25 +71,28 @@ export interface EngagementSchedule {
   workHours: string;
   days: readonly string[];
   shift: WorkShift | null;
+  ongoing?: boolean;
 }
 
 export function buildEngagementSchedule(form: EngagementSchedule, now = Date.now()) {
   const short = form.bookingType === 'short_term';
   const shift = WORK_SHIFTS.find(item => item.value === form.shift);
-  if (short && !shift) throw new Error('Select Morning, Afternoon or Night.');
-  const hours = short ? shift!.hours : form.workHours;
+  if (short && !shift && form.shift !== 'custom') throw new Error('Choose a preset or set your own working hours.');
+  const hours = short && shift ? shift.hours : form.workHours;
+  if (!form.startDate) throw new Error('Choose a start date.');
+  if (!short && !form.ongoing && !form.endDate) throw new Error('Choose an end date or select No end date.');
+  if (!hours.trim()) throw new Error('Choose your working hours before continuing.');
   const [startClock = '', endClock = ''] = hours.split(' - ');
   const start = bookingSchedule(form.startDate, startClock);
-  const end = bookingSchedule(short ? form.startDate : form.endDate, endClock);
+  const end = bookingSchedule(short || form.ongoing ? form.startDate : form.endDate, endClock);
   if (start.clock >= end.clock) throw new Error('Daily work hours must end after they start.');
   if (Date.parse(start.iso) <= now) throw new Error('Choose a start date and shift that have not passed.');
-  if (Date.parse(end.iso) <= Date.parse(start.iso)) throw new Error('Choose an end after the start.');
-  if (!short && Date.parse(end.iso) - Date.parse(start.iso) < 86400000) throw new Error('Long-term work must last at least 24 hours.');
+  if (!short && !form.ongoing && bookingSchedule(form.endDate, '12:00 PM').iso < bookingSchedule(earliestLongTermEnd(form.startDate), '12:00 PM').iso) throw new Error(LONG_TERM_MINIMUM_MESSAGE);
   const days = WORK_DAYS.filter(item => form.days.includes(item.value)).map(item => item.value);
   if (!short && !days.length) throw new Error('Select at least one working day.');
   if (!short && !days.includes(dayForDate(form.startDate) as typeof days[number])) throw new Error('The start date must fall on a selected working day.');
   return {
-    start_time: start.iso, end_time: end.iso, daily_start_time: start.clock, daily_end_time: end.clock,
+    start_time: start.iso, end_time: !short && form.ongoing ? null : end.iso, daily_start_time: start.clock, daily_end_time: end.clock,
     work_days: short ? [dayForDate(form.startDate)] : days,
   };
 }

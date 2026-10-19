@@ -7,7 +7,7 @@ export interface PostingPayload {
   work_setup: WorkSetup;
   service_category: string[];
   start_time: string;
-  end_time: string;
+  end_time: string | null;
   work_days?: string[];
   daily_start_time?: string;
   daily_end_time?: string;

@@ -703,10 +703,10 @@ function ChatDetailSession({
     if (responseBusyRef.current) throw new Error('Please wait for the current booking action to finish.');
     const times = details.workHours.split(' - ');
     const start = bookingSchedule(details.startDate, times[0] || '');
-    const end = bookingSchedule(details.endDate, times[1] || '');
+    const end = bookingSchedule(details.ongoing ? details.startDate : details.endDate, times[1] || '');
     const payload = {
       recipient_id: partnerId, booking_type: details.bookingType, work_setup: details.workSetup,
-      service_category: details.serviceCategory, start_time: start.iso, end_time: end.iso,
+      service_category: details.serviceCategory, start_time: start.iso, end_time: details.ongoing ? null : end.iso,
       daily_start_time: start.clock, daily_end_time: end.clock, work_days: details.days,
       region: details.region, province: details.province, city: details.city, barangay: details.barangay,
       street: details.street, floor_number: details.floorUnit || undefined, zip_code: details.zipCode, special_instruction: '',
@@ -1474,6 +1474,9 @@ function ChatDetailSession({
                       ? contactName
                       : (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : contactName));
                   const formattedStartDate = formatBookingStartDate(item.bookingInfo.startDate);
+                  const formattedEndDate = item.bookingInfo.endDate
+                    ? formatBookingStartDate(item.bookingInfo.endDate)
+                    : item.bookingInfo.bookingType === 'long_term' ? uiText('No end date') : uiText('Same day');
                   const bookingStatus = isAcquired
                     ? 'Job filled'
                     : isConfirmed
@@ -1532,7 +1535,8 @@ function ChatDetailSession({
                               ]}>
                                 {bookingStatus}
                               </Text>
-                              {` · Start: ${formattedStartDate}`}
+                              {` · ${uiText('Start:')} ${formattedStartDate}`}
+                              {`\n${uiText('Ends')}: ${formattedEndDate}`}
                             </Text>
                           </View>
 

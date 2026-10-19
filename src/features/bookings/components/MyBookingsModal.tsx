@@ -40,7 +40,7 @@ export function MyBookingsModal({
   accountType = 'Homeowner',
   initialTab = 'active',
 }: MyBookingsModalProps) {
-  const { tr: uiText } = useUiLanguage();
+  const { tr: uiText, formatDate } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const { user, updateUser } = useUser();
   const [penalty, setPenalty] = useState<BookingPenaltyStatus | null>(null);
@@ -325,6 +325,12 @@ export function MyBookingsModal({
               const categories = Array.isArray(booking.service_category)
                 ? booking.service_category
                 : [booking.service_category];
+              const startDate = booking.start_time ? formatDate(booking.start_time, 'compact') : '';
+              const safeStartDate = startDate || uiText('Date unavailable');
+              const endDate = booking.end_time ? formatDate(booking.end_time, 'compact') : '';
+              const safeEndDate = endDate || (booking.booking_type === 'long_term'
+                ? uiText('No end date')
+                : startDate ? uiText('Same day') : uiText('Date unavailable'));
 
               return (
                 <View key={booking.booking_id} style={styles.card}>
@@ -371,10 +377,14 @@ export function MyBookingsModal({
 
                   {/* Date/Time */}
                   <View style={styles.infoRow}>
-                    <Ionicons name="time-outline" size={14} color="#6B7280" />
+                    <Ionicons name="calendar-outline" size={14} color="#6B7280" />
                     <Text style={styles.infoText}>
-                      {uiText("Start:")}{new Date(booking.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {uiText("Start:")} {safeStartDate}
                     </Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Ionicons name="calendar-outline" size={14} color="#6B7280" />
+                    <Text style={styles.infoText}>{uiText('Ends')}: {safeEndDate}</Text>
                   </View>
 
                   {/* Special Instruction preview */}

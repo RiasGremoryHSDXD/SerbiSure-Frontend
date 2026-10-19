@@ -9,6 +9,7 @@ import { POSTING_CONFIG, engagementRate, buildPostDescription, buildPostLocation
 import { submitPost, type PostingPayload } from '../api/postingApi';
 
 import { useUser } from '../../auth/session/UserContext';
+import { useLanguage } from '../../../shared/localization/LanguageContext';
 
 import { useWorkLocation } from '../../bookings/hooks/useWorkLocation';
 import { workLocationError } from '../../bookings/workLocation';
@@ -26,6 +27,7 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
   const config = POSTING_CONFIG[mode];
   const insets = useSafeAreaInsets();
   const { user } = useUser();
+  const { tr } = useLanguage();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
   const effectiveToken = token || user?.token || null;
@@ -38,6 +40,7 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [ongoing, setOngoing] = useState(false);
   const [workDays, setWorkDays] = useState<string[]>([]);
   const [workHours, setWorkHours] = useState('');
 
@@ -129,7 +132,7 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
     setEngagementType(null);
     setSetupPreference(null);
     setSelectedTime(null);
-    setStartDate(''); setEndDate(''); setWorkDays([]); setWorkHours('');
+    setStartDate(''); setEndDate(''); setOngoing(false); setWorkDays([]); setWorkHours('');
     address.resetWorkLocation();
     setInstructions('');
     setOfferAmount(config.dailyDefault);
@@ -152,9 +155,10 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
 
   const handleEngagementChange = (type: 'short' | 'long') => {
     if (type !== engagementType) {
-      setSelectedTime(null); setEndDate(''); setWorkDays([]); setWorkHours('');
+      setSelectedTime(null); setEndDate(''); setOngoing(false); setWorkDays([]); setWorkHours('');
     }
     setEngagementType(type);
+    if (type === 'short') setSetupPreference('stay-out');
     setOfferAmount(engagementRate(mode, offerAmount, type));
   };
 
@@ -177,7 +181,7 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
 
   const scheduleTerms = () => buildEngagementSchedule({
     bookingType: engagementType === 'long' ? 'long_term' : 'short_term',
-    startDate, endDate, workHours, days: workDays, shift: selectedTime,
+    startDate, endDate, workHours, days: workDays, shift: selectedTime, ongoing,
   });
 
   const getLocationLabel = () => buildPostLocation({
@@ -191,7 +195,8 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
   const buildAutoMessage = () => {
     const roleText = getSelectedRoleLabel();
     const locText = getLocationLabel();
-    const setupText = setupPreference === 'stay-in' ? 'stay-in' : 'stay-out';
+    const setupText = engagementType === 'short' ? 'stay-out'
+      : setupPreference === 'stay-in' ? 'stay-in' : 'stay-out';
 
     return buildPostDescription(mode, {
       service: roleText || config.defaultService, location: locText, setup: setupText,
@@ -224,7 +229,7 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
         Alert.alert('Selection Required', config.missingEngagement);
         return;
       }
-      if (!setupPreference) {
+      if (engagementType === 'long' && !setupPreference) {
         Alert.alert('Selection Required', config.missingSetup);
         return;
       }
@@ -237,7 +242,7 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
         return;
       }
       try { scheduleTerms(); } catch (error) {
-        Alert.alert('Invalid Schedule', error instanceof Error ? error.message : 'Select a valid schedule.');
+        Alert.alert(tr('Invalid Schedule'), tr(error instanceof Error ? error.message : 'Select a valid schedule.'));
         return;
       }
       setStep(3);
@@ -276,7 +281,8 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
 
         const payload: PostingPayload = {
           booking_type: engagementType === 'short' ? 'short_term' : 'long_term',
-          work_setup: setupPreference === 'stay-in' ? 'stay_in' : 'stay_out',
+          work_setup: engagementType === 'short' ? 'stay_out'
+            : setupPreference === 'stay-in' ? 'stay_in' : 'stay_out',
           service_category: selectedServices,
           ...schedule,
           region: selectedRegion?.displayName || selectedRegion?.name,
@@ -322,7 +328,7 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
             for (const [k, v] of Object.entries(errorData)) {
               const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
               const list = Array.isArray(v) ? v : [v];
-              list.forEach(m => msgs.push(`• ${label}: ${m}`));
+              list.forEach(m => msgs.push(`• ${tr(label)}: ${tr(String(m))}`));
             }
             if (msgs.length > 0) errorMsg = msgs.join('\n');
           }
@@ -372,7 +378,7 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
     setSetupPreference,
     selectedTime,
     setSelectedTime,
-    startDate, setStartDate, endDate, setEndDate, workDays, setWorkDays, workHours, setWorkHours,
+    startDate, setStartDate, endDate, setEndDate, ongoing, setOngoing, workDays, setWorkDays, workHours, setWorkHours,
     ...address,
     instructions,
     setInstructions,

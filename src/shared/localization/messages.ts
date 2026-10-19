@@ -1,6 +1,52 @@
 // English source text -> Tagalog, Bisaya. Keep stored API values in English;
 // translate only their presentation. User-authored content is never passed here.
 export const UI_MESSAGES = {
+  'Job type & schedule': ['Uri at iskedyul ng trabaho', 'Matang ug iskedyul sa trabaho'],
+  'Previous month': ['Nakaraang buwan', 'Miaging bulan'],
+  'Next month': ['Susunod na buwan', 'Sunod nga bulan'],
+  'Start time': ['Oras ng pagsisimula', 'Oras sa pagsugod'],
+  'End time': ['Oras ng pagtatapos', 'Oras sa pagtapos'],
+  'Start': ['Simula', 'Sugód'],
+  'End': ['Pagtatapos', 'Pagtapos'],
+  'START': ['SIMULA', 'SUGOD'],
+  'Service date': ['Petsa ng serbisyo', 'Petsa sa serbisyo'],
+  'Availability Date': ['Petsa ng pagiging available', 'Petsa nga anaa'],
+  'Dates': ['Mga petsa', 'Mga petsa'],
+  'Starts': ['Magsisimula', 'Magsugod'],
+  'Ends': ['Magtatapos', 'Matapos'],
+  'Same day': ['Parehong araw', 'Parehas nga adlaw'],
+  'Date unavailable': ['Hindi available ang petsa', 'Dili magamit ang petsa'],
+  'End Time': ['Oras ng pagtatapos', 'Oras sa pagtapos'],
+  'Cannot Send Offer': ['Hindi maipadala ang alok', 'Dili mapadala ang tanyag'],
+  'How long will the work continue?': ['Gaano katagal ang trabaho?', 'Unsa kadugay ang trabaho?'],
+  'With an end date': ['May petsa ng pagtatapos', 'Adunay petsa sa pagtapos'],
+  'No end date': ['Walang petsa ng pagtatapos', 'Walay petsa sa pagtapos'],
+  'The work continues without a planned end date.': ['Magpapatuloy ang trabaho nang walang nakatakdang petsa ng pagtatapos.', 'Magpadayon ang trabaho nga walay gitakdang petsa sa pagtapos.'],
+  'Choose dates at least 30 days apart. This is a SerbiSure posting rule.': ['Pumili ng mga petsang may pagitan na hindi bababa sa 30 araw. Patakaran ito ng SerbiSure sa pag-post.', 'Pagpili og mga petsa nga adunay labing menos 30 ka adlaw nga gilay-on. Palisiya kini sa SerbiSure sa pag-post.'],
+  'SerbiSure requires at least 30 days for long-term posts. Choose a later end date.': ['Kailangan ng hindi bababa sa 30 araw para sa pangmatagalang post sa SerbiSure. Pumili ng mas huling petsa ng pagtatapos.', 'Kinahanglan og labing menos 30 ka adlaw ang dugay nga post sa SerbiSure. Pagpili og mas ulahi nga petsa sa pagtapos.'],
+  'Earliest end date: {date}': ['Pinakamaagang petsa ng pagtatapos: {date}', 'Labing sayong petsa sa pagtapos: {date}'],
+  'Set my own time': ['Magtakda ng sariling oras', 'Magtakda sa kaugalingong oras'],
+  'Working hours': ['Oras ng trabaho', 'Oras sa trabaho'],
+  'Select daily working hours': ['Piliin ang araw-araw na oras ng trabaho', 'Pilia ang adlaw-adlaw nga oras sa trabaho'],
+  'Choose a preset or set your own working hours.': ['Pumili ng nakahandang oras o magtakda ng sariling oras ng trabaho.', 'Pagpili og gitakdang oras o itakda ang kaugalingong oras sa trabaho.'],
+  'Choose a start date.': ['Pumili ng petsa ng pagsisimula.', 'Pagpili og petsa sa pagsugod.'],
+  'Choose an end date or select No end date.': ['Pumili ng petsa ng pagtatapos o piliin ang Walang petsa ng pagtatapos.', 'Pagpili og petsa sa pagtapos o pilia ang Walay petsa sa pagtapos.'],
+  'Choose your working hours before continuing.': ['Piliin ang oras ng trabaho bago magpatuloy.', 'Pilia ang oras sa trabaho sa dili pa mopadayon.'],
+  'Daily work hours must end after they start.': ['Dapat mas huli ang oras ng pagtatapos kaysa oras ng pagsisimula sa parehong araw.', 'Ang oras sa pagtapos kinahanglan mas ulahi kaysa oras sa pagsugod sa samang adlaw.'],
+  'Choose a start date and shift that have not passed.': ['Pumili ng petsa at oras ng pagsisimula na hindi pa lumilipas.', 'Pagpili og petsa ug oras sa pagsugod nga wala pa molabay.'],
+  'Select at least one working day.': ['Pumili ng kahit isang araw ng trabaho.', 'Pagpili og labing menos usa ka adlaw sa trabaho.'],
+  'The start date must fall on a selected working day.': ['Dapat tumapat ang petsa ng pagsisimula sa napiling araw ng trabaho.', 'Ang petsa sa pagsugod kinahanglan motunong sa gipiling adlaw sa trabaho.'],
+  'Select valid dates and working hours.': ['Pumili ng wastong petsa at oras ng trabaho.', 'Pagpili og hustong petsa ug oras sa trabaho.'],
+  'Select valid working hours.': ['Pumili ng wastong oras ng trabaho.', 'Pagpili og hustong oras sa trabaho.'],
+  'Select a valid calendar date.': ['Pumili ng wastong petsa sa kalendaryo.', 'Pagpili og hustong petsa sa kalendaryo.'],
+  'End time must be after start time.': ['Dapat mas huli ang oras ng pagtatapos kaysa oras ng pagsisimula.', 'Ang oras sa pagtapos kinahanglan mas ulahi kaysa oras sa pagsugod.'],
+  'Enter valid times.': ['Maglagay ng wastong oras.', 'Pagsulod og hustong oras.'],
+  'Invalid Schedule': ['Hindi wastong iskedyul', 'Dili hustong iskedyul'],
+  'Start date': ['Petsa ng pagsisimula', 'Petsa sa pagsugod'],
+  'End date': ['Petsa ng pagtatapos', 'Petsa sa pagtapos'],
+  'AVAILABILITY DATE': ['PETSA NG PAGIGING AVAILABLE', 'PETSA NGA ANAA'],
+  'START DATE TO END DATE': ['PETSA NG PAGSISIMULA AT PAGTATAPOS', 'PETSA SA PAGSUGOD UG PAGTAPOS'],
+  'SERVICE DATE': ['PETSA NG SERBISYO', 'PETSA SA SERBISYO'],
   'ACCOUNT': ['ACCOUNT', 'ACCOUNT'],
   'PREFERENCES': ['MGA KAGUSTUHAN', 'MGA GUSTO'],
   'SUPPORT & LEGAL': ['TULONG AT MGA PATAKARAN', 'TABANG UG MGA PALISIYA'],
@@ -834,6 +880,11 @@ const MONTHS = {
   Tagalog: ['Enero', 'Pebrero', 'Marso', 'Abril', 'Mayo', 'Hunyo', 'Hulyo', 'Agosto', 'Setyembre', 'Oktubre', 'Nobyembre', 'Disyembre'],
   Bisaya: ['Enero', 'Pebrero', 'Marso', 'Abril', 'Mayo', 'Hunyo', 'Hulyo', 'Agosto', 'Septiyembre', 'Oktubre', 'Nobiyembre', 'Disyembre'],
 };
+const MONTHS_SHORT = {
+  English: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+  Tagalog: ['Ene', 'Peb', 'Mar', 'Abr', 'May', 'Hun', 'Hul', 'Ago', 'Set', 'Okt', 'Nob', 'Dis'],
+  Bisaya: ['Ene', 'Peb', 'Mar', 'Abr', 'May', 'Hun', 'Hul', 'Ago', 'Sep', 'Okt', 'Nob', 'Dis'],
+};
 const DAYS = {
   English: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
   Tagalog: ['Linggo', 'Lunes', 'Martes', 'Miyerkules', 'Huwebes', 'Biyernes', 'Sabado'],
@@ -841,12 +892,14 @@ const DAYS = {
 };
 
 // Use explicit Cebuano names: Android Intl may silently fall back to English.
-export function formatLocalizedDate(language: AppLanguage, value: Date | string, style: 'greeting' | 'monthYear' | 'full' = 'full'): string {
+export function formatLocalizedDate(language: AppLanguage, value: Date | string, style: 'greeting' | 'monthYear' | 'full' | 'compact' = 'full'): string {
   const date = typeof value === 'string' ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return '';
   const key = language === 'Cebuano' ? 'Bisaya' : language;
   const month = MONTHS[key][date.getMonth()];
+  const shortMonth = MONTHS_SHORT[key][date.getMonth()];
   if (style === 'greeting') return `${DAYS[key][date.getDay()]}, ${month} ${date.getDate()}`;
   if (style === 'monthYear') return `${month} ${date.getFullYear()}`;
+  if (style === 'compact') return `${shortMonth} ${date.getDate()}, ${date.getFullYear()}`;
   return `${month} ${date.getDate()}, ${date.getFullYear()}`;
 }

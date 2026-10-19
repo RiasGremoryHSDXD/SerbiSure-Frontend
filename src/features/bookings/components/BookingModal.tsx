@@ -50,6 +50,7 @@ export interface BookingConfirmData {
   days: string[];
   salary: string;
   bookingType: 'long_term' | 'short_term';
+  ongoing?: boolean;
   jobPost?: BookingJobPost | null;
 }
 
@@ -116,6 +117,7 @@ export function BookingModal({
   // Form states
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [ongoing, setOngoing] = useState(false);
   const [workHours, setWorkHours] = useState('');
   const [savedLocation, setSavedLocation] = useState('');
   const address = useWorkLocation(visible && !readOnly);
@@ -200,8 +202,9 @@ export function BookingModal({
 
     setStartDate(initialDetails?.startDate || '');
     setEndDate(initialDetails?.endDate || '');
+    setOngoing(defaultType === 'long_term' && !!initialDetails && !initialDetails.endDate);
     setWorkHours(initialDetails?.workHours || '');
-    setSelectedShift(WORK_SHIFTS.find(item => item.hours === initialDetails?.workHours)?.value || null);
+    setSelectedShift(WORK_SHIFTS.find(item => item.hours === initialDetails?.workHours)?.value || (initialDetails?.workHours ? 'custom' : null));
     setSavedLocation(initialDetails?.location || effectiveJobPost?.location || '');
     setSelectedDays(initialDetails?.days || []);
     setSalary(initialDetails?.salary || '');
@@ -224,7 +227,7 @@ export function BookingModal({
   }, [visible, readOnly, token, selectedBookingType, wageLocation, region, policyAttempt]);
 
   const getSchedule = () => buildEngagementSchedule({
-    bookingType: selectedBookingType, startDate, endDate, workHours, days: selectedDays, shift: selectedShift,
+    bookingType: selectedBookingType, startDate, endDate, workHours, days: selectedDays, shift: selectedShift, ongoing,
   });
   const stepError = (step: BookingOfferStep): string | null => {
     if (step === 1) {
@@ -265,8 +268,9 @@ export function BookingModal({
     submittingRef.current = true;
     setSubmitting(true);
     void Promise.resolve().then(() => onConfirm({
-      startDate, endDate: selectedBookingType === 'short_term' ? startDate : endDate,
-      workHours: selectedBookingType === 'short_term' ? WORK_SHIFTS.find(item => item.value === selectedShift)!.hours : workHours,
+      startDate, endDate: selectedBookingType === 'short_term' ? startDate : ongoing ? '' : endDate,
+      ongoing: selectedBookingType === 'long_term' && ongoing,
+      workHours: selectedBookingType === 'short_term' && selectedShift !== 'custom' ? WORK_SHIFTS.find(item => item.value === selectedShift)!.hours : workHours,
       location: location.trim(), days: schedule.work_days,
       salary: salary.trim(), bookingType: selectedBookingType, jobPost: effectiveJobPost,
       serviceCategory: normalizeServices(serviceCategory), workSetup: workSetup!, region,
@@ -274,7 +278,7 @@ export function BookingModal({
       street: address.streetAddress.trim(), floorUnit: address.floorUnit.trim(), zipCode: address.zipcode.trim(),
     })).then(handleClose).catch(error => {
       submittingRef.current = false; setSubmitting(false);
-      Alert.alert('Cannot Send Offer', error instanceof Error ? error.message : 'Please try again.');
+      Alert.alert(uiText('Cannot Send Offer'), uiText(error instanceof Error ? error.message : 'Please try again.'));
     });
 
   };
@@ -355,7 +359,7 @@ export function BookingModal({
           {!readOnly && <View style={styles.stepIntro} accessibilityLiveRegion="polite"><Text style={styles.stepTitle}>{offerStep === 1 && userRole === 'kasambahay' ? 'Which services will you offer?' : currentStep.title}</Text><Text style={styles.stepHint}>{currentStep.hint}</Text></View>}
           {!!formError && <View style={styles.errorCard} accessibilityLiveRegion="polite">
             <Ionicons name="alert-circle-outline" size={20} color="#B91C1C" />
-            <Text style={styles.errorText}>{formError}</Text>
+            <Text style={styles.errorText}>{uiText(formError)}</Text>
           </View>}
 
           {!readOnly && offerStep === 1 && <>
@@ -387,7 +391,7 @@ export function BookingModal({
                 accessibilityRole="button" accessibilityState={{ selected: selectedBookingType === value }} disabled={submitting}
                 style={[styles.termChoice, selectedBookingType === value && styles.choiceActive]}
                 onPress={() => {
-                  if (value !== selectedBookingType) { setSalary(''); setWorkHours(''); setSelectedShift(null); setSelectedDays([]); setEndDate(''); }
+                  if (value !== selectedBookingType) { setSalary(''); setWorkHours(''); setSelectedShift(null); setSelectedDays([]); setEndDate(''); setOngoing(false); }
                   setSelectedBookingType(value);
                 }}>
                 <Text style={styles.choiceText}>{value === 'short_term' ? uiText("Short-term") : uiText("Long-term")}</Text>
@@ -398,7 +402,8 @@ export function BookingModal({
           {!readOnly && offerStep === 2 && <WorkScheduleFields bookingType={selectedBookingType} startDate={startDate} endDate={endDate}
             workHours={workHours} days={selectedDays} shift={selectedShift}
             onStartDate={setStartDate} onEndDate={setEndDate} onWorkHours={setWorkHours} onDays={setSelectedDays}
-            onShift={value => { setSelectedShift(value); setWorkHours(WORK_SHIFTS.find(item => item.value === value)!.hours); }}
+            onShift={value => { setSelectedShift(value); const preset = WORK_SHIFTS.find(item => item.value === value); if (preset) setWorkHours(preset.hours); }}
+            ongoing={ongoing} onOngoing={setOngoing}
             disabled={!visible || submitting} />}
           {!readOnly && offerStep === 3 && <>
             <View style={styles.formGroup}>
@@ -425,6 +430,7 @@ export function BookingModal({
           {(readOnly || offerStep === 4) && <>
             <BookingOfferReview serviceCategory={serviceCategory} workSetup={workSetup} bookingType={selectedBookingType}
               startDate={startDate} endDate={selectedBookingType === 'short_term' && !readOnly ? startDate : endDate}
+              ongoing={ongoing}
               workHours={workHours} days={selectedDays} region={region} location={previewLocation} salary={salary}
               onEdit={readOnly ? undefined : goToStep} disabled={submitting} />
             <View style={styles.policyCard}><Ionicons name="information-circle-outline" size={18} color="#9A3412" />

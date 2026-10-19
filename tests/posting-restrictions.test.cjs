@@ -63,14 +63,21 @@ function postingScreen(t, mode = 'service') {
   const { usePostForm } = load('src/features/posting/hooks/usePostForm.ts', {
     'react-native': native, 'react-native-safe-area-context': safeArea,
     '../../bookings/engagementForm': engagement, '../validation': validation, '../postingConfig': posting,
-    '../../bookings/api/bookingApi': { fetchMinimumWage: async () => ({ rate_period: 'day', minimum_rate: '600' }) },
+    '../../bookings/api/bookingApi': { fetchMinimumWage: async (_token, type) => ({ rate_period: type === 'long_term' ? 'month' : 'day', minimum_rate: type === 'long_term' ? '6500' : '600' }) },
     '../api/postingApi': { submitPost: (...args) => { const request = { ...deferred(), args }; requests.push(request); return request.promise; } },
     '../../auth/session/UserContext': { useUser: () => ({ user }) },
+    '../../../shared/localization/LanguageContext': language,
     '../../bookings/hooks/useWorkLocation': { useWorkLocation: () => location },
     '../../bookings/workLocation': load('src/features/bookings/workLocation.ts'),
   });
   const restriction = load('src/features/bookings/components/BookingRestrictionModal.tsx', {
     'react-native': native, '../../../shared/localization/LanguageContext': language, '../../../shared/theme/theme': theme,
+  });
+  const step2 = load('src/features/posting/components/PostStep2.tsx', {
+    'react-native': native, '@expo/vector-icons': { Ionicons: 'Icon' },
+    '../../../shared/localization/LanguageContext': language, '../styles': { postingStyles: {} },
+    '../../bookings/components/WorkScheduleFields': { WorkScheduleFields: () => null },
+    '../../bookings/components/WorkLocationFields': { WorkLocationFields: () => null },
   });
   let controller;
   const { PostScreen } = load('src/features/posting/screens/PostScreen.tsx', {
@@ -79,7 +86,8 @@ function postingScreen(t, mode = 'service') {
     '../hooks/usePostForm': { usePostForm: props => { controller = usePostForm(props); return controller; } },
     '../../bookings/components/BookingRestrictionModal': restriction,
     '../../verification/components/VerificationRequiredModal': { VerificationRequiredModal: props => props.visible ? React.createElement('Text', {}, 'Account Verification Required') : null },
-    ...Object.fromEntries([1, 2, 3, 4].map(step => ['../components/PostStep' + step, { ['PostStep' + step]: () => null }])),
+    ...Object.fromEntries([1, 3, 4].map(step => ['../components/PostStep' + step, { ['PostStep' + step]: () => null }])),
+    '../components/PostStep2': step2,
   });
   const container = { children: [] };
   const root = renderer.createContainer(container, 0, null, false, null, '', error => { throw error; }, null);
@@ -93,10 +101,18 @@ function postingScreen(t, mode = 'service') {
   const nodes = () => { const result = []; const walk = node => { result.push(node); node.children.forEach(walk); }; container.children.forEach(walk); return result; };
   const set = callback => renderer.flushSync(() => callback(controller));
   const next = async () => { await controller.handleNext(); await tick(); };
-  const ready = async () => {
+  const ready = async (duration = 'short') => {
     render();
     set(form => form.handleToggleService('Cleaning')); await next();
-    set(form => { form.handleEngagementChange('short'); form.setSetupPreference('stay-out'); form.setSelectedTime('morning'); form.setStartDate('12/31/2099'); });
+    set(form => {
+      form.handleEngagementChange(duration === 'short' ? 'short' : 'long');
+      if (duration !== 'short') form.setSetupPreference('stay-out');
+      form.setSelectedTime('morning'); form.setStartDate('12/31/2099');
+      if (duration !== 'short') {
+        form.setOngoing(duration === 'ongoing'); form.setEndDate(duration === 'fixed' ? '01/30/2100' : '');
+        form.setWorkHours('09:00 AM - 02:00 PM'); form.setWorkDays(['Th']);
+      }
+    });
     await next(); await next();
     set(form => form.setAgreedTerms(true));
     assert.equal(controller.step, 4);
@@ -112,10 +128,44 @@ function postingScreen(t, mode = 'service') {
     const contains = node => node.text === label || node.children.some(contains);
     renderer.flushSync(() => nodes().find(node => node.type === 'Pressable' && contains(node)).props.onPress());
   };
-  return { ready, submit, render, text, press, nodes, requests, alerts, closed, verification, user, get form() { return controller; } };
+  return { ready, submit, render, text, press, set, next, nodes, requests, alerts, closed, verification, user, get form() { return controller; } };
 }
 
 for (const mode of ['job', 'service']) {
+test(`${mode}: short-term hides work setup and replaces a previous Stay-in choice with Stay-out`, async t => {
+  const screen = postingScreen(t, mode); await screen.ready();
+  screen.set(form => form.handleBack());
+  screen.set(form => form.handleBack());
+  assert.equal(screen.form.step, 2);
+  assert.doesNotMatch(screen.text(), /WORK SETUP PREFERENCE|Stay-in|Stay-out/);
+  screen.press('Long-term');
+  assert.match(screen.text(), /WORK SETUP PREFERENCE/);
+  screen.press('Stay-in');
+  assert.equal(screen.form.setupPreference, 'stay-in');
+  screen.press('Short-term');
+  assert.equal(screen.form.setupPreference, 'stay-out');
+  assert.doesNotMatch(screen.text(), /WORK SETUP PREFERENCE|Stay-in|Stay-out/);
+  screen.set(form => form.setSelectedTime('morning'));
+  await screen.next(); await screen.next();
+  assert.equal(screen.form.step, 4);
+  await screen.submit(403, { code: 'booking_restricted' });
+  assert.equal(screen.requests[0].args[1].work_setup, 'stay_out');
+  assert.doesNotMatch(screen.requests[0].args[1].special_instruction, /stay-out/);
+});
+}
+
+for (const mode of ['job', 'service']) {
+  for (const duration of ['fixed', 'ongoing']) {
+    test(`${mode}: ${duration} long-term posts send the actual schedule`, async t => {
+      const screen = postingScreen(t, mode); await screen.ready(duration);
+      await screen.submit(403, { code: 'booking_restricted' });
+      const payload = screen.requests[0].args[1];
+      assert.equal(payload.booking_type, 'long_term');
+      assert.equal(payload.end_time, duration === 'ongoing' ? null : '2100-01-30T06:00:00.000Z');
+      assert.equal(payload.daily_start_time, '09:00:00');
+      assert.equal(payload.daily_end_time, '14:00:00');
+    });
+  }
   test(mode + ': penalty restriction shows the notice and preserves the form for retry', async t => {
     const screen = postingScreen(t, mode); await screen.ready();
     await screen.submit(403, { code: 'booking_restricted', detail: 'Booking and posting are restricted until next month.' });

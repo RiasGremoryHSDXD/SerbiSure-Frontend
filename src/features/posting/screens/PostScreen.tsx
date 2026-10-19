@@ -87,7 +87,7 @@ export function PostScreen(props: PostScreenProps) {
             )}
             {step === 2 && (
               <Text style={styles.mainTitle}>
-                {uiText("Job type &")}{' '}<Text style={styles.titleHighlight}>{uiText("setup")}</Text>
+                {uiText("Job type & schedule")}
               </Text>
             )}
             {step === 3 && (

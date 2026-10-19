@@ -75,9 +75,11 @@ export function buildPostDescription(mode: PostingMode, input: {
 }): string {
   const { service, location, setup, time, shortTerm, instructions, rate } = input;
   let message = mode === 'job'
-    ? `I am looking for ${service} at ${location}, capable of working on ${shortTerm ? `${time} on a ` : 'a '}${setup} setup.`
+    ? shortTerm
+      ? `I am looking for ${service} at ${location}, available ${time}.`
+      : `I am looking for ${service} at ${location}, capable of working on a ${setup} setup.`
     : shortTerm
-      ? `I am offering ${service} service in ${location}, available ${time} on a ${setup} arrangement.`
+      ? `I am offering ${service} service in ${location}, available ${time}.`
       : `I am looking for long-term ${service} work in ${location} on a ${setup} arrangement.`;
   const rateText = buildPostRateText(rate, shortTerm);
   if (rateText) {

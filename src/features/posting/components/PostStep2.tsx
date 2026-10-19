@@ -55,6 +55,7 @@ export function PostStep2({ form }: { form: PostFormController }) {
         </View>
 
         {/* 2. Setup Preference: Stay-in vs Stay-out */}
+        {engagementType === 'long' && <>
         <Text style={[styles.sectionLabel, { marginTop: 14 }]}>{uiText("WORK SETUP PREFERENCE")}</Text>
         <View style={styles.typeToggleRow}>
           <Pressable
@@ -83,12 +84,14 @@ export function PostStep2({ form }: { form: PostFormController }) {
             <Text style={styles.typeTitle}>{uiText("Stay-in")}</Text>
           </Pressable>
         </View>
+        </>}
 
         {engagementType && <WorkScheduleFields
           bookingType={engagementType === 'long' ? 'long_term' : 'short_term'}
           startDate={form.startDate} endDate={form.endDate} workHours={form.workHours} days={form.workDays} shift={selectedTime}
           onStartDate={form.setStartDate} onEndDate={form.setEndDate} onWorkHours={form.setWorkHours}
           onDays={form.setWorkDays} onShift={setSelectedTime}
+          ongoing={form.ongoing} onOngoing={form.setOngoing}
           disabled={!form.visible || form.isPosting}
         />}
         {engagementType === 'long' && <View style={{ marginTop: 14 }}>

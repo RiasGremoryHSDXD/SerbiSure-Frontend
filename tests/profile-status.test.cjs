@@ -64,7 +64,7 @@ function profile(t) {
   let controller, auth;
   function Worker() {
     controller = useWorkerProfile(true);
-    return React.createElement(AvailabilitySection, { profile: { ...controller, t: { setStatus: 'Status', available: 'Available', onJob: 'On the Job' } } });
+    return React.createElement(AvailabilitySection, { profile: { ...controller, t: { setStatus: 'Status', available: 'Available', onJob: 'Occupied' } } });
   }
   function Screen({ visible }) { auth = context.useUser(); return visible ? React.createElement(Worker) : null; }
   const container = { children: [] };
@@ -78,7 +78,7 @@ function profile(t) {
   return { render, requests, updates, alerts, nodes, get current() { return controller; }, get user() { return auth.user; } };
 }
 
-test('status starts unknown, then stays On the Job across Profile/Home remounts without refetching', async t => {
+test('status starts unknown, then stays Occupied across Profile/Home remounts without refetching', async t => {
   const screen = profile(t);
   screen.render(); await tick();
   assert.equal(screen.current.isOnJob, null);

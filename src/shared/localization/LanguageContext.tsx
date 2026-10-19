@@ -64,7 +64,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     logout: 'Log out',
     setStatus: 'Status',
     available: 'Available',
-    onJob: 'On the Job',
+    onJob: 'Occupied',
     aboutTitle: 'About',
     recentReviews: 'Recent Reviews',
     viewAll: 'View All',
@@ -206,7 +206,7 @@ interface LanguageContextType {
   setLanguage: (lang: Language) => void;
   t: Translations;
   tr: (source: string, params?: MessageParams) => string;
-  formatDate: (value: Date | string, style?: 'greeting' | 'monthYear' | 'full') => string;
+  formatDate: (value: Date | string, style?: 'greeting' | 'monthYear' | 'full' | 'compact') => string;
 }
 
 const LanguageContext = createContext<LanguageContextType>({
@@ -221,7 +221,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [language, setLanguage] = useState<Language>('English');
   const t = TRANSLATIONS[language === 'Cebuano' ? 'Bisaya' : language] || TRANSLATIONS.English;
   const tr = (source: string, params?: MessageParams) => translateMessage(language, source, params);
-  const formatDate = (value: Date | string, style?: 'greeting' | 'monthYear' | 'full') => formatLocalizedDate(language, value, style);
+  const formatDate = (value: Date | string, style?: 'greeting' | 'monthYear' | 'full' | 'compact') => formatLocalizedDate(language, value, style);
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage, t, tr, formatDate }}>
