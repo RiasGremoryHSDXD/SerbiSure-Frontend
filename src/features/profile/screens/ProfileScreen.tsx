@@ -506,6 +506,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
       <MyBookingsModal
         visible={isMyBookingsModalVisible}
         onClose={() => setIsMyBookingsModalVisible(false)}
+        onSafetyAcknowledged={profile.returnToDashboard}
         token={user.token || ''}
         accountType={ROLE_CONFIG[role].accountType}
         initialTab={bookingsModalInitialTab}

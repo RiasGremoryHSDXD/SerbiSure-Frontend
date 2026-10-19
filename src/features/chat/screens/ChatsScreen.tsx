@@ -174,6 +174,7 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
 
         <SupportContactsCard
           key={user.id}
+          accountId={user.id || ''}
           token={user.token}
           profileKey={[user.barangay, user.city, user.province].join('|')}
           refreshKey={supportRefresh}

@@ -15,6 +15,7 @@
       "**/*"
     ],
     "plugins": [
+      "expo-secure-store",
       [
         "react-native-vision-camera",
         {

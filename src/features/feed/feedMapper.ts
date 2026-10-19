@@ -3,6 +3,19 @@ import type { Role } from '../../app/roleConfig';
 import { formatTimeAgo } from '../../shared/utils/date';
 import { formatBookingAddress, formatBookingLocationShort } from '../bookings/api/bookingApi';
 import type { BookingFeedDto, FeedPost } from './types';
+import type { SavedJobItem } from '../bookings/store/savedJobsStore';
+
+// Both Browse roles use one shape for cards, saved posts, profiles and chats.
+export function mapBrowsePost(item: BookingFeedDto, role: Role): SavedJobItem & { title: string; location: string; aboutText: string; tags: string[] } {
+  if (role === 'kasambahay') return mapJobPreview(item);
+  const worker = mapWorkerPreview(item);
+  return {
+    id: worker.id, partnerId: worker.partnerId, employerName: worker.name, title: worker.role,
+    avatar: worker.avatar, image: worker.image, location: worker.location, roleTag: worker.role,
+    termTag: worker.years, setupTag: worker.setupTag, price: worker.price, unit: worker.unit,
+    aboutText: worker.aboutText, tags: Array.from(new Set([worker.years, ...worker.tags])),
+  };
+}
 
 const CATEGORY_LABELS: Record<string, string> = {
   Cleaning: 'Cleaning', Child_care: 'Child Care', Cooking: 'Cook', Caregiver: 'Caregiver',

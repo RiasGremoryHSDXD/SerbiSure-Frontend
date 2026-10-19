@@ -624,7 +624,7 @@ export function VerificationStatusModal({
             <View style={{ flex: 1 }}>
               <Text style={styles.ocrScanningTitle}>{uiText("Reading your document...")}</Text>
               <Text style={styles.ocrScanningSubtitle}>
-                {uiText("Our system is checking the details on your")}{docTitle}{uiText(". This takes just a moment.")}</Text>
+                {uiText("Our system is checking the details on your")} {docTitle}{uiText(". This takes just a moment.")}</Text>
             </View>
           </View>
         ) : (!isRejected && (hasOcrData || hasDiscrepancies)) ? (

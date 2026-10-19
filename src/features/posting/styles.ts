@@ -66,7 +66,7 @@ export const postingStyles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 16,
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
   },
 
   // STEP 1 STYLES

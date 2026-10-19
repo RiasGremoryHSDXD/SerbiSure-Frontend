@@ -3,6 +3,10 @@ import type { FaceLandmarks, LandmarkFrame } from '../face/types';
 
 export type LivenessStep = 'face' | 'turnLeft' | 'turnRight' | 'still' | 'verified';
 
+const PROMPT_DURATION_MS = 600;
+const TURN_HOLD_MS = 400;
+const MAX_FRAME_GAP_MS = 500;
+
 export type LivenessResult = {
   verified: true;
   completedAt: number;
@@ -16,8 +20,11 @@ export type LivenessState = {
   verified: boolean;
   retryMessage: string | null;
   stillnessProgress: number;
-  stableSince: number | null;
+  stillnessPausedAt: number | null;
   stableFace: FaceLandmarks | null;
+  stepStartedAt: number | null;
+  actionSince: number | null;
+  lastFrameAt: number | null;
 };
 
 export const initialLivenessState: LivenessState = {
@@ -27,19 +34,22 @@ export const initialLivenessState: LivenessState = {
   verified: false,
   retryMessage: null,
   stillnessProgress: 0,
-  stableSince: null,
+  stillnessPausedAt: null,
   stableFace: null,
+  stepStartedAt: null,
+  actionSince: null,
+  lastFrameAt: null,
 };
 
 const stepInstructions: Record<LivenessStep, string> = {
   face: 'Position your face inside the frame',
-  turnLeft: 'Look left',
-  turnRight: 'Look right',
-  still: 'Face forward and stay still',
+  turnLeft: 'Look Left',
+  turnRight: 'Look Right',
+  still: 'Face forward and hold for a moment',
   verified: 'Face verification complete',
 };
 
-function completeStep(state: LivenessState, completed: LivenessStep, next: LivenessStep): LivenessState {
+function completeStep(state: LivenessState, completed: LivenessStep, next: LivenessStep, now: number): LivenessState {
   return {
     ...state,
     step: next,
@@ -48,7 +58,11 @@ function completeStep(state: LivenessState, completed: LivenessStep, next: Liven
       : [...state.completedSteps, completed],
     instruction: stepInstructions[next],
     retryMessage: null,
-    stillnessProgress: next === 'still' ? state.stillnessProgress : 0,
+    stillnessProgress: 0,
+    stillnessPausedAt: null,
+    stableFace: null,
+    actionSince: null,
+    stepStartedAt: now,
   };
 }
 
@@ -57,8 +71,11 @@ export function retryCurrentStep(state: LivenessState): LivenessState {
     ...state,
     retryMessage: null,
     stillnessProgress: 0,
-    stableSince: null,
+    stillnessPausedAt: null,
     stableFace: null,
+    actionSince: null,
+    stepStartedAt: null,
+    lastFrameAt: null,
   };
 }
 
@@ -67,8 +84,36 @@ export function advanceLiveness(state: LivenessState, frame: LandmarkFrame): Liv
     return state;
   }
 
+  // Stale/out-of-order frames cannot complete a challenge. A paused detector
+  // must observe the current action again instead of counting the pause.
+  if (state.lastFrameAt !== null && frame.timestamp <= state.lastFrameAt) return state;
+  const previousFrameAt = state.lastFrameAt;
+  if (state.step !== 'still' && state.lastFrameAt !== null && frame.timestamp - state.lastFrameAt > MAX_FRAME_GAP_MS) {
+    state = retryCurrentStep(state);
+  }
+  state = { ...state, lastFrameAt: frame.timestamp, stepStartedAt: state.stepStartedAt ?? frame.timestamp };
   const alignment = getFaceAlignment(frame);
   const face = frame.face;
+
+  if (state.step === 'still') {
+    const ready = face && alignment.centered && getHeadPoseDirection(face) === 'center';
+    const stillness = getStillnessProgress(ready ? face : null, {
+      stableFace: state.stableFace,
+      progress: state.stillnessProgress,
+      pausedAt: state.stillnessPausedAt,
+    }, frame.timestamp, previousFrameAt);
+    return {
+      ...state,
+      step: stillness.isStill ? 'verified' : 'still',
+      completedSteps: stillness.isStill ? [...state.completedSteps, 'still'] : state.completedSteps,
+      instruction: stillness.isStill ? stepInstructions.verified : ready ? stepInstructions.still : 'Face the camera to continue',
+      verified: stillness.isStill,
+      retryMessage: null,
+      stillnessProgress: stillness.isStill ? 1 : stillness.progress,
+      stillnessPausedAt: stillness.pausedAt,
+      stableFace: stillness.stableFace,
+    };
+  }
 
   if (!face || !alignment.centered) {
     return {
@@ -76,51 +121,27 @@ export function advanceLiveness(state: LivenessState, frame: LandmarkFrame): Liv
       instruction: stepInstructions.face,
       retryMessage: face ? 'Move closer to the center of the frame.' : 'No face detected.',
       stillnessProgress: 0,
-      stableSince: null,
+      stillnessPausedAt: null,
       stableFace: null,
+      actionSince: null,
+      stepStartedAt: frame.timestamp,
     };
   }
 
   if (state.step === 'face') {
-    return completeStep(state, 'face', 'turnLeft');
+    return completeStep(state, 'face', 'turnLeft', frame.timestamp);
   }
 
   const headPose = getHeadPoseDirection(face);
 
-  if (state.step === 'turnLeft') {
-    return headPose === 'left'
-      ? completeStep(state, 'turnLeft', 'turnRight')
-      : { ...state, instruction: stepInstructions.turnLeft, retryMessage: null };
-  }
-
-  if (state.step === 'turnRight') {
-    return headPose === 'right'
-      ? completeStep(state, 'turnRight', 'still')
-      : { ...state, instruction: stepInstructions.turnRight, retryMessage: null };
-  }
-
-  if (state.step === 'still') {
-    const stillness = getStillnessProgress(face, state.stableFace, state.stableSince, frame.timestamp);
-    if (stillness.isStill) {
-      return {
-        ...state,
-        step: 'verified',
-        completedSteps: [...state.completedSteps, 'still'],
-        instruction: stepInstructions.verified,
-        verified: true,
-        retryMessage: null,
-        stillnessProgress: 1,
-      };
+  if (state.step === 'turnLeft' || state.step === 'turnRight') {
+    const expected = state.step === 'turnLeft' ? 'left' : 'right';
+    const prompted = frame.timestamp - state.stepStartedAt! >= PROMPT_DURATION_MS;
+    const actionSince = prompted && headPose === expected ? state.actionSince ?? frame.timestamp : null;
+    if (actionSince !== null && frame.timestamp - actionSince >= TURN_HOLD_MS) {
+      return completeStep(state, state.step, state.step === 'turnLeft' ? 'turnRight' : 'still', frame.timestamp);
     }
-
-    return {
-      ...state,
-      instruction: stepInstructions.still,
-      retryMessage: null,
-      stillnessProgress: stillness.progress,
-      stableSince: stillness.stableSince,
-      stableFace: stillness.stableFace,
-    };
+    return { ...state, actionSince, instruction: stepInstructions[state.step], retryMessage: null };
   }
 
   return state;

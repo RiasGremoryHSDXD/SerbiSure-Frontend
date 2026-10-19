@@ -14,8 +14,7 @@ import { UserProfileModal } from '../../profile/components/UserProfileModal';
 import { ChatDetailScreen } from '../../chat/components/ChatDetailScreen';
 import { JobDetailSheet } from '../components/JobDetailSheet';
 import { HomeFeedFilters, HomeFeedHeader, HomeFeedEmptyState, HomeFeedLoadingState } from '../components/HomeFeedControls';
-import { JobPostCard } from '../components/JobPostCard';
-import { WorkerPostCard } from '../components/WorkerPostCard';
+import { FeedPostCard } from '../components/FeedPostCard';
 import { useFeed } from '../hooks/useFeed';
 import { matchesHomeFeedFilters, type HomeFeedCategory } from '../feedFilters';
 import type { FeedPost } from '../types';
@@ -88,8 +87,7 @@ export function HomeScreen({ role: requestedRole, avatarUri, onAvatarPress, onVi
         onDetails: () => setSelectedPost(post),
         onToggleSave: () => { void toggleSave(post, authToken); },
       };
-      if (post.kind === 'job') return <JobPostCard key={post.id} {...actions} applied={isApplied(post.id)} />;
-      return <WorkerPostCard key={post.id} {...actions} />;
+      return <FeedPostCard key={post.id} {...actions} applied={post.kind === 'job' && isApplied(post.id)} />;
     });
   };
 

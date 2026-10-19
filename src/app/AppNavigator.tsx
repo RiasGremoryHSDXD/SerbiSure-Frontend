@@ -6,9 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../shared/localization/LanguageContext';
 import THEME from '../shared/theme/theme';
 
-import { WorkersScreen } from '../features/feed/screens/WorkersScreen';
-
-import { JobsScreen } from '../features/feed/screens/JobsScreen';
+import { BrowseScreen } from '../features/feed/screens/BrowseScreen';
 
 import { useUser } from '../features/auth/session/UserContext';
 import { chatStore } from '../features/chat/store/chatStore';
@@ -42,7 +40,6 @@ export function AppNavigator({ role = 'homeowner', avatarUri: oldAvatarUri, toke
   const [totalUnreadChats, setTotalUnreadChats] = useState(chatStore.getTotalUnreadCount());
 
   const activeRole = resolveRole(user.accountType, role);
-  const isKasambahay = activeRole === 'kasambahay';
   const avatarUri = user.profileLink || oldAvatarUri;
   const authToken = token || user.token;
 
@@ -73,11 +70,7 @@ export function AppNavigator({ role = 'homeowner', avatarUri: oldAvatarUri, toke
       case 'home':
         return <HomeScreen role={activeRole} avatarUri={avatarUri} onAvatarPress={handleOpenProfileView} onViewAll={() => setActiveTab('browse')} token={authToken} />;
       case 'browse':
-        return isKasambahay ? (
-          <JobsScreen avatarUri={avatarUri} onViewProfile={handleOpenProfileView} token={authToken} />
-        ) : (
-          <WorkersScreen avatarUri={avatarUri} onViewProfile={handleOpenProfileView} token={authToken} />
-        );
+        return <BrowseScreen key={`${activeRole}:${user.id}`} role={activeRole} avatarUri={avatarUri} onViewProfile={handleOpenProfileView} token={authToken} />;
       case 'chats':
         return <ChatsScreen role={activeRole} />;
       case 'profile':

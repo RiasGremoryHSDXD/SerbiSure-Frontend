@@ -11,11 +11,19 @@ export interface ChatOfferPayload extends PostingPayload {
   daily_end_time: string;
 }
 
+function errorMessages(data: unknown): string[] {
+  if (typeof data === 'string') return data.trim() ? [data.trim()] : [];
+  if (Array.isArray(data)) return data.flatMap(errorMessages);
+  if (data && typeof data === 'object') return Object.entries(data)
+    .filter(([key]) => key !== 'code').flatMap(([, value]) => errorMessages(value));
+  return [];
+}
+
 async function result<T>(path: string, token: string, method: string, body: unknown, key?: string): Promise<T> {
   const res = await requestResponse(path, { token, method, headers: key ? { 'Idempotency-Key': key } : undefined, body: JSON.stringify(body) });
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    const errors = data && typeof data === 'object' ? Object.values(data).flat().filter(value => typeof value === 'string').join(' ') : '';
+    const errors = errorMessages(data).join(' ');
     throw new Error(errors || 'Unable to save this booking. Please try again.');
   }
   if (!data) throw new Error('Unexpected booking response. Refresh the conversation before retrying.');
@@ -30,6 +38,6 @@ export async function respondToBookingOffer(token: string, card: BookingCardInfo
   if (!card.bookingId || !card.canRespond) throw new Error('This offer is not available for you to confirm.');
   const path = card.proposalId ? '/api/v1/booking/proposals/' + card.proposalId + '/respond/'
     : '/api/v1/booking/' + card.bookingId + (action === 'accept' ? '/accept/' : '/cancel/');
-  const data = await result<{ booking?: BookingItem; proposal?: { status: string } }>(path, token, 'PATCH', { action });
+  const data = await result<{ booking?: BookingItem; proposal?: { status: string } }>(path, token, 'PATCH', { action, ...(action === 'reject' && !card.proposalId ? { reason: 'Other', expected_points: 0 } : {}) });
   if (action === 'accept' && data.booking?.booking_status !== 'Accepted') throw new Error('The server did not confirm this booking. Refresh and check its status.');
 }

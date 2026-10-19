@@ -12,6 +12,7 @@ modules.set(configPath, {
   API_BASE_URL: 'http://test.local', DEFAULT_TIMEOUT_MS: 15000,
   buildApiUrl: (endpoint) => /^https?:/.test(endpoint) ? endpoint : `http://test.local/${endpoint.replace(/^\/+/, '')}`,
 });
+modules.set(path.join(root, 'src/shared/auth/session.ts'), { getSession: () => null });
 function load(relativePath) {
   const filename = path.resolve(root, relativePath);
   if (modules.has(filename)) return modules.get(filename);
@@ -127,6 +128,15 @@ test('chat presence requires an explicit boolean or recognized header; missing a
       assert.equal((await chatApi.fetchChatThreadDetails('token', 'contact')).partnerIsOnline, expected);
     });
   }
+});
+
+test('malformed thread responses stay errors and permission failures retain their HTTP status', async () => {
+  await withFetch(async () => response({ unexpected: [] }), async () => {
+    await assert.rejects(chatApi.fetchChatThreadDetails('token', 'partner'), /Could not load messages/);
+  });
+  await withFetch(async () => response({ detail: 'Not allowed' }, 403), async () => {
+    await assert.rejects(chatApi.fetchChatThreadDetails('token', 'partner'), error => error.status === 403);
+  });
 });
 
 test('account roles select the correct posting mode and verification documents', () => {
@@ -269,6 +279,11 @@ test('chat offers use durable request keys and acceptance waits for authoritativ
   }, () => assert.rejects(offersApi.respondToBookingOffer('session', { ...card, proposalId: 'proposal-1' }, 'accept'), /below the minimum/));
   await withFetch(async () => response({ booking: { booking_status: 'Pending' } }),
     () => assert.rejects(offersApi.respondToBookingOffer('session', card, 'accept'), /did not confirm/));
+  await withFetch(async () => response({ detail: { code: 'booking_restricted', detail: 'Booking and posting are restricted until next month.' } }, 403),
+    () => assert.rejects(offersApi.respondToBookingOffer('session', card, 'accept'), error => {
+      assert.equal(error.message, 'Booking and posting are restricted until next month.');
+      return true;
+    }));
 });
 
 test('booking lists distinguish empty results from server failures and malformed responses', async () => {
@@ -352,9 +367,13 @@ test('posting defaults switch with engagement while preserving a custom rate', (
 
 test('generated descriptions preserve role and engagement wording', () => {
   const input = { service: 'Cleaning', location: 'Nazareth', setup: 'stay-out', time: '8 AM to 5 PM', shortTerm: true, instructions: '  Pet-friendly  ' };
-  assert.equal(posting.buildPostDescription('job', input), 'I am looking for Cleaning at Nazareth, capable of working on 8 AM to 5 PM on a stay-out setup.\n\nSpecific instructions:\nPet-friendly');
-  assert.equal(posting.buildPostDescription('service', input), 'I am offering Cleaning service in Nazareth, available 8 AM to 5 PM on a stay-out arrangement.\n\nAbout my experience:\nPet-friendly');
+  assert.equal(posting.buildPostDescription('job', input), 'I am looking for Cleaning at Nazareth, available 8 AM to 5 PM.\n\nSpecific instructions:\nPet-friendly');
+  assert.equal(posting.buildPostDescription('service', input), 'I am offering Cleaning service in Nazareth, available 8 AM to 5 PM.\n\nAbout my experience:\nPet-friendly');
   assert.equal(posting.buildPostDescription('service', { ...input, shortTerm: false, instructions: '' }), 'I am looking for long-term Cleaning work in Nazareth on a stay-out arrangement.');
+  const location = posting.buildPostLocation({ street: 'Lot 3', floorUnit: '5', barangay: 'Brgy. Agusan', city: 'City of Cagayan De Oro', zipcode: '9000' });
+  assert.equal(location, 'Lot 3, Floor/Unit 5, Brgy. Agusan, City of Cagayan De Oro (9000)');
+  assert.equal(posting.buildPostDescription('service', { ...input, location, rate: '₱600' }), 'I am offering Cleaning service in Lot 3, Floor/Unit 5, Brgy. Agusan, City of Cagayan De Oro (9000), available 8 AM to 5 PM with an expected rate of ₱600 / day.\n\nAbout my experience:\nPet-friendly');
+  assert.equal(posting.buildPostLocation({ street: '  ', floorUnit: '', barangay: null, city: 'Cagayan de Oro', zipcode: '9000' }), 'Cagayan de Oro (9000)');
 });
 
 test('rate validation handles empty values, formatted amounts, and existing limits', () => {
@@ -548,6 +567,29 @@ test('long-term schedules need explicit ordered dates, daily hours and matching 
   assert.throws(() => engagementForm.buildEngagementSchedule(form, Date.parse('2030-03-01T00:00:00Z')));
   assert.throws(() => engagementForm.buildEngagementSchedule({...form, bookingType:'short_term'}, now));
   assert.equal(engagementForm.dayForDate('01/06/2030'), 'Su');
+});
+
+test('fixed terms require 30 calendar days while ongoing terms retain hours without a fake end date', () => {
+  const form = { bookingType: 'long_term', startDate: '10/21/2030', endDate: '11/20/2030', workHours: '09:00 AM - 02:00 PM', days: ['M'], shift: null };
+  const now = Date.parse('2030-10-01T00:00:00Z');
+  assert.equal(engagementForm.earliestLongTermEnd(form.startDate), '11/20/2030');
+  assert.equal(engagementForm.earliestLongTermEnd('01/31/2030'), '03/02/2030');
+  assert.throws(() => engagementForm.buildEngagementSchedule({ ...form, endDate: '11/19/2030' }, now), /30 days/);
+  assert.equal(engagementForm.buildEngagementSchedule(form, now).end_time, '2030-11-20T06:00:00.000Z');
+  const ongoing = engagementForm.buildEngagementSchedule({ ...form, ongoing: true, endDate: '' }, now);
+  assert.equal(ongoing.end_time, null);
+  assert.equal(ongoing.daily_end_time, '14:00:00');
+  assert.throws(() => engagementForm.buildEngagementSchedule({ ...form, workHours: '' }, now), /Choose your working hours/);
+});
+
+test('short-term custom hours use the selected day and reject missing or reversed times', () => {
+  const form = { bookingType: 'short_term', startDate: '01/07/2030', endDate: '', workHours: '09:00 AM - 02:00 PM', days: [], shift: 'custom', ongoing: true };
+  const now = Date.parse('2030-01-01T00:00:00Z');
+  const saved = engagementForm.buildEngagementSchedule(form, now);
+  assert.equal(saved.start_time, '2030-01-07T01:00:00.000Z');
+  assert.equal(saved.end_time, '2030-01-07T06:00:00.000Z');
+  assert.throws(() => engagementForm.buildEngagementSchedule({ ...form, workHours: '' }, now), /Choose your working hours/);
+  assert.throws(() => engagementForm.buildEngagementSchedule({ ...form, workHours: '05:00 PM - 08:00 AM' }, now), /end after/);
 });
 
 test('both forms require a complete PSGC hierarchy and a real street and ZIP code', () => {

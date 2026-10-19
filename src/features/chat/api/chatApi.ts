@@ -130,7 +130,7 @@ export async function fetchChatThreadDetails(token: string, partnerId: string): 
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Failed to load messages (${res.status})`);
+    throw new ApiError(errorData.detail || 'Could not load messages. Please retry.', res.status, errorData);
   }
 
   const json = await res.json();
@@ -146,6 +146,8 @@ export async function fetchChatThreadDetails(token: string, partnerId: string): 
   } else if (Array.isArray(json?.results)) {
     messages = json.results;
     partnerIsTyping = Boolean(json.partner_is_typing);
+  } else {
+    throw new Error('Could not load messages. Please retry.');
   }
 
   if (!partnerIsTyping && res.headers.get('x-partner-is-typing') === 'true') {
@@ -348,7 +350,7 @@ export const toggleChatReaction = reactToChatMessage;
 
 /**
  * DELETE /api/v1/chat/message/<message_id>/
- * Deletes or unsends a message in the conversation.
+ * Removes a message from the authenticated user's view across their devices.
  */
 export async function deleteChatMessage(
   token: string,
@@ -365,7 +367,7 @@ export async function deleteChatMessage(
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const msg = data.detail || `Failed to delete message (${res.status})`;
+    const msg = data.detail || 'Could not remove the message. Try again.';
     throw new Error(msg);
   }
 

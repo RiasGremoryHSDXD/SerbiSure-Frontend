@@ -5,21 +5,21 @@ import { Text, View, Pressable, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PendingPostCard } from './PendingPostCard';
+import { CancelBookingModal } from '../../bookings/components/CancelBookingModal';
 
 import { profileStyles as styles } from '../styles';
 import type { ProfileController } from '../hooks/useProfile';
 
 export function PendingPostsSection({ profile }: { profile: ProfileController }) {
   const { tr: uiText } = useUiLanguage();
+  const [cancelTarget, setCancelTarget] = React.useState<string | null>(null);
   const {
     copy,
     pendingPosts,
     isLoadingPendingPosts,
     pendingPostsError,
-    isCancellingPostId,
     openMyBookings,
     loadPendingPosts,
-    handleCancelPendingPost,
   } = profile;
   return (<>
     <View style={styles.pendingPostsSection}>
@@ -76,7 +76,7 @@ export function PendingPostsSection({ profile }: { profile: ProfileController })
         /* State 4: Success / List */
         <View style={styles.pendingPostsList}>
           {pendingPosts.map((post) => {
-            const isCancelling = isCancellingPostId === post.booking_id;
+            const isCancelling = cancelTarget === post.booking_id;
             return (
               <PendingPostCard key={post.booking_id} post={post} note={post.proposals_count && post.proposals_count > 0 ? `${post.proposals_count} Proposal(s) received` : copy.waiting}>
                 {/* Action Buttons */}
@@ -90,7 +90,7 @@ export function PendingPostsSection({ profile }: { profile: ProfileController })
 
                   <Pressable
                     style={[styles.pendingPostCancelBtn, isCancelling && { opacity: 0.6 }]}
-                    onPress={() => handleCancelPendingPost(post.booking_id)}
+                    onPress={() => setCancelTarget(post.booking_id)}
                     disabled={isCancelling}
                   >
                     {isCancelling ? (
@@ -108,5 +108,11 @@ export function PendingPostsSection({ profile }: { profile: ProfileController })
         </View>
       )}
     </View>
+    {cancelTarget && profile.user.token && <CancelBookingModal key={cancelTarget} bookingId={cancelTarget} token={profile.user.token}
+      onClose={() => setCancelTarget(null)} onCancelled={safety => {
+        setCancelTarget(null);
+        if (safety) profile.returnToDashboard();
+        else void loadPendingPosts(true);
+      }} />}
   </>);
 }

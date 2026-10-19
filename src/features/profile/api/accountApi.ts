@@ -476,10 +476,11 @@ export async function fetchJobStatus(token: string): Promise<boolean> {
     }
 
     const data = await res.json();
-    return Boolean(data.is_on_job);
+    if (typeof data.is_on_job !== 'boolean') throw new Error('Could not load your status. Please try again.');
+    return data.is_on_job;
   } catch (error: any) {
     console.warn('[accountApi] fetchJobStatus error:', error?.message || error);
-    return false;
+    throw error;
   }
 }
 
@@ -504,7 +505,8 @@ export async function updateJobStatus(token: string, isOnJob: boolean): Promise<
     }
 
     const data = await res.json();
-    return Boolean(data.is_on_job);
+    if (typeof data.is_on_job !== 'boolean') throw new Error('Could not update your status. Please try again.');
+    return data.is_on_job;
   } catch (error: any) {
     console.warn('[accountApi] updateJobStatus error:', error?.message || error);
     throw error;

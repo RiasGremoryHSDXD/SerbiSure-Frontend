@@ -60,7 +60,7 @@ export interface BookingItem {
   completed_at?: string | null;
   contract_summary?: {
     booking_id: string; service_category: string[]; rate_amount: string | null; rate_period: 'month'; rate_needs_review: boolean;
-    work_setup: WorkSetup | null; start_date: string; location: string; contract_pdf_url: string; source_url: string; notice: string;
+    work_setup: WorkSetup | null; start_date: string; end_date?: string | null; location: string; contract_pdf_url: string; source_url: string; notice: string;
   } | null;
   createdAt: string;
   poster?: BookingParticipant;
@@ -70,6 +70,8 @@ export interface BookingItem {
   cancel_requested_by?: { id: string; name: string; account_type: string } | null;
   cancel_requested_at?: string | null;
   cancellation_reason?: string | null;
+  cancellation_penalty_points?: number;
+  cancelled_at?: string | null;
   can_cancel?: boolean;
   cancellation_deadline?: string | null;
   is_cancel_requested?: boolean;
@@ -259,13 +261,13 @@ export async function completeBooking(token: string, bookingId: string): Promise
 }
 
 /**
- * Cancel or respond to cancellation of a booking
+ * Cancel a booking after reviewing the server-calculated penalty.
  */
 export async function cancelBooking(
   token: string,
   bookingId: string,
-  payload?: { action?: 'request' | 'confirm' | 'decline'; reason?: string }
-): Promise<{ success: boolean; message?: string; error?: string; booking?: BookingItem }> {
+  payload: { reason: string; expected_points?: number }
+): Promise<CancellationResult> {
   try {
     const res = await requestResponse(`${API_BASE_URL}/api/v1/booking/${bookingId}/cancel/`, {
       method: 'PATCH',
@@ -273,14 +275,50 @@ export async function cancelBooking(
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(payload || { action: 'request' }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) return { success: false, error: bookingError(data, 'Could not cancel booking.') };
-    return { success: true, message: data.message, booking: data.booking };
+    if (data.booking?.booking_status !== 'Cancelled' || !data.penalty) {
+      return { success: false, error: 'Could not confirm cancellation. Refresh your bookings.' };
+    }
+    return { success: true, message: data.message, booking: data.booking, penalty: data.penalty, safety_advisory: data.safety_advisory };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error.' };
   }
+}
+
+export interface BookingPenaltyStatus {
+  penalty_points: number;
+  is_restricted: boolean;
+  penalty_month: string;
+  resets_at: string;
+}
+
+export interface CancellationPreview extends BookingPenaltyStatus {
+  points_to_add: number;
+  reasons: string[];
+}
+
+export interface CancellationResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  booking?: BookingItem;
+  penalty?: BookingPenaltyStatus & { points_added: number };
+  safety_advisory?: boolean;
+}
+
+export function fetchBookingPenaltyStatus(token: string): Promise<BookingPenaltyStatus> {
+  return requestJson('/api/v1/booking/penalties/', { token });
+}
+
+export async function fetchCancellationPreview(token: string, bookingId: string): Promise<CancellationPreview> {
+  const data = await requestJson<CancellationPreview>(`/api/v1/booking/${encodeURIComponent(bookingId)}/cancel/`, { token });
+  if (!data || ![0, 1, 2].includes(data.points_to_add) || typeof data.penalty_points !== 'number' || !Array.isArray(data.reasons) || !data.reasons.length || data.reasons.some(reason => typeof reason !== 'string')) {
+    throw new Error('Could not load cancellation details. Try again.');
+  }
+  return data;
 }
 
 /**

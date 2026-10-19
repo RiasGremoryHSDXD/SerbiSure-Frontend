@@ -2,15 +2,17 @@ import { useLanguage as useUiLanguage } from '../../../shared/localization/Langu
 import { AppState } from 'react-native';
 import { realtime } from '../../../shared/realtime';
 import { useRealtimeStatus } from '../../../shared/realtime/useRealtimeStatus';
+import { useChatPresence } from '../../../shared/realtime/useChatPresence';
 import { mapBookingCard, bookingSchedule, type BookingCardInfo } from '../bookingCards';
 import { sendBookingOffer, respondToBookingOffer } from '../api/bookingOffersApi';
 import type { BookingConfirmData } from '../../bookings/components/BookingModal';
-import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { StyleSheet, Text, View, Image, TextInput, ScrollView, Pressable, Modal, KeyboardAvoidingView, Platform, Alert, Animated, ActivityIndicator, Dimensions, PanResponder, ToastAndroid, NativeModules, LayoutChangeEvent } from 'react-native';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
+import { StyleSheet, Text, View, Image, TextInput, FlatList, Pressable, Modal, KeyboardAvoidingView, Platform, Alert, Animated, ActivityIndicator, Dimensions, PanResponder, ToastAndroid, NativeModules, LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { BookingModal } from '../../bookings/components/BookingModal';
+import { confirmBookingAcceptance, bookingResponseMessage } from '../../bookings/bookingAcceptance';
 import { UserProfileView } from '../../profile/components/UserProfileView';
 import { OfficialProfileModal } from '../../profile/components/OfficialProfileModal';
 import { useChatSafety } from '../hooks/useChatSafety';
@@ -20,6 +22,8 @@ import THEME from '../../../shared/theme/theme';
 import { fetchChatThreadDetails, generateUUID, sendChatMessage, sendChatImage, toggleChatReaction, deleteChatMessage, sendChatTyping } from '../api/chatApi';
 import { chatStore } from '../store/chatStore';
 import { createThreadRefreshQueue } from '../threadRefreshQueue';
+import { cacheThread, forgetCachedThread, getCachedThread, threadCacheGeneration } from '../threadCache';
+import { getReplyRelationship, isGenericPhotoReply } from '../replyRelationships';
 import { savedJobsStore } from '../../bookings/store/savedJobsStore';
 import { API_BASE_URL } from '../../../shared/api/config';
 import { fetchWithTimeout } from '../../../shared/api/httpClient';
@@ -367,8 +371,9 @@ function TypingDotsIndicator({ avatarUri }: { avatarUri: string }) {
 
 export function ChatDetailScreen(props: ChatDetailScreenProps) {
   const { user } = useUser();
+  if (!props.visible) return null;
   // Reset before the next render: an effect-based reset can still flash the old thread.
-  const sessionKey = JSON.stringify([user.id || user.email || '', props.partnerId || '', props.visible]);
+  const sessionKey = JSON.stringify([user.id || user.email || props.token || user.token || '', props.partnerId || '', props.visible]);
   return <ChatDetailSession key={sessionKey} {...props} />;
 }
 
@@ -388,17 +393,26 @@ function ChatDetailSession({
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const effectiveToken = token || user.token;
-  const safety = useChatSafety(effectiveToken, visible);
+  const threadKey = effectiveToken && partnerId ? JSON.stringify([user.id || user.email || effectiveToken, partnerId]) : null;
+  const sessionThreadKey = useRef(threadKey).current;
+  const cachedThread = useMemo(() => visible && threadKey
+    ? getCachedThread(threadKey)?.filter(message => !chatStore.isMessageDeleted(message.id)) ?? null : null, [visible, threadKey]);
+  const cacheGeneration = useRef(threadCacheGeneration());
+  const hasLoadedThread = useRef(cachedThread !== null);
+  const [transitionReady, setTransitionReady] = useState(false);
+  const safety = useChatSafety(effectiveToken, visible && transitionReady);
   const isSupportConversation = ['admin', 'superadmin', 'barangay'].includes(contactRole.toLowerCase());
   const chatPaused = !!safety?.restricted_until && !isSupportConversation;
   const sessionActive = useRef(true);
+  if (threadKey !== sessionThreadKey) sessionActive.current = false;
   useLayoutEffect(() => {
     sessionActive.current = true;
     return () => { sessionActive.current = false; };
   }, []);
 
-  // Presence stays neutral until this conversation receives a server-confirmed status.
-  const [partnerOnline, setPartnerOnline] = useState<boolean | null>(null);
+  const presenceAccount = effectiveToken ? user.id || effectiveToken : null;
+  const presence = useChatPresence(presenceAccount, partnerId ? [partnerId] : []);
+  const partnerOnline = presence(partnerId);
 
   // Determine if the current active user is a Kasambahay or Homeowner
   const isKasambahay =
@@ -407,8 +421,7 @@ function ChatDetailSession({
     contactRole?.toLowerCase().includes('homeowner');
   const isHomeowner = !isKasambahay;
 
-  const scrollViewRef = useRef<ScrollView>(null);
-  const hasAutoScrolledRef = useRef(false);
+  const scrollViewRef = useRef<FlatList<ChatMessage>>(null);
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const lastTypingSentRef = useRef<number>(0);
 
@@ -420,14 +433,6 @@ function ChatDetailSession({
       sendChatTyping(effectiveToken, partnerId, true);
     }
   };
-
-  useEffect(() => {
-    if (isOtherTyping) {
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    }
-  }, [isOtherTyping]);
 
   const copyToClipboard = (text: string) => {
     if (!text) return;
@@ -456,11 +461,19 @@ function ChatDetailSession({
   const [inputMessage, setInputMessage] = useState('');
   const sendingText = useRef(false);
   const [isSendingText, setIsSendingText] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(cachedThread || []);
+  const newestFirst = useMemo(() => [...messages].reverse(), [messages]);
+  const newestFirstRef = useRef(newestFirst);
+  newestFirstRef.current = newestFirst;
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  const uploadingImage = useRef(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [reactingMessageId, setReactingMessageId] = useState<string | null>(null);
   const [activeActionMenuMsg, setActiveActionMenuMsg] = useState<ChatMessage | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<ChatMessage | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
+  const removalPending = useRef(false);
   const [activeMenuLayout, setActiveMenuLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const messageRefs = useRef<{ [id: string]: View | null }>({});
   const reactionScaleAnim = useRef(new Animated.Value(0.3)).current;
@@ -468,35 +481,6 @@ function ChatDetailSession({
   const menuScaleAnim = useRef(new Animated.Value(0.4)).current;
   const menuOpacityAnim = useRef(new Animated.Value(0)).current;
   const backdropOpacityAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    hasAutoScrolledRef.current = false;
-    if (visible) {
-      const t1 = setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: false }), 50);
-      const t2 = setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: false }), 200);
-      const t3 = setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: false }), 450);
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-        clearTimeout(t3);
-      };
-    }
-  }, [visible, partnerId]);
-
-  useEffect(() => {
-    if (messages.length > 0 && !hasAutoScrolledRef.current) {
-      hasAutoScrolledRef.current = true;
-      requestAnimationFrame(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: false });
-      });
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: false });
-      }, 100);
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: false });
-      }, 300);
-    }
-  }, [messages.length]);
 
   useEffect(() => {
     if (activeActionMenuMsg) {
@@ -563,6 +547,7 @@ function ChatDetailSession({
   // Right-to-left slide transition state
   const [modalVisible, setModalVisible] = useState(visible);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
+  const entranceAnimation = useRef<Animated.CompositeAnimation | null>(null);
 
   // Swipe-to-reply state & input ref
   const [replyingTo, setReplyingTo] = useState<{
@@ -574,16 +559,16 @@ function ChatDetailSession({
   } | null>(null);
   const inputRef = useRef<TextInput>(null);
 
-  // Layout positions and dimensions for each message to enable accurate jumping/scrolling
-  const messageOffsets = useRef<{ [id: string]: number }>({});
-  const messageHeights = useRef<{ [id: string]: number }>({});
-  const chatViewportHeight = useRef<number>(0);
+  const jumpRetry = useRef<ReturnType<typeof setTimeout>>();
+  const jumpAttempts = useRef(0);
+  const jumpTarget = useRef<string>();
+  useEffect(() => () => { clearTimeout(jumpRetry.current); entranceAnimation.current?.stop(); }, []);
 
   const scrollToMessage = (targetId?: string, targetImageUri?: string) => {
     let finalTargetId = targetId;
 
     // 1. If finalTargetId is not known or not measured, resolve via targetImageUri
-    if ((!finalTargetId || typeof messageOffsets.current[finalTargetId] !== 'number') && targetImageUri) {
+    if (!messages.some(message => message.id === finalTargetId) && targetImageUri) {
       const match = messages.find(
         (m) =>
           m.imageUri &&
@@ -604,27 +589,12 @@ function ChatDetailSession({
       }
     }
 
-    const targetY = finalTargetId ? messageOffsets.current[finalTargetId] : undefined;
-    if (finalTargetId && typeof targetY === 'number') {
-      const targetHeight = messageHeights.current[finalTargetId] || 220;
-      const vpHeight = chatViewportHeight.current > 0 ? chatViewportHeight.current : 520;
-
-      // Position the target photo/message centered in the viewport so it lands right in view
-      const centeredOffset = Math.max(16, (vpHeight - targetHeight) / 2);
-      const scrollY = Math.max(0, targetY - centeredOffset);
-
-      scrollViewRef.current?.scrollTo({ y: scrollY, animated: true });
-      return;
-    }
-
-    // 3. Fallback if layout hasn't populated yet
-    if (finalTargetId) {
-      const idx = messages.findIndex((m) => m.id === finalTargetId);
-      if (idx >= 0 && scrollViewRef.current) {
-        const estY = Math.max(0, idx * 80);
-        scrollViewRef.current?.scrollTo({ y: estY, animated: true });
-      }
-    }
+    const index = newestFirst.findIndex(message => message.id === finalTargetId);
+    if (index < 0) { Alert.alert(uiText('Message unavailable'), uiText('This message is no longer available.')); return; }
+    clearTimeout(jumpRetry.current);
+    jumpAttempts.current = 0;
+    jumpTarget.current = finalTargetId;
+    scrollViewRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
   };
 
   useEffect(() => {
@@ -642,29 +612,17 @@ function ChatDetailSession({
     }
   }, [visible, initialReplyTo, initialMessage]);
 
-  useEffect(() => {
-    if (visible) {
-      setModalVisible(true);
-      slideAnim.setValue(SCREEN_WIDTH);
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        damping: 26,
-        mass: 0.85,
-        stiffness: 240,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      Animated.timing(slideAnim, {
-        toValue: SCREEN_WIDTH,
-        duration: 200,
-        useNativeDriver: true,
-      }).start(() => {
-        setModalVisible(false);
-      });
-    }
-  }, [visible, slideAnim]);
+  const handleModalShow = () => {
+    entranceAnimation.current?.stop();
+    slideAnim.setValue(SCREEN_WIDTH);
+    entranceAnimation.current = Animated.timing(slideAnim, { toValue: 0, duration: 220, useNativeDriver: true });
+    entranceAnimation.current.start(({ finished }) => {
+      if (finished && sessionActive.current) setTransitionReady(true);
+    });
+  };
 
   const handleClose = () => {
+    entranceAnimation.current?.stop();
     if (partnerId && effectiveToken) {
       sendChatTyping(effectiveToken, partnerId, false);
     }
@@ -707,10 +665,14 @@ function ChatDetailSession({
   const nextPoll = useRef(0);
   const appliedPoll = useRef(0);
   const liveStatus = useRealtimeStatus();
-  const [threadLoading, setThreadLoading] = useState(true);
+  const [threadLoading, setThreadLoading] = useState(cachedThread === null);
   const [threadError, setThreadError] = useState<string | null>(null);
   const [threadReload, setThreadReload] = useState(0);
   const offerDraft = useRef<{ body: string; key: string } | null>(null);
+
+  useLayoutEffect(() => {
+    if (visible && sessionActive.current && threadKey && threadKey === sessionThreadKey && hasLoadedThread.current) cacheThread(threadKey, messages, cacheGeneration.current);
+  }, [visible, threadKey, messages, threadLoading]);
 
   const handleOfferResponse = async (msgId: string, action: 'accept' | 'reject') => {
     const card = messages.find(message => message.id === msgId)?.bookingInfo;
@@ -732,9 +694,16 @@ function ChatDetailSession({
   const handleKasambahayConfirm = (id: string) => handleOfferResponse(id, 'accept');
   const handleKasambahayDecline = (id: string) => handleOfferResponse(id, 'reject');
   const confirmFromCard = (id: string, action: 'accept' | 'reject') => {
-    void handleOfferResponse(id, action).catch(error => {
-      if (sessionActive.current) Alert.alert('Cannot Confirm', error instanceof Error ? error.message : 'Please try again.');
-    });
+    const card = messages.find(message => message.id === id)?.bookingInfo;
+    if (!card?.canRespond || responseBusyRef.current) return;
+    const respond = () => {
+      if (!sessionActive.current) return;
+      void handleOfferResponse(id, action).catch(error => {
+        if (sessionActive.current) Alert.alert(uiText('Booking not updated'), uiText(bookingResponseMessage(error)));
+      });
+    };
+    if (action === 'accept') confirmBookingAcceptance(card.bookingType, uiText, respond);
+    else respond();
   };
 
   const handleSendOffer = async (details: BookingConfirmData) => {
@@ -742,10 +711,10 @@ function ChatDetailSession({
     if (responseBusyRef.current) throw new Error('Please wait for the current booking action to finish.');
     const times = details.workHours.split(' - ');
     const start = bookingSchedule(details.startDate, times[0] || '');
-    const end = bookingSchedule(details.endDate, times[1] || '');
+    const end = bookingSchedule(details.ongoing ? details.startDate : details.endDate, times[1] || '');
     const payload = {
       recipient_id: partnerId, booking_type: details.bookingType, work_setup: details.workSetup,
-      service_category: details.serviceCategory, start_time: start.iso, end_time: end.iso,
+      service_category: details.serviceCategory, start_time: start.iso, end_time: details.ongoing ? null : end.iso,
       daily_start_time: start.clock, daily_end_time: end.clock, work_days: details.days,
       region: details.region, province: details.province, city: details.city, barangay: details.barangay,
       street: details.street, floor_number: details.floorUnit || undefined, zip_code: details.zipCode, special_instruction: '',
@@ -773,7 +742,7 @@ function ChatDetailSession({
   };
 
   React.useEffect(() => {
-    if (!visible) return;
+    if (!visible || !transitionReady || threadKey !== sessionThreadKey) return;
 
     let isMounted = true;
     let typingTimer: ReturnType<typeof setTimeout> | undefined;
@@ -781,16 +750,18 @@ function ChatDetailSession({
     const queue = createThreadRefreshQueue((isInitial) => {
       if (!partnerId || !effectiveToken) return Promise.resolve();
       const version = threadVersion.current;
+      const presenceRevision = realtime.getPresenceRevision();
       const poll = ++nextPoll.current;
-      if (isInitial) setThreadLoading(true);
+      if (isInitial) setThreadLoading(!hasLoadedThread.current);
 
       return fetchChatThreadDetails(effectiveToken, partnerId)
         .then(({ messages: items, partnerIsTyping, partnerIsOnline }) => {
-          if (!isMounted || version !== threadVersion.current || poll < appliedPoll.current) return;
+          if (!isMounted || !sessionActive.current || version !== threadVersion.current || poll < appliedPoll.current) return;
           appliedPoll.current = poll;
           setThreadLoading(false); setThreadError(null);
           if (realtime.status !== 'connected') setIsOtherTyping(partnerIsTyping);
-          setPartnerOnline(typeof partnerIsOnline === 'boolean' ? partnerIsOnline : null);
+          // HTTP is a fallback. A slow response must never replace newer live presence.
+          if (realtime.status !== 'connected') realtime.recordPresence(presenceAccount, partnerId, partnerIsOnline, presenceRevision);
 
           if (items && items.length > 0) {
             const visibleItems = items.filter((m) => !chatStore.isMessageDeleted(m.chat_message_id));
@@ -892,9 +863,10 @@ function ChatDetailSession({
               };
             });
 
-            const deduplicatedMapped = mapped;
-
+            hasLoadedThread.current = true;
+            if (threadKey) cacheThread(threadKey, mapped, cacheGeneration.current);
             setMessages((prev) => {
+              const deduplicatedMapped = [...mapped, ...prev.filter(message => message.id.startsWith('temp-'))];
               const hasChanged =
                 prev.length !== deduplicatedMapped.length ||
                 prev.some((msg, idx) => {
@@ -920,6 +892,8 @@ function ChatDetailSession({
 
             void chatStore.loadInbox(effectiveToken, true);
           } else if (isInitial && initialMessage) {
+            hasLoadedThread.current = true;
+            if (threadKey) cacheThread(threadKey, [], cacheGeneration.current);
             // New thread with initial auto-message!
             const replyHeader = initialReplyTo
               ? `> [${initialReplyTo.author}|${initialReplyTo.imageUri || ''}|${initialReplyTo.messageId || ''}]: ${initialReplyTo.text}\n\n`
@@ -966,15 +940,24 @@ function ChatDetailSession({
                 if (isMounted) { setMessages(current => current.filter(message => message.id !== tempId)); setInputMessage(initialMessage || ''); setThreadError(err instanceof Error ? err.message : 'Could not send the initial message. Please retry.'); }
               });
           } else {
-            setMessages([]);
+            hasLoadedThread.current = true;
+            if (threadKey) cacheThread(threadKey, [], cacheGeneration.current);
+            setMessages(current => current.filter(message => message.id.startsWith('temp-')));
           }
         })
         .catch((err) => {
           if (!isMounted || version !== threadVersion.current) return;
           setThreadLoading(false);
-          setThreadError(err instanceof Error ? err.message : 'Unable to load this conversation.');
+          if ([401, 403, 404].includes(err?.status)) {
+            hasLoadedThread.current = false;
+            if (threadKey) forgetCachedThread(threadKey);
+            setMessages([]);
+            setThreadError(err.status === 401 ? 'Please sign in again.' : 'This conversation is unavailable.');
+          } else {
+            setThreadError(hasLoadedThread.current ? 'Could not refresh messages. Please retry.' : 'Could not load messages. Please retry.');
+          }
         });
-    }, () => isMounted && !!partnerId && !!effectiveToken && !responseBusyRef.current && AppState.currentState === 'active');
+    }, () => isMounted && !!partnerId && !!effectiveToken && !responseBusyRef.current && !sendingText.current && !uploadingImage.current && AppState.currentState === 'active');
     const syncThread = queue.request;
 
     if (partnerId && effectiveToken) {
@@ -1003,13 +986,14 @@ function ChatDetailSession({
         isMounted = false; queue.stop();
       };
     }
-  }, [visible, partnerId, effectiveToken, resolvedAvatar, initialMessage, threadReload]);
+  }, [visible, transitionReady, partnerId, effectiveToken, resolvedAvatar, initialMessage, threadReload, threadKey, presenceAccount]);
 
   const handleSend = () => {
     const trimmed = inputMessage.trim();
     if (!trimmed || sendingText.current || chatPaused) return;
     if (!partnerId || !effectiveToken) { Alert.alert('Sign in required', 'Please sign in before sending messages.'); return; }
     sendingText.current = true;
+    threadVersion.current++;
     setIsSendingText(true);
 
     if (partnerId && effectiveToken) {
@@ -1067,7 +1051,7 @@ function ChatDetailSession({
     setInputMessage('');
 
     setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
+      scrollViewRef.current?.scrollToOffset({ offset: 0, animated: true });
     }, 100);
 
     // Call real backend API if partnerId and token exist
@@ -1077,7 +1061,7 @@ function ChatDetailSession({
           if (!sessionActive.current) return;
           if (res?.data?.chat_message_id) {
             setMessages((prev) =>
-              prev.map((msg) => (msg.id === tempId ? { ...msg, id: res.data.chat_message_id, text: (res.data.message_payload || '').replace(/^> \[[^\n]*\]: [^\n]*\n\n/, '') } : msg))
+              prev.filter(msg => msg.id !== res.data.chat_message_id).map((msg) => (msg.id === tempId ? { ...msg, id: res.data.chat_message_id, text: (res.data.message_payload || '').replace(/^> \[[^\n]*\]: [^\n]*\n\n/, '') } : msg))
             );
           }
           if (res.language_warning) Alert.alert('Notice', res.language_warning);
@@ -1098,13 +1082,13 @@ function ChatDetailSession({
           Alert.alert('Message not sent', err.message || 'Could not send message. Please try again.');
         }).finally(() => {
           sendingText.current = false;
-          if (sessionActive.current) setIsSendingText(false);
+          if (sessionActive.current) { setIsSendingText(false); refreshThreadRef.current?.(); }
         });
     }
   };
 
   const handlePickImage = async () => {
-    if (chatPaused) return;
+    if (chatPaused || uploadingImage.current) return;
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!sessionActive.current) return;
@@ -1139,6 +1123,8 @@ function ChatDetailSession({
       const now = new Date();
       const timeString = formatTimeOnly(now.toISOString());
       const tempId = `temp-img-${Date.now()}`;
+      uploadingImage.current = true;
+      threadVersion.current++;
 
       const newMsg: ChatMessage = {
         id: tempId,
@@ -1155,7 +1141,7 @@ function ChatDetailSession({
       });
 
       setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
+        scrollViewRef.current?.scrollToOffset({ offset: 0, animated: true });
       }, 100);
 
       setIsUploadingImage(true);
@@ -1164,12 +1150,13 @@ function ChatDetailSession({
         if (!sessionActive.current) return;
         if (res?.data?.chat_message_id) {
           setMessages((prev) =>
-            prev.map((msg) =>
+            prev.filter(msg => msg.id !== res.data.chat_message_id).map((msg) =>
               msg.id === tempId
                 ? {
                   ...msg,
                   id: res.data.chat_message_id,
                   imageUri: res.data.image_url || imageUri,
+                  isUploading: false,
                 }
                 : msg
             )
@@ -1197,7 +1184,8 @@ function ChatDetailSession({
           Alert.alert('Upload Failed', errMsg);
         }
       } finally {
-        if (sessionActive.current) setIsUploadingImage(false);
+        uploadingImage.current = false;
+        if (sessionActive.current) { setIsUploadingImage(false); refreshThreadRef.current?.(); }
       }
     } catch (err) {
       if (!sessionActive.current) return;
@@ -1213,6 +1201,7 @@ function ChatDetailSession({
 
     // Normalize heart emoji
     const normalizedEmoji = emoji === '\u2764' ? '❤️' : emoji;
+    const previousMessage = messages.find(message => message.id === targetMsgId);
 
     // Optimistic UI update
     setMessages((prev) =>
@@ -1259,43 +1248,38 @@ function ChatDetailSession({
           );
         }
       } catch (err) {
-        console.warn('[ChatDetailScreen] toggle reaction error:', err);
+        if (!sessionActive.current) return;
+        setMessages(current => current.map(message => message.id === targetMsgId ? {
+          ...message, reaction: previousMessage?.reaction, reactionSummary: previousMessage?.reactionSummary,
+        } : message));
+        Alert.alert(uiText('Reaction not saved'), uiText('Could not save your reaction. Please retry.'));
       }
     }
   };
 
-  const handleDeleteOrUnsend = async (msg: ChatMessage, actionType: 'unsend' | 'delete_for_me') => {
-    setActiveActionMenuMsg(null);
-
-    // Track ID in chatStore so background polling never resurrects it
-    if (msg.id) {
-      chatStore.markMessageDeleted(msg.id);
-    }
-
-    // Optimistic removal from message list
-    setMessages((prev) => prev.filter((m) => m.id !== msg.id));
-
-    if (actionType === 'delete_for_me') {
-      if (Platform.OS === 'android') {
-        ToastAndroid.show('Message deleted for you', ToastAndroid.SHORT);
-      }
+  const handleRemoveForYou = async () => {
+    if (!removeTarget || removalPending.current || !effectiveToken) return;
+    const msg = removeTarget;
+    if (msg.isUploading || !isValidUUID(msg.id)) {
+      setRemoveError('Wait for this message to finish sending.');
       return;
     }
-
-    // For unsend: delete for everyone on the server
-    if (actionType === 'unsend') {
-      if (Platform.OS === 'android') {
-        ToastAndroid.show('Message unsent', ToastAndroid.SHORT);
-      }
-
-      if (effectiveToken && msg.id && isValidUUID(msg.id) && !msg.id.startsWith('temp-')) {
-        try {
-          await deleteChatMessage(effectiveToken, msg.id);
-        } catch (err) {
-          // Log softly to prevent yellow LogBox popup on user device
-          console.log('[ChatDetailScreen] unsend background sync:', err);
-        }
-      }
+    removalPending.current = true;
+    setIsRemoving(true); setRemoveError(null);
+    try {
+      await deleteChatMessage(effectiveToken, msg.id);
+      if (!sessionActive.current) return;
+      chatStore.markMessageDeleted(msg.id);
+      setMessages(previous => previous.filter(message => message.id !== msg.id));
+      setReplyingTo(reply => reply?.messageId === msg.id || reply?.id === msg.id ? null : reply);
+      setRemoveTarget(null);
+      void chatStore.loadInbox(effectiveToken, true);
+      if (Platform.OS === 'android') ToastAndroid.show('Message removed for you', ToastAndroid.SHORT);
+    } catch {
+      if (sessionActive.current) setRemoveError('Could not remove the message. Try again.');
+    } finally {
+      removalPending.current = false;
+      if (sessionActive.current) setIsRemoving(false);
     }
   };
 
@@ -1349,8 +1333,9 @@ function ChatDetailSession({
     );
   };
 
+  if (threadKey !== sessionThreadKey) return null;
   return (
-    <Modal visible={modalVisible} animationType="none" transparent onRequestClose={handleClose}>
+    <Modal visible={modalVisible} animationType="none" transparent onShow={handleModalShow} onRequestClose={handleClose}>
       <Animated.View style={[styles.modalScreenContainer, { transform: [{ translateX: slideAnim }] }]}>
         <KeyboardAvoidingView
           style={styles.container}
@@ -1381,13 +1366,7 @@ function ChatDetailSession({
                   <Ionicons name="chevron-forward" size={13} color="#8E8E93" />
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                  {partnerOnline !== null && <>
-                    <Text style={styles.contactSub}>{partnerOnline ? 'Active now' : 'Inactive'}</Text>
-                    <Text style={{ color: '#C4C4C4', fontSize: 10 }}>•</Text>
-                  </>}
-                  <View style={styles.headerRoleBadge}>
-                    <Text style={styles.headerRoleBadgeText}>{isSupportConversation && contactRole.toLowerCase() !== 'barangay' ? 'Support' : contactRole}</Text>
-                  </View>
+                  <Text testID="chat-presence-status" numberOfLines={1} style={[styles.contactSub, { width: 92 }]}>{uiText(partnerOnline === undefined ? 'Checking…' : partnerOnline ? 'Active now' : 'Inactive')}</Text>
                 </View>
               </View>
             </Pressable>
@@ -1410,24 +1389,30 @@ function ChatDetailSession({
 
           {/* Chat Body Container */}
           <View style={{ flex: 1 }}>
-            <ScrollView
+            <FlatList<ChatMessage>
               ref={scrollViewRef}
+              data={newestFirst}
+              inverted
+              keyExtractor={message => message.id}
+              initialNumToRender={12}
+              maxToRenderPerBatch={8}
+              windowSize={5}
+              maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 40 }}
               style={styles.chatBody}
               contentContainerStyle={styles.chatBodyContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              onLayout={(e) => {
-                chatViewportHeight.current = e.nativeEvent.layout.height;
+              onScrollToIndexFailed={({ index, averageItemLength }) => {
+                if (jumpAttempts.current++ >= 2) return;
+                scrollViewRef.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
+                clearTimeout(jumpRetry.current);
+                jumpRetry.current = setTimeout(() => {
+                  const target = newestFirstRef.current.findIndex(message => message.id === jumpTarget.current);
+                  if (sessionActive.current && target >= 0) scrollViewRef.current?.scrollToIndex({ index: target, viewPosition: 0.5, animated: true });
+                }, 120);
               }}
-              onContentSizeChange={(contentWidth, contentHeight) => {
-                if (!hasAutoScrolledRef.current && messages.length > 0 && contentHeight > 0) {
-                  hasAutoScrolledRef.current = true;
-                  requestAnimationFrame(() => {
-                    scrollViewRef.current?.scrollToEnd({ animated: false });
-                  });
-                }
-              }}
-            >
+              ListHeaderComponent={isOtherTyping ? <TypingDotsIndicator avatarUri={resolvedAvatar} /> : null}
+              ListFooterComponent={<>
               {/* Show initial Date Separator if empty thread */}
               {messages.length === 0 && !threadLoading && !threadError ? (
                 <View style={{ padding: 32, alignItems: 'center' }}>
@@ -1439,9 +1424,10 @@ function ChatDetailSession({
 
               {liveStatus !== 'connected' ? <Text accessibilityLiveRegion="polite" style={{ padding: 12, color: '#71717A', fontSize: 12 }}>{liveStatus === 'unauthorized' ? 'Live updates unavailable. Please sign in again.' : 'Reconnecting live updates…'}</Text> : null}
               {threadLoading && !messages.length ? <ActivityIndicator style={{ marginTop: 32 }} color="#FFB380" /> : null}
-              {threadError ? <View style={{ padding: 20 }}><Text>{threadError}</Text><Pressable onPress={() => setThreadReload(value => value + 1)}><Text style={{ marginTop: 8, color: '#EA580C' }}>{uiText("Retry conversation")}</Text></Pressable></View> : null}
-              {/* Messages */}
-              {messages.map((item, index) => {
+              {threadError ? <View style={{ padding: 20 }}><Text>{uiText(threadError)}</Text><Pressable onPress={() => setThreadReload(value => value + 1)}><Text style={{ marginTop: 8, color: '#EA580C' }}>{uiText("Retry conversation")}</Text></Pressable></View> : null}
+              </>}
+              renderItem={({ item, index: reversedIndex }) => {
+                const index = messages.length - 1 - reversedIndex;
                 const prevMsg = index > 0 ? messages[index - 1] : null;
                 const showDateSeparator =
                   index === 0 ||
@@ -1454,6 +1440,8 @@ function ChatDetailSession({
                   </View>
                 ) : null;
 
+                // Inverted list cells reverse their direct children. Keep each timestamp
+                // and message inside one View so the timestamp stays above its message.
                 // FB Marketplace Style Listing Closed / Acquired Message
                 if (
                   item.text &&
@@ -1464,7 +1452,7 @@ function ChatDetailSession({
                 ) {
                   const cleanMsg = item.text.replace(/^\[(?:JOB_ACQUIRED|LISTING_?CLOSED)\]:?\s*/i, '');
                   return (
-                    <React.Fragment key={`closed-listing-${item.id}`}>
+                    <View key={`closed-listing-${item.id}`}>
                       {datePillElement}
                       <View style={styles.listingClosedCard}>
                         <View style={styles.listingClosedBadge}>
@@ -1480,7 +1468,7 @@ function ChatDetailSession({
                           <Text style={styles.listingClosedSub}>{cleanMsg}</Text>
                         </View>
                       </View>
-                    </React.Fragment>
+                    </View>
                   );
                 }
 
@@ -1494,6 +1482,9 @@ function ChatDetailSession({
                       ? contactName
                       : (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : contactName));
                   const formattedStartDate = formatBookingStartDate(item.bookingInfo.startDate);
+                  const formattedEndDate = item.bookingInfo.endDate
+                    ? formatBookingStartDate(item.bookingInfo.endDate)
+                    : item.bookingInfo.bookingType === 'long_term' ? uiText('No end date') : uiText('Same day');
                   const bookingStatus = isAcquired
                     ? 'Job filled'
                     : isConfirmed
@@ -1503,15 +1494,11 @@ function ChatDetailSession({
                         : item.bookingInfo.canRespond ? 'Booking offer' : 'Waiting for reply';
 
                   return (
-                    <React.Fragment key={`system-wrap-${item.id}`}>
+                    <View key={`system-wrap-${item.id}`}>
                       {datePillElement}
                       <View
                         style={styles.systemCardContainer}
                         collapsable={false}
-                        onLayout={(e) => {
-                          messageOffsets.current[item.id] = e.nativeEvent.layout.y;
-                          messageHeights.current[item.id] = e.nativeEvent.layout.height;
-                        }}
                       >
                         <Pressable
                           style={({ pressed }) => [
@@ -1556,7 +1543,8 @@ function ChatDetailSession({
                               ]}>
                                 {bookingStatus}
                               </Text>
-                              {` · Start: ${formattedStartDate}`}
+                              {` · ${uiText('Start:')} ${formattedStartDate}`}
+                              {`\n${uiText('Ends')}: ${formattedEndDate}`}
                             </Text>
                           </View>
 
@@ -1598,7 +1586,7 @@ function ChatDetailSession({
                           </View>
                         ) : null}
                       </View>
-                    </React.Fragment>
+                    </View>
                   );
                 }
 
@@ -1624,6 +1612,19 @@ function ChatDetailSession({
                 const isSameGroupAsPrev = isSameSenderAsPrev && prevMsg.time === item.time;
                 const isSameGroupAsNext = isSameSenderAsNext && nextMsg.time === item.time;
 
+                const quotedMessage = item.replyTo?.messageId
+                  ? messages.find(message => message.id === item.replyTo?.messageId)
+                  : undefined;
+                const replyRelationship = item.replyTo ? getReplyRelationship({
+                  currentIsMine: item.sender === 'me',
+                  quotedIsMine: quotedMessage ? quotedMessage.sender === 'me' : undefined,
+                  quotedAuthor: item.replyTo.author,
+                  partnerName: contactName,
+                }) : '';
+                const replyShowsPhotoOnly = item.replyTo
+                  ? isGenericPhotoReply(item.replyTo.text, item.replyTo.imageUri)
+                  : false;
+
                 const hasReaction = !!item.reaction || Object.values(item.reactionSummary || {}).some((c) => c > 0);
                 const rowSpacingStyle = isSameGroupAsNext
                   ? (hasReaction ? styles.messageRowGroupedWithReaction : styles.messageRowGrouped)
@@ -1642,17 +1643,13 @@ function ChatDetailSession({
                   }
 
                   return (
-                    <React.Fragment key={`left-frag-${item.id}`}>
+                    <View key={`left-frag-${item.id}`}>
                       {datePillElement}
                       <SwipeableMessageRow
                         key={item.id}
                         align="left"
                         onReply={() => handleInitiateReply(item)}
                         disabled={item.isTyping}
-                        onLayout={(e) => {
-                          messageOffsets.current[item.id] = e.nativeEvent.layout.y;
-                          messageHeights.current[item.id] = e.nativeEvent.layout.height;
-                        }}
                       >
                         <View style={[styles.leftMessageRow, rowSpacingStyle]}>
                           <Pressable
@@ -1673,27 +1670,31 @@ function ChatDetailSession({
                             {/* Instagram / Messenger Style Quoted Reply Stack */}
                             {item.replyTo ? (
                               <View style={styles.replyQuoteStackLeft}>
-                                <Text style={styles.replyQuoteLabelLeft}>
-                                  {item.replyTo.author === 'You' ? `${contactName} replied to you` : `${contactName} replied`}
-                                </Text>
+                                <View style={styles.replyQuoteLabelRowLeft}>
+                                  <Ionicons name="arrow-undo" size={12} color="#8E8E93" />
+                                  <Text testID={`reply-relationship-${item.id}`} style={styles.replyQuoteLabelLeft} numberOfLines={1}>
+                                    {replyRelationship}
+                                  </Text>
+                                </View>
                                 <Pressable
                                   onPress={() => scrollToMessage(item.replyTo?.messageId, item.replyTo?.imageUri)}
                                   style={({ pressed }) => [
                                     styles.replyQuoteBubbleLeft,
                                     item.replyTo?.imageUri ? styles.replyQuoteBubbleWithPhoto : null,
+                                    replyShowsPhotoOnly ? styles.replyQuotePhotoOnly : null,
                                     pressed && { opacity: 0.75 },
                                   ]}
                                 >
                                   {item.replyTo.imageUri ? (
                                     <Image
                                       source={{ uri: item.replyTo.imageUri }}
-                                      style={styles.replyQuotePhotoThumb}
+                                      style={replyShowsPhotoOnly ? styles.replyQuotePhotoOnlyThumb : styles.replyQuotePhotoThumb}
                                       resizeMode="cover"
                                     />
                                   ) : null}
-                                  <Text style={styles.replyQuoteBubbleText} numberOfLines={2}>
+                                  {!replyShowsPhotoOnly ? <Text style={styles.replyQuoteBubbleText} numberOfLines={2}>
                                     {item.replyTo.text}
-                                  </Text>
+                                  </Text> : null}
                                 </Pressable>
                               </View>
                             ) : null}
@@ -1751,7 +1752,7 @@ function ChatDetailSession({
                           </View>
                         </View>
                       </SwipeableMessageRow>
-                    </React.Fragment>
+                    </View>
                   );
                 }
 
@@ -1768,42 +1769,42 @@ function ChatDetailSession({
                 }
 
                 return (
-                  <React.Fragment key={`right-frag-${item.id}`}>
+                  <View key={`right-frag-${item.id}`}>
                     {datePillElement}
                     <SwipeableMessageRow
                       key={item.id}
                       align="right"
                       onReply={() => handleInitiateReply(item)}
-                      onLayout={(e) => {
-                        messageOffsets.current[item.id] = e.nativeEvent.layout.y;
-                        messageHeights.current[item.id] = e.nativeEvent.layout.height;
-                      }}
                     >
                       <View style={[styles.rightMessageRow, rowSpacingStyle]}>
                         {/* Instagram / Messenger Style Quoted Reply Stack */}
                         {item.replyTo ? (
                           <View style={styles.replyQuoteStackRight}>
-                            <Text style={styles.replyQuoteLabelRight}>
-                              {item.replyTo.author === 'You' ? 'You replied' : `You replied to ${item.replyTo.author}`}
-                            </Text>
+                            <View style={styles.replyQuoteLabelRowRight}>
+                              <Ionicons name="arrow-undo" size={12} color="#8E8E93" />
+                              <Text testID={`reply-relationship-${item.id}`} style={styles.replyQuoteLabelRight} numberOfLines={1}>
+                                {replyRelationship}
+                              </Text>
+                            </View>
                             <Pressable
                               onPress={() => scrollToMessage(item.replyTo?.messageId, item.replyTo?.imageUri)}
                               style={({ pressed }) => [
                                 styles.replyQuoteBubbleRight,
                                 item.replyTo?.imageUri ? styles.replyQuoteBubbleWithPhoto : null,
+                                replyShowsPhotoOnly ? styles.replyQuotePhotoOnly : null,
                                 pressed && { opacity: 0.75 },
                               ]}
                             >
                               {item.replyTo.imageUri ? (
                                 <Image
                                   source={{ uri: item.replyTo.imageUri }}
-                                  style={styles.replyQuotePhotoThumb}
+                                  style={replyShowsPhotoOnly ? styles.replyQuotePhotoOnlyThumb : styles.replyQuotePhotoThumb}
                                   resizeMode="cover"
                                 />
                               ) : null}
-                              <Text style={styles.replyQuoteBubbleText} numberOfLines={2}>
+                              {!replyShowsPhotoOnly ? <Text style={styles.replyQuoteBubbleText} numberOfLines={2}>
                                 {item.replyTo.text}
-                              </Text>
+                              </Text> : null}
                             </Pressable>
                           </View>
                         ) : null}
@@ -1858,11 +1859,10 @@ function ChatDetailSession({
                         </View>
                       </View>
                     </SwipeableMessageRow>
-                  </React.Fragment>
+                  </View>
                 );
-              })}
-              {isOtherTyping ? <TypingDotsIndicator avatarUri={resolvedAvatar} /> : null}
-            </ScrollView>
+              }}
+            />
           </View>
 
           {/* Reply Context Banner - Ultra-clean with thumbnail preview */}
@@ -1880,7 +1880,7 @@ function ChatDetailSession({
                   <View style={styles.replyBannerHeaderLeft}>
                     <Ionicons name="arrow-undo" size={13} color="#8E8E93" style={{ marginRight: 5 }} />
                     <Text style={styles.replyBannerAuthor}>
-                      {uiText("Replying to")}<Text style={styles.replyBannerAuthorName}>{replyingTo.author}</Text>
+                      {uiText("Replying to")}{' '}<Text style={styles.replyBannerAuthorName}>{replyingTo.author}</Text>
                     </Text>
                   </View>
                   <Pressable
@@ -1892,16 +1892,16 @@ function ChatDetailSession({
                     <Ionicons name="close" size={17} color="#8E8E93" />
                   </Pressable>
                 </View>
-                <Text style={styles.replyBannerText} numberOfLines={1}>
+                {!isGenericPhotoReply(replyingTo.text, replyingTo.imageUri) ? <Text style={styles.replyBannerText} numberOfLines={1}>
                   {replyingTo.text}
-                </Text>
+                </Text> : null}
               </View>
             </View>
           ) : null}
 
           {/* Messenger Style Input Footer */}
           {!!safety?.restricted_until && !isSupportConversation && <View style={{ paddingHorizontal: 20, paddingVertical: 12 }}>
-            <Text style={{ color: '#6B7280', fontSize: 13 }}>{uiText("Messaging paused until")}{new Date(safety.restricted_until).toLocaleString()}{uiText(". Contact your Barangay desk or SerbiSure Support for help.")}</Text>
+            <Text style={{ color: '#6B7280', fontSize: 13 }}>{uiText("Messaging paused until")} {new Date(safety.restricted_until).toLocaleString()}{uiText(". Contact your Barangay desk or SerbiSure Support for help.")}</Text>
           </View>}
           {isUploadingImage && (
             <View style={styles.uploadingBar}>
@@ -1973,7 +1973,7 @@ function ChatDetailSession({
         </Modal>
 
         {/* Booking Screen Modal */}
-        <BookingModal
+        {bookingModalVisible && <BookingModal
           visible={bookingModalVisible}
           onClose={() => setBookingModalVisible(false)}
           contactName={contactName}
@@ -1987,7 +1987,7 @@ function ChatDetailSession({
           userRole={isHomeowner ? 'homeowner' : 'kasambahay'}
           initialDetails={activeBookingDetails}
           token={effectiveToken}
-          bookingType="long_term"
+          bookingType={activeBookingDetails?.bookingType}
           onConfirm={handleSendOffer}
           onKasambahayConfirm={() => {
             if (activeBookingMsgId) {
@@ -1999,11 +1999,11 @@ function ChatDetailSession({
               return handleKasambahayDecline(activeBookingMsgId);
             }
           }}
-        />
+        />}
 
         {/* Counterparty profile. Official desks use a focused information view;
             residents keep the existing public profile with posts and reviews. */}
-        {isSupportConversation ? (
+        {profileModalVisible && (isSupportConversation ? (
           <OfficialProfileModal
             visible={profileModalVisible}
             onClose={() => setProfileModalVisible(false)}
@@ -2024,7 +2024,7 @@ function ChatDetailSession({
             prefilledAvatar={resolvedAvatar}
             prefilledRole={contactRole}
           />
-        )}
+        ))}
 
         {/* Blurred Long-Press Action Menu & Reaction Overlay (Position-aware & Animated) */}
         {activeActionMenuMsg ? (() => {
@@ -2182,50 +2182,61 @@ function ChatDetailSession({
                     }}
                   >
                     <Ionicons name="copy-outline" size={19} color="#1A1A1A" style={styles.actionMenuIcon} />
-                    <Text style={styles.actionMenuText}>{uiText("Copy")}</Text>
+                    <Text style={styles.actionMenuText}>{uiText("Copy Text")}</Text>
                   </Pressable>
                 ) : null}
 
 
-                {/* Unsend (if message sender is 'me') */}
-                {isSender ? (
+                {/* Removal is private to this account for either message direction. */}
                   <Pressable
                     style={({ pressed }) => [
                       styles.actionMenuItem,
                       styles.actionMenuItemLast,
                       pressed && styles.actionMenuItemPressed,
                     ]}
-                    onPress={() => handleDeleteOrUnsend(activeActionMenuMsg, 'unsend')}
+                    accessibilityLabel="Remove message"
+                    onPress={() => { setRemoveError(null); setRemoveTarget(activeActionMenuMsg); setActiveActionMenuMsg(null); }}
                   >
                     <Ionicons name="trash-outline" size={19} color="#EF4444" style={styles.actionMenuIcon} />
-                    <Text style={[styles.actionMenuText, { color: '#EF4444' }]}>{uiText("Unsend")}</Text>
+                    <Text style={[styles.actionMenuText, { color: '#EF4444' }]}>Remove for you</Text>
                   </Pressable>
-                ) : null}
-
-                {/* Delete for me (if message sender is 'other') */}
-                {!isSender ? (
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.actionMenuItem,
-                      styles.actionMenuItemLast,
-                      pressed && styles.actionMenuItemPressed,
-                    ]}
-                    onPress={() => handleDeleteOrUnsend(activeActionMenuMsg, 'delete_for_me')}
-                  >
-                    <Ionicons name="trash-outline" size={19} color="#EF4444" style={styles.actionMenuIcon} />
-                    <Text style={[styles.actionMenuText, { color: '#EF4444' }]}>{uiText("Delete for me")}</Text>
-                  </Pressable>
-                ) : null}
               </Animated.View>
             </View>
           );
         })() : null}
+        <Modal visible={!!removeTarget} transparent animationType="fade" onRequestClose={() => { if (!removalPending.current) setRemoveTarget(null); }}>
+          <View style={styles.removeBackdrop}>
+            <View accessibilityViewIsModal style={styles.removeDialog}>
+              <Text accessibilityRole="header" style={styles.removeTitle}>Remove for you?</Text>
+              <Text style={styles.removeDescription}>This message will be removed from your screen. Other participants will still be able to see it.</Text>
+              {removeError ? <Text accessibilityRole="alert" style={styles.removeError}>{removeError}</Text> : null}
+              <View style={styles.removeButtons}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Cancel removal" disabled={isRemoving} onPress={() => setRemoveTarget(null)} style={styles.removeButton}>
+                  <Text style={styles.removeCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Confirm removal" disabled={isRemoving} onPress={() => void handleRemoveForYou()} style={[styles.removeButton, styles.removeConfirmButton, isRemoving && { opacity: 0.5 }]}>
+                  <Text style={styles.removeConfirmText}>{isRemoving ? 'Removing…' : 'Remove'}</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </Animated.View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  removeBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', padding: 24 },
+  removeDialog: { width: '100%', maxWidth: 420, borderRadius: 20, backgroundColor: '#FFFFFF', padding: 24 },
+  removeTitle: { fontSize: 18, fontWeight: '700', color: '#0D0D11' },
+  removeDescription: { marginTop: 16, fontSize: 14, lineHeight: 22, color: '#52525B' },
+  removeError: { marginTop: 12, fontSize: 13, color: '#DC2626' },
+  removeButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 24 },
+  removeButton: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 24 },
+  removeConfirmButton: { backgroundColor: '#0D0D11' },
+  removeCancelText: { fontSize: 14, fontWeight: '600', color: '#3F3F46' },
+  removeConfirmText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
   modalScreenContainer: {
     flex: 1,
     backgroundColor: '#F9F8F6',
@@ -2273,17 +2284,6 @@ const styles = StyleSheet.create({
   },
   headerTextCol: {
     justifyContent: 'center',
-  },
-  headerRoleBadge: {
-    backgroundColor: '#FFB380',
-    paddingHorizontal: 7,
-    paddingVertical: 1.5,
-    borderRadius: 9999,
-  },
-  headerRoleBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#0D0D11',
   },
   contactName: {
     fontSize: 16,
@@ -3053,12 +3053,20 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     maxWidth: '100%',
   },
+  replyQuoteLabelRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    maxWidth: '100%',
+    marginBottom: 2,
+    marginRight: 6,
+  },
   replyQuoteLabelRight: {
     fontSize: 11,
     fontWeight: '600',
     color: '#8E8E93',
-    marginBottom: 2,
-    marginRight: 6,
+    flexShrink: 1,
   },
   replyQuoteBubbleRight: {
     backgroundColor: 'rgba(0, 0, 0, 0.08)',
@@ -3084,12 +3092,19 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     maxWidth: '100%',
   },
+  replyQuoteLabelRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    maxWidth: '100%',
+    marginBottom: 2,
+    marginLeft: 6,
+  },
   replyQuoteLabelLeft: {
     fontSize: 11,
     fontWeight: '600',
     color: '#8E8E93',
-    marginBottom: 2,
-    marginLeft: 6,
+    flexShrink: 1,
   },
   replyQuoteBubbleLeft: {
     backgroundColor: 'rgba(0, 0, 0, 0.08)',
@@ -3106,6 +3121,18 @@ const styles = StyleSheet.create({
   replyQuoteBubbleWithPhoto: {
     paddingLeft: 6,
     paddingVertical: 5,
+  },
+  replyQuotePhotoOnly: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    backgroundColor: 'transparent',
+    overflow: 'hidden',
+    borderRadius: 16,
+  },
+  replyQuotePhotoOnlyThumb: {
+    width: 84,
+    height: 84,
+    borderRadius: 16,
   },
   replyQuotePhotoThumb: {
     width: 32,

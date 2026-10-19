@@ -6,6 +6,7 @@ const ts = require('typescript');
 const React = require('react');
 const Reconciler = require('react-reconciler');
 const { DefaultEventPriority } = require('react-reconciler/constants');
+const { successfulFrames } = require('./fixtures/liveness.cjs');
 
 const append = (parent, child) => { parent.children = parent.children.filter(item => item !== child); parent.children.push(child); };
 const remove = (parent, child) => { parent.children = parent.children.filter(item => item !== child); };
@@ -32,14 +33,20 @@ const deferred = () => {
 const tick = async () => { await new Promise(resolve => setImmediate(resolve)); renderer.flushPassiveEffects(); };
 
 function harness(t, extraMocks = {}) {
-  const alerts = [];
+  const alerts = [], deletedPhotos = [];
   const native = { StyleSheet: { create: value => value }, Alert: { alert: (...args) => alerts.push(args) } };
-  for (const type of ['View', 'Text', 'Pressable', 'Image', 'ActivityIndicator']) native[type] = type;
+  for (const type of ['View', 'Text', 'Pressable', 'Image', 'ActivityIndicator', 'TextInput', 'KeyboardAvoidingView', 'ScrollView']) native[type] = type;
+  native.Platform = { OS: 'android', select: values => values.android || values.default };
+  native.ScrollView = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({ scrollTo() {} }));
+    return React.createElement('ScrollView', props);
+  });
   const mocks = {
     'react-native': native,
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
     '@expo/vector-icons': { Ionicons: 'Icon' },
     '@shopify/react-native-skia': { Canvas: 'Canvas', Circle: 'Circle', Path: 'Path', Skia: { Path: { Make: () => ({ addArc() {} }) } } },
+    'expo-file-system': { deleteAsync: async uri => { deletedPhotos.push(uri); } },
     '../../../shared/theme/theme': { default: { colors: {}, roundness: {}, typography: { fontFamily: {}, tracking: {} } } },
     '../../auth/components/RegistrationStepper': { RegistrationStepper: () => null },
     './IDPhotoModal': { IDPhotoModal: () => null },
@@ -78,11 +85,11 @@ function harness(t, extraMocks = {}) {
     container.children.forEach(visit); return result;
   };
   const text = node => node.text || node.children.map(text).join('');
-  return { load, render, unmount, alerts, nodes, button: label => nodes().find(node => node.type === 'Pressable' && text(node) === label) };
+  return { load, render, unmount, alerts, deletedPhotos, nodes, button: label => nodes().find(node => node.type === 'Pressable' && text(node) === label) };
 }
 
-test('liveness opens documents immediately after capture and stops tracking; no upload wait or success timer', async t => {
-  const photo = deferred(); const verified = []; let now = 1000;
+test('capture pauses for photo review and only confirmation submits the selfie once', async t => {
+  const photo = deferred(); const verified = []; let now = 0;
   t.mock.method(Date, 'now', () => now);
   const FaceCamera = React.forwardRef((props, ref) => {
     React.useImperativeHandle(ref, () => ({ captureSelfie: () => photo.promise }));
@@ -92,18 +99,133 @@ test('liveness opens documents immediately after capture and stops tracking; no 
   const { LivenessScreen } = h.load('src/features/verification/components/LivenessScreen.tsx');
   h.render(React.createElement(LivenessScreen, { onVerified: result => verified.push(result) }));
   renderer.flushSync(() => h.button('Continue').props.onPress()); renderer.flushPassiveEffects();
-  const frame = (yawAngle, timestamp) => ({ frameWidth: 100, frameHeight: 100, timestamp,
-    face: { bounds: { x: 30, y: 30, width: 40, height: 40 }, points: [], signals: { yawAngle }, timestamp } });
-  for (const [yaw, time] of [[0, 1000], [-15, 1200], [15, 1400], [0, 1600], [0, 4600]]) {
-    now = time;
-    renderer.flushSync(() => h.nodes().find(node => node.type === 'FaceCamera').props.onLandmarks(frame(yaw, time)));
+  const instructions = new Set();
+  for (const frame of successfulFrames()) {
+    now = frame.timestamp;
+    renderer.flushSync(() => h.nodes().find(node => node.type === 'FaceCamera').props.onLandmarks(frame));
     renderer.flushPassiveEffects();
+    h.nodes().filter(node => node.type === 'Text').forEach(node => instructions.add(node.children.map(child => child.text || '').join('')));
   }
+  for (const prompt of ['Look Left', 'Look Right', 'Face forward and hold for a moment']) assert.ok(instructions.has(prompt), prompt);
+  assert.equal([...instructions].some(prompt => /^[123]$/.test(prompt)), false);
+  assert.equal([...instructions].some(prompt => /blink|open your eyes/i.test(prompt)), false);
   assert.equal(h.nodes().find(node => node.type === 'FaceCamera').props.detecting, false);
   assert.equal(verified.length, 0);
   photo.resolve('file:///selfie.jpg'); await tick();
+  assert.equal(verified.length, 0);
+  assert.equal(h.nodes().some(node => node.type === 'FaceCamera'), false);
+  const preview = h.nodes().find(node => node.type === 'Image' && node.props.source?.uri);
+  assert.equal(preview.props.source.uri, 'file:///selfie.jpg');
+  assert.equal(preview.props.resizeMode, 'cover');
+  assert.equal(h.button('Use This Photo').props.disabled, true);
+  renderer.flushSync(() => h.button('Use This Photo').props.onPress());
+  assert.equal(verified.length, 0);
+  renderer.flushSync(() => preview.props.onLoad());
+  const confirm = h.button('Use This Photo').props.onPress;
+  const retake = h.button('Retake Photo').props.onPress;
+  renderer.flushSync(() => { confirm(); confirm(); retake(); });
   assert.equal(verified.length, 1);
   assert.equal(verified[0].selfiePath, 'file:///selfie.jpg');
+  h.unmount();
+  assert.deepEqual(h.deletedPhotos, []); // The background upload still owns this file.
+});
+
+function registrationForm(t, role = 'homeowner', actualCamera) {
+  const requests = [], completed = [], users = [];
+  const h = harness(t, {
+    '../../../shared/localization/LanguageContext': { useLanguage: () => ({ tr: value => value }) },
+    '../session/UserContext': { useUser: () => ({ updateUser: value => users.push(value) }) },
+    '../../../shared/ui/SearchablePickerModal': { SearchablePickerModal: 'LocationPicker' },
+    '../../../shared/ui/DateOfBirthPickerModal': { DateOfBirthPickerModal: 'BirthPicker' },
+    '../../../shared/ui/DemographicPickerModal': { DemographicPickerModal: 'DemographicPicker' },
+    '../../profile/components/PrivacyPolicyModal': { PrivacyPolicyModal: () => null },
+    '../../profile/worker/WorkerCvForm': { WorkerCvForm: 'WorkerForm' },
+    '../components/RegistrationStepper': { RegistrationStepper: () => null },
+    '../components/RegistrationErrorModal': { RegistrationErrorModal: 'RegistrationError' },
+    ...(actualCamera ? { '../camera/FaceCamera': { FaceCamera: actualCamera } }
+      : { '../../verification/components/LivenessScreen': { LivenessScreen: 'Liveness' } }),
+    '../../../shared/services/locationService': {
+      getRegions: async () => [], getProvinces: async () => [], getCities: async () => [], getBarangays: async () => [],
+      getZipCodeForCity: () => '9000',
+    },
+    '../../../shared/api/httpClient': { fetchWithTimeout: (url, options) => {
+      const request = deferred(); requests.push({ ...request, url, options }); return request.promise;
+    } },
+  });
+  const { RegistrationScreen } = h.load('src/features/auth/screens/RegistrationScreen.tsx');
+  h.render(React.createElement(RegistrationScreen, { role, onNext: (...args) => completed.push(args) }));
+  const act = callback => { renderer.flushSync(callback); renderer.flushPassiveEffects(); };
+  const input = (placeholder, value) => act(() => h.nodes().find(node => node.type === 'TextInput' && node.props.placeholder === placeholder).props.onChangeText(value));
+  const node = type => h.nodes().find(node => node.type === type);
+  input('First Name', 'Test'); input('Last Name', 'Resident');
+  input('Email', 'test@example.com'); input('Password (min. 8 characters)', 'password123'); input('Confirm Password', 'password123');
+  // Phone input has a short formatted example as its placeholder.
+  act(() => h.nodes().find(item => item.type === 'TextInput' && item.props.keyboardType === 'phone-pad').props.onChangeText('9123456789'));
+  act(() => node('BirthPicker').props.onSelect('2000-01-01', 26));
+  act(() => h.button('Female').props.onPress());
+  act(() => h.button('Next').props.onPress());
+  if (role === 'kasambahay') {
+    act(() => node('WorkerForm').props.onChange({ ...node('WorkerForm').props.value,
+      service_categories: ['Cleaning'], work_setup: 'stay_out', engagement_preference: 'short_term', desired_daily_rate: '800',
+      experience_level: 'new', civil_status: 'Single', number_of_children: '0', available_from: '2026-11-01', available_days: ['M'], preferred_shifts: ['morning'], languages: ['English'],
+    }));
+    // Visit the four existing CV pages.
+    for (let page = 0; page < 4; page++) act(() => h.button('Next').props.onPress());
+  }
+  for (const [title, value] of [['Select Region', { code: '10', name: 'Northern Mindanao' }], ['Select Province', { code: 'province', name: 'Misamis Oriental' }],
+    ['Select City / Municipality', { code: 'city', name: 'Cagayan de Oro' }], ['Select Barangay', { code: 'barangay', name: 'Agusan' }]]) {
+    act(() => h.nodes().find(item => item.type === 'LocationPicker' && item.props.title === title).props.onSelect(value));
+  }
+  input('House No. / Street / Zone / Subdivision', '123 Street'); input('Zip Code (e.g. 9000)', '9000');
+  act(() => h.nodes().filter(item => item.type === 'Pressable' && item.props.accessibilityRole === 'checkbox').forEach(item => item.props.onPress()));
+  return { ...h, requests, completed, users, act, node, input };
+}
+
+for (const role of ['homeowner', 'kasambahay']) {
+  test(`${role} registration waits for a captured face check and ignores repeated callbacks`, async t => {
+    const h = registrationForm(t, role);
+    assert.equal(h.requests.length, 0);
+    h.act(() => h.button('Continue').props.onPress());
+    assert.ok(h.node('Liveness')); assert.equal(h.requests.length, 0);
+    h.act(() => h.node('Liveness').props.onVerified({ verified: false, selfiePath: '/selfie.jpg' }));
+    h.act(() => h.node('Liveness').props.onVerified({ verified: true }));
+    assert.equal(h.requests.length, 0);
+    const selfie = { verified: true, completedAt: 1000, selfiePath: '/selfie.jpg' };
+    const verified = h.node('Liveness').props.onVerified;
+    h.act(() => { verified(selfie); verified(selfie); });
+    assert.equal(h.requests.length, 1); assert.equal(h.node('Liveness').props.submitting, true);
+    assert.equal(h.node('Liveness').props.onBack, undefined);
+    assert.equal(h.completed.length, 0);
+    h.requests[0].resolve(new Response(JSON.stringify({ access: 'created-token', refresh: 'refresh-token' }), { status: 201 })); await tick();
+    assert.deepEqual(h.completed, [['created-token', selfie]]);
+    h.act(() => verified(selfie)); assert.equal(h.requests.length, 1);
+  });
+}
+
+test('registration retry retains the selfie and request key, while editing preserves form details', async t => {
+  const h = registrationForm(t);
+  h.act(() => h.button('Continue').props.onPress());
+  const selfie = { verified: true, completedAt: 1000, selfiePath: '/selfie.jpg' };
+  h.act(() => h.node('Liveness').props.onVerified(selfie));
+  h.requests[0].reject(new Error('Network request failed')); await tick();
+  assert.equal(h.completed.length, 0); assert.equal(h.users.length, 0);
+  assert.equal(h.node('Liveness').props.submissionFailed, true);
+  assert.ok(h.node('RegistrationError').props.errorData);
+  h.act(() => h.node('RegistrationError').props.onClose());
+  h.act(() => h.node('Liveness').props.onRetrySubmission());
+  assert.equal(h.requests[1].options.headers['Idempotency-Key'], h.requests[0].options.headers['Idempotency-Key']);
+  h.requests[1].resolve(new Response(JSON.stringify({ email: ['Already registered.'] }), { status: 400 })); await tick();
+  assert.equal(h.completed.length, 0);
+  h.act(() => h.node('RegistrationError').props.onGoToStep(1));
+  assert.equal(h.nodes().find(item => item.type === 'TextInput' && item.props.placeholder === 'First Name').props.value, 'Test');
+  h.input('Email', 'corrected@example.com');
+  h.act(() => h.button('Next').props.onPress()); h.act(() => h.button('Continue').props.onPress());
+  assert.equal(h.requests.length, 2);
+  h.act(() => h.node('Liveness').props.onVerified(selfie));
+  assert.notEqual(h.requests[2].options.headers['Idempotency-Key'], h.requests[0].options.headers['Idempotency-Key']);
+  h.unmount();
+  h.requests[2].resolve(new Response(JSON.stringify({ access: 'token', refresh: 'refresh' }), { status: 201 })); await tick();
+  assert.equal(h.completed.length, 0);
 });
 
 test('Skip and Cancel wait for selfie confirmation and cannot bypass a failed save', async t => {
@@ -157,7 +279,7 @@ test('submitting documents already on the server still requires a confirmed self
 });
 
 test('native capture errors show friendly guidance and Retry retakes the photo without repeating liveness', async t => {
-  let now = 1000;
+  let now = 0;
   t.mock.method(Date, 'now', () => now);
   let captures = 0;
   const FaceCamera = React.forwardRef((props, ref) => {
@@ -173,10 +295,8 @@ test('native capture errors show friendly guidance and Retry retakes the photo w
   let completed = 0;
   h.render(React.createElement(LivenessScreen, { onVerified: () => completed++ }));
   renderer.flushSync(() => h.button('Continue').props.onPress()); renderer.flushPassiveEffects();
-  for (const [yawAngle, timestamp] of [[0, 1000], [-15, 1200], [15, 1400], [0, 1600], [0, 4600]]) {
-    now = timestamp;
-    const frame = { frameWidth: 100, frameHeight: 100, timestamp,
-      face: { bounds: { x: 30, y: 30, width: 40, height: 40 }, points: [], signals: { yawAngle }, timestamp } };
+  for (const frame of successfulFrames()) {
+    now = frame.timestamp;
     renderer.flushSync(() => h.nodes().find(node => node.type === 'FaceCamera').props.onLandmarks(frame));
     renderer.flushPassiveEffects();
   }
@@ -190,8 +310,114 @@ test('native capture errors show friendly guidance and Retry retakes the photo w
   renderer.flushSync(() => h.button('Retry').props.onPress()); renderer.flushPassiveEffects();
   await tick();
   assert.equal(captures, 2);
+  assert.equal(completed, 0);
+  renderer.flushSync(() => h.nodes().find(node => node.type === 'Image' && node.props.source?.uri).props.onLoad());
+  renderer.flushSync(() => h.button('Use This Photo').props.onPress());
   assert.equal(completed, 1);
 });
+
+test('retake discards the rejected photo and requires the entire liveness sequence again', async t => {
+  let captures = 0;
+  const verified = [];
+  const FaceCamera = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({ captureSelfie: async () => `file:///selfie-${++captures}.jpg` }));
+    return React.createElement('FaceCamera', props);
+  });
+  const h = harness(t, { '../camera/FaceCamera': { FaceCamera } });
+  const { LivenessScreen } = h.load('src/features/verification/components/LivenessScreen.tsx');
+  const act = callback => { renderer.flushSync(callback); renderer.flushPassiveEffects(); };
+  h.render(React.createElement(LivenessScreen, { onVerified: result => verified.push(result) }));
+  act(() => h.button('Continue').props.onPress());
+  for (const frame of successfulFrames()) act(() => h.nodes().find(node => node.type === 'FaceCamera').props.onLandmarks(frame));
+  await tick();
+  act(() => h.button('Retake Photo').props.onPress());
+  assert.deepEqual(h.deletedPhotos, ['file:///selfie-1.jpg']);
+  assert.equal(h.nodes().some(node => node.type === 'Image' && node.props.source?.uri), false);
+  assert.ok(h.nodes().find(node => node.type === 'FaceCamera').props.detecting);
+  assert.equal(verified.length, 0);
+  assert.equal(captures, 1);
+  const prompts = new Set();
+  for (const frame of successfulFrames()) {
+    act(() => h.nodes().find(node => node.type === 'FaceCamera').props.onLandmarks(frame));
+    h.nodes().filter(node => node.type === 'Text').forEach(node => prompts.add(node.children.map(child => child.text || '').join('')));
+  }
+  await tick();
+  for (const prompt of ['Look Left', 'Look Right', 'Face forward and hold for a moment']) assert.ok(prompts.has(prompt));
+  assert.equal(captures, 2);
+  assert.equal(verified.length, 0);
+  const preview = h.nodes().find(node => node.type === 'Image' && node.props.source?.uri);
+  assert.equal(preview.props.source.uri, 'file:///selfie-2.jpg');
+  act(() => preview.props.onLoad());
+  act(() => h.button('Use This Photo').props.onPress());
+  assert.equal(verified[0].selfiePath, 'file:///selfie-2.jpg');
+});
+
+test('a photo that cannot be displayed cannot be confirmed, and leaving review discards it', async t => {
+  const FaceCamera = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({ captureSelfie: async () => 'file:///unreadable.jpg' }));
+    return React.createElement('FaceCamera', props);
+  });
+  let verified = 0;
+  const h = harness(t, { '../camera/FaceCamera': { FaceCamera } });
+  const { LivenessScreen } = h.load('src/features/verification/components/LivenessScreen.tsx');
+  const act = callback => { renderer.flushSync(callback); renderer.flushPassiveEffects(); };
+  h.render(React.createElement(LivenessScreen, { onVerified: () => verified++ }));
+  act(() => h.button('Continue').props.onPress());
+  for (const frame of successfulFrames()) act(() => h.nodes().find(node => node.type === 'FaceCamera').props.onLandmarks(frame));
+  await tick();
+  act(() => h.nodes().find(node => node.type === 'Image' && node.props.source?.uri).props.onError());
+  assert.equal(h.button('Use This Photo').props.disabled, true);
+  act(() => h.button('Use This Photo').props.onPress());
+  assert.equal(verified, 0);
+  assert.ok(h.button('Retake Photo'));
+  assert.match(h.nodes().map(node => node.text || '').join(' '), /Retake the photo/);
+  h.unmount();
+  assert.deepEqual(h.deletedPhotos, ['file:///unreadable.jpg']);
+});
+
+test('leaving during capture discards the late result instead of starting registration', async t => {
+  const photo = deferred();
+  const FaceCamera = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({ captureSelfie: () => photo.promise }));
+    return React.createElement('FaceCamera', props);
+  });
+  let verified = 0;
+  const h = harness(t, { '../camera/FaceCamera': { FaceCamera } });
+  const { LivenessScreen } = h.load('src/features/verification/components/LivenessScreen.tsx');
+  const act = callback => { renderer.flushSync(callback); renderer.flushPassiveEffects(); };
+  h.render(React.createElement(LivenessScreen, { onVerified: () => verified++ }));
+  act(() => h.button('Continue').props.onPress());
+  for (const frame of successfulFrames()) act(() => h.nodes().find(node => node.type === 'FaceCamera').props.onLandmarks(frame));
+  h.unmount();
+  photo.resolve('file:///late.jpg'); await tick();
+  assert.equal(verified, 0);
+  assert.deepEqual(h.deletedPhotos, ['file:///late.jpg']);
+});
+
+for (const role of ['homeowner', 'kasambahay']) {
+  test(`${role} account creation waits until the captured selfie is reviewed and confirmed`, async t => {
+    const FaceCamera = React.forwardRef((props, ref) => {
+      React.useImperativeHandle(ref, () => ({ captureSelfie: async () => 'file:///accepted.jpg' }));
+      return React.createElement('FaceCamera', props);
+    });
+    const h = registrationForm(t, role, FaceCamera);
+    h.act(() => h.button('Continue').props.onPress()); // Location -> liveness.
+    h.act(() => h.button('Continue').props.onPress()); // Start the camera.
+    for (const frame of successfulFrames()) h.act(() => h.node('FaceCamera').props.onLandmarks(frame));
+    await tick();
+    assert.equal(h.requests.length, 0);
+    const preview = h.nodes().find(node => node.type === 'Image' && node.props.source?.uri);
+    h.act(() => preview.props.onLoad());
+    const confirm = h.button('Use This Photo').props.onPress;
+    h.act(() => { confirm(); confirm(); });
+    assert.equal(h.requests.length, 1);
+    h.requests[0].resolve(new Response(JSON.stringify({ access: 'created-token', refresh: 'refresh-token' }), { status: 201 })); await tick();
+    assert.equal(h.completed.length, 1);
+    assert.equal(h.completed[0][1].selfiePath, 'file:///accepted.jpg');
+    h.unmount();
+    assert.deepEqual(h.deletedPhotos, []);
+  });
+}
 
 test('pausing landmark results keeps Android camera outputs attached through photo capture', async t => {
   const frameProcessor = { frameProcessor() {} };

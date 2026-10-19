@@ -57,11 +57,47 @@ const payload = text => ({ messages: [{ chat_message_id: text, message_payload: 
 const tick = async () => { await new Promise(resolve => setImmediate(resolve)); renderer.flushPassiveEffects(); };
 const localizationMessages = compile('src/shared/localization/messages.ts', {});
 const languageContext = compile('src/shared/localization/LanguageContext.tsx', { './messages': localizationMessages });
+const replyRelationships = compile('src/features/chat/replyRelationships.ts', {});
 
-function screen(t) {
-  let user = { id: 'account-one', token: 'token-one', accountType: 'Homeowner' };
-  const requests = [], sends = [], previews = [], alerts = [];
-  const animation = () => ({ start(callback) { callback?.({ finished: true }); }, stop() {} });
+function presenceClient(t) {
+  const { RealtimeClient } = compile('src/shared/realtime/RealtimeClient.ts', {
+    '../api/httpClient': { requestJson: async () => ({}), notifyAccountSuspension() {} },
+  });
+  let socket, watched = new Set(), currentAccount = null, currentToken = null;
+  const watches = new Set();
+  const client = new RealtimeClient('https://test.local', () => {
+    socket = { close() {}, send(raw) { const data = JSON.parse(raw); if (data.type === 'presence.watch') watched = new Set(data.partner_ids); } };
+    return socket;
+  });
+  const watch = client.watchPresence.bind(client);
+  client.watchPresence = ids => { watches.add(ids); const off = watch(ids); return () => { watches.delete(ids); off(); }; };
+  const ready = () => { socket.onopen?.({}); socket.onmessage?.({ data: JSON.stringify({ type: 'ready' }) }); };
+  t.after(() => client.stop());
+  return { client, watches,
+    start(account, token = account) { currentAccount = account; currentToken = token; client.start(token, account); if (token && client.status !== 'connected') ready(); },
+    event(event) { socket.onmessage?.({ data: JSON.stringify(event) }); },
+    status(status) {
+      if (status === 'connected') { client.setActive(true); client.start(currentToken, currentAccount); ready(); }
+      else if (status === 'reconnecting') socket.onclose?.({ code: 1006 });
+      else client.setActive(false);
+    },
+    isWatched: id => watched.has(id),
+  };
+}
+
+function screen(t, options = {}) {
+  let user = { id: 'account-one', token: 'token-one', accountType: options.accountType || 'Homeowner' };
+  const requests = [], sends = [], removals = [], previews = [], alerts = [], deleted = new Set(), entrances = [], scrolls = [], dialogs = [];
+  const bookingResponses = [], bookingModals = [], closedBookings = [];
+  const live = presenceClient(t); live.start(user.id, user.token);
+  const presenceHook = compile('src/shared/realtime/useChatPresence.ts', { './index': { realtime: live.client } });
+  const realtimeStatus = compile('src/shared/realtime/useRealtimeStatus.ts', { './index': { realtime: live.client } });
+  const animation = (_value, config) => ({
+    start(callback) {
+      if (options.deferEntrance && config?.toValue === 0) entrances.push(() => callback?.({ finished: true }));
+      else callback?.({ finished: true });
+    }, stop() {},
+  });
   class Value { setValue() {} interpolate() { return 0; } }
   const native = { StyleSheet: { create: value => value, absoluteFillObject: {}, hairlineWidth: 1 },
     Dimensions: { get: () => ({ width: 390, height: 844 }) }, Platform: { OS: 'android' },
@@ -69,15 +105,41 @@ function screen(t) {
     PanResponder: { create: () => ({ panHandlers: {} }) },
     AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },
     Alert: { alert: (...args) => alerts.push(args) }, ToastAndroid: { show() {}, SHORT: 0 }, NativeModules: {},
-    Modal: props => props.visible ? React.createElement('Modal', props, props.children) : null,
+    Modal: function NativeModal(props) {
+      React.useLayoutEffect(() => { if (props.visible) props.onShow?.(); }, [props.visible]);
+      return props.visible ? React.createElement('Modal', props, props.children) : null;
+    },
   };
   for (const type of ['Text', 'View', 'Image', 'TextInput', 'ScrollView', 'Pressable', 'KeyboardAvoidingView', 'ActivityIndicator']) native[type] = type;
+  native.FlatList = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({
+      scrollToOffset(args) { scrolls.push({ type: 'offset', ...args }); },
+      scrollToIndex(args) { scrolls.push({ type: 'index', ...args }); },
+    }), []);
+    return React.createElement('FlatList', props, props.ListHeaderComponent,
+      ...props.data.slice(0, props.initialNumToRender).map((item, index) =>
+        // Native inverted list cells reverse their direct children as well as the item order.
+        React.createElement('View', { key: item.id, testID: `list-cell-${item.id}`,
+          style: { flexDirection: props.inverted ? 'column-reverse' : 'column' } }, props.renderItem({ item, index }))),
+      props.ListFooterComponent);
+  });
   const api = {
-    fetchChatThreadDetails(token, partnerId) { const request = { ...deferred(), token, partnerId }; requests.push(request); return request.promise; },
+    fetchChatThreadDetails(token, partnerId) {
+      const request = { ...deferred(), token, partnerId }; requests.push(request);
+      return request.promise.then(result => {
+        // Simulate the server's separate watch snapshot for existing message fixtures.
+        if (options.autoPresence !== false && token === user.token && live.isWatched(partnerId) && typeof result.partnerIsOnline === 'boolean') {
+          live.event({ type: 'presence.changed', partner_id: partnerId, is_online: result.partnerIsOnline });
+        }
+        return result;
+      });
+    },
     sendChatMessage() { const request = deferred(); sends.push(request); return request.promise; },
+    deleteChatMessage(token, id) { const request = { ...deferred(), token, id }; removals.push(request); return request.promise; },
     sendChatTyping() {},
   };
   const { createThreadRefreshQueue } = compile('src/features/chat/threadRefreshQueue.ts', {});
+  const threadCache = compile('src/features/chat/threadCache.ts', {});
   const { ChatDetailScreen } = compile('src/features/chat/components/ChatDetailScreen.tsx', {
     '../../../shared/localization/LanguageContext': languageContext,
     'react-native': native,
@@ -85,16 +147,22 @@ function screen(t) {
     '@expo/vector-icons': { Ionicons: 'Icon' }, 'expo-image-picker': {},
     '../../auth/session/UserContext': { useUser: () => ({ user }) },
     '../../../shared/theme/theme': { default: { typography: { fontFamily: {} } } },
-    '../../../shared/realtime': { realtime: { status: 'connected', subscribe: () => () => {} } },
-    '../../../shared/realtime/useRealtimeStatus': { useRealtimeStatus: () => 'connected' },
-    '../bookingCards': { mapBookingCard: () => null }, '../api/bookingOffersApi': {},
-    '../../bookings/components/BookingModal': { BookingModal: () => null },
-    '../../profile/components/UserProfileView': { UserProfileView: () => null },
-    '../../profile/components/OfficialProfileModal': { OfficialProfileModal: () => null },
+    '../../../shared/realtime': { realtime: live.client },
+    '../../../shared/realtime/useRealtimeStatus': realtimeStatus,
+    '../../../shared/realtime/useChatPresence': presenceHook,
+    '../bookingCards': { mapBookingCard: () => null }, '../api/bookingOffersApi': {
+      respondToBookingOffer: (...args) => { const request = { ...deferred(), args }; bookingResponses.push(request); return request.promise; },
+    },
+    '../../bookings/bookingAcceptance': compile('src/features/bookings/bookingAcceptance.ts', { 'react-native': native }),
+    '../../bookings/components/BookingModal': { BookingModal: props => { dialogs.push('booking'); bookingModals.push(props); return null; } },
+    '../../profile/components/UserProfileView': { UserProfileView: () => { dialogs.push('profile'); return null; } },
+    '../../profile/components/OfficialProfileModal': { OfficialProfileModal: () => { dialogs.push('official'); return null; } },
     '../hooks/useChatSafety': { useChatSafety: () => null },
     '../api/chatApi': api, '../threadRefreshQueue': { createThreadRefreshQueue },
-    '../store/chatStore': { chatStore: { isMessageDeleted: () => false, loadInbox: async () => [], addOrUpdateChat: entry => previews.push(entry) } },
-    '../../bookings/store/savedJobsStore': {}, '../../../shared/api/config': {}, '../../../shared/api/httpClient': {},
+    '../threadCache': threadCache,
+    '../replyRelationships': replyRelationships,
+    '../store/chatStore': { chatStore: { isMessageDeleted: id => deleted.has(id), markMessageDeleted: id => deleted.add(id), loadInbox: async () => [], addOrUpdateChat: entry => previews.push(entry) } },
+    '../../bookings/store/savedJobsStore': { savedJobsStore: { markJobClosed: id => closedBookings.push(id) } }, '../../../shared/api/config': {}, '../../../shared/api/httpClient': {},
   });
   const originalFrame = global.requestAnimationFrame;
   global.requestAnimationFrame = callback => { callback(); return 0; };
@@ -115,11 +183,146 @@ function screen(t) {
     renderer.flushSync(() => renderer.updateContainer(null, root, null));
     renderer.flushPassiveEffects(); global.requestAnimationFrame = originalFrame;
   });
-  return { update, requests, sends, previews, alerts, nodes,
+  return { update, requests, sends, removals, previews, alerts, nodes, threadCache, deleted, entrances, scrolls, dialogs, live, bookingResponses, bookingModals, closedBookings,
+    unmount() { renderer.flushSync(() => renderer.updateContainer(null, root, null)); renderer.flushPassiveEffects(); },
+    event(event) { renderer.flushSync(() => live.event(event)); },
     texts: () => nodes().filter(node => node.text !== undefined).map(node => node.text).join(' '),
-    changeAccount() { user = { ...user, id: 'account-two', token: 'token-two' }; },
+    changeAccount() { user = { ...user, id: 'account-two', token: 'token-two' }; live.start(user.id, user.token); },
+    renewToken() { user = { ...user, token: 'renewed-token' }; live.start(user.id, user.token); },
   };
 }
+
+for (const accountType of ['Homeowner', 'Kasambahay']) {
+  for (const duration of ['short_term', 'fixed_long_term', 'ongoing_long_term']) {
+    test(`${accountType}: chat details and quick acceptance use the saved ${duration} booking type`, async t => {
+      const role = accountType === 'Homeowner' ? 'homeowner' : 'kasambahay';
+      const chat = screen(t, { accountType, deferEntrance: true });
+      const bookingType = duration === 'short_term' ? 'short_term' : 'long_term';
+      const card = { bookingId: 'booking-one', proposalId: 'proposal-one', title: 'BOOKING OFFER', bookedByName: 'Offer Sender', canRespond: true,
+        bookingType, startDate: '10/20/2026', endDate: duration === 'ongoing_long_term' ? '' : duration === 'short_term' ? '10/20/2026' : '11/20/2026' };
+      chat.threadCache.cacheThread(JSON.stringify(['account-one', 'Other Person']), [{ id: 'offer-message', sender: 'system', bookingInfo: card, time: 'Now' }], chat.threadCache.threadCacheGeneration());
+      chat.update('Other Person', true, { contactRole: accountType === 'Homeowner' ? 'Kasambahay' : 'Homeowner', userRole: role });
+      const content = node => node.text || node.children.map(content).join('');
+      renderer.flushSync(() => chat.nodes().find(node => node.type === 'Pressable' && content(node).includes('Offer Sender')).props.onPress());
+      assert.equal(chat.bookingModals.at(-1).userRole, role);
+      assert.equal(chat.bookingModals.at(-1).bookingType, bookingType);
+      assert.equal(chat.bookingModals.at(-1).initialDetails.bookingType, bookingType);
+      assert.equal(chat.bookingModals.at(-1).canRespond, true);
+      renderer.flushSync(() => chat.bookingModals.at(-1).onClose());
+      const accept = () => renderer.flushSync(() => chat.nodes().find(node => node.type === 'Pressable' && content(node) === 'Agree & Accept').props.onPress({ stopPropagation() {} }));
+      accept();
+      assert.equal(chat.bookingResponses.length, 0);
+      assert.equal(chat.alerts.at(-1)[0], bookingType === 'short_term' ? 'Accept booking?' : 'Confirm Contract Agreement');
+      if (bookingType === 'short_term') assert.doesNotMatch(chat.alerts.at(-1)[1], /contract|long-term|registration/i);
+      const confirm = chat.alerts.at(-1)[2][1].onPress;
+      renderer.flushSync(() => { confirm(); confirm(); });
+      assert.equal(chat.bookingResponses.length, 1);
+      assert.equal(chat.bookingResponses[0].args[0], 'token-one');
+      assert.equal(chat.bookingResponses[0].args[1].bookingType, bookingType);
+      assert.equal(chat.bookingResponses[0].args[2], 'accept');
+      assert.equal(chat.closedBookings.length, 0);
+      chat.bookingResponses[0].resolve(); await tick();
+      assert.deepEqual(chat.closedBookings, ['booking-one']);
+      assert.ok(!chat.nodes().some(node => node.type === 'Pressable' && content(node) === 'Agree & Accept'));
+    });
+  }
+}
+
+test('quick booking acceptance keeps the offer available after a connection failure', async t => {
+  const chat = screen(t, { accountType: 'Homeowner', deferEntrance: true });
+  const card = { bookingId: 'booking-one', title: 'BOOKING OFFER', bookedByName: 'Offer Sender', canRespond: true, bookingType: 'short_term', startDate: '10/20/2026' };
+  chat.threadCache.cacheThread(JSON.stringify(['account-one', 'Other Person']), [{ id: 'offer', sender: 'system', bookingInfo: card, time: 'Now' }], chat.threadCache.threadCacheGeneration());
+  chat.update('Other Person', true, { contactRole: 'Kasambahay' });
+  const content = node => node.text || node.children.map(content).join('');
+  renderer.flushSync(() => chat.nodes().find(node => node.type === 'Pressable' && content(node) === 'Agree & Accept').props.onPress({ stopPropagation() {} }));
+  renderer.flushSync(() => chat.alerts.at(-1)[2][1].onPress());
+  chat.bookingResponses[0].reject(new Error('Network request failed')); await tick();
+  assert.deepEqual(chat.alerts.at(-1), ['Booking not updated', 'Could not connect. Check your connection and try again.']);
+  assert.deepEqual(chat.closedBookings, []);
+  assert.ok(chat.nodes().some(node => node.type === 'Pressable' && content(node) === 'Agree & Accept'));
+});
+
+test('reply relationships cover incoming, outgoing and self replies', () => {
+  const relationship = replyRelationships.getReplyRelationship;
+  assert.equal(relationship({ currentIsMine: false, quotedIsMine: true, partnerName: 'Chrislyn Jewel' }), 'Chrislyn Jewel replied to you');
+  assert.equal(relationship({ currentIsMine: false, quotedIsMine: false, partnerName: 'Chrislyn Jewel' }), 'Chrislyn Jewel replied to themself');
+  assert.equal(relationship({ currentIsMine: true, quotedIsMine: false, partnerName: 'Chrislyn Jewel' }), 'You replied to Chrislyn Jewel');
+  assert.equal(relationship({ currentIsMine: true, quotedIsMine: true, partnerName: 'Chrislyn Jewel' }), 'You replied to yourself');
+  assert.equal(relationship({ currentIsMine: false, quotedAuthor: 'You', partnerName: 'Chrislyn Jewel' }), 'Chrislyn Jewel replied to themself');
+  assert.equal(replyRelationships.isGenericPhotoReply('📷 Photo', 'https://test.local/photo.jpg'), true);
+  assert.equal(replyRelationships.isGenericPhotoReply('Receipt photo', 'https://test.local/photo.jpg'), false);
+  assert.equal(replyRelationships.isGenericPhotoReply('📷 Photo'), false);
+});
+
+test('photo-only replies render the picture without a camera-and-Photo label', t => {
+  const chat = screen(t, { deferEntrance: true });
+  const history = [
+    { id: 'photo-original', sender: 'other', imageUri: 'https://test.local/original.jpg', time: 'Now' },
+    { id: 'photo-reply', sender: 'me', text: 'Looks good', time: 'Now', replyTo: { author: 'Photo User', text: '📷 Photo', imageUri: 'https://test.local/original.jpg', messageId: 'photo-original' } },
+  ];
+  chat.threadCache.cacheThread(JSON.stringify(['account-one', 'Photo User']), history, chat.threadCache.threadCacheGeneration());
+  chat.update('Photo User');
+  assert.ok(chat.nodes().some(node => node.type === 'Image' && node.props.source?.uri === 'https://test.local/original.jpg' && node.props.style?.width === 84));
+  assert.doesNotMatch(chat.texts(), /📷 Photo/);
+});
+
+for (const sender of ['me', 'other']) {
+  test(`mobile removal confirms and saves privately for ${sender} messages, retaining the message on failure`, async t => {
+    const chat = screen(t, { deferEntrance: true });
+    const id = 'c348ce19-1000-4000-8000-000000000001';
+    const history = [{ id, sender, text: 'Keep this evidence', time: 'Now' }];
+    chat.threadCache.cacheThread(JSON.stringify(['account-one', 'A']), history, chat.threadCache.threadCacheGeneration());
+    chat.update('A');
+    const press = label => renderer.flushSync(() => chat.nodes().find(node => node.props?.accessibilityLabel === label).props.onPress());
+    const start = () => {
+      renderer.flushSync(() => chat.nodes().find(node => node.type === 'Pressable' && node.props.onLongPress).props.onLongPress());
+      assert.doesNotMatch(chat.texts(), /Unsend|Delete for everyone/);
+      assert.match(chat.texts(), /Reply/);
+      assert.match(chat.texts(), /Copy Text/);
+      press('Remove message');
+      assert.match(chat.texts(), /Remove for you\?/);
+      assert.match(chat.texts(), /This message will be removed from your screen. Other participants will still be able to see it./);
+    };
+    start(); press('Cancel removal');
+    assert.equal(chat.removals.length, 0); assert.equal(chat.deleted.has(id), false);
+    start(); press('Confirm removal'); press('Confirm removal');
+    assert.equal(chat.removals.length, 1);
+    assert.equal(chat.deleted.has(id), false, 'Do not hide evidence before server success');
+    chat.removals[0].reject(new Error('Offline')); await tick();
+    assert.match(chat.texts(), /Could not remove the message. Try again./);
+    assert.match(chat.texts(), /Keep this evidence/);
+    press('Confirm removal');
+    chat.removals[1].resolve({ message: 'Message removed for you.' }); await tick();
+    assert.equal(chat.deleted.has(id), true);
+    assert.doesNotMatch(chat.texts(), /Keep this evidence/);
+    assert.deepEqual(chat.alerts, [], 'Use in-app confirmation and error text');
+  });
+}
+
+test('mobile chat renders all four Messenger reply headers for every shared chat role', t => {
+  const chat = screen(t, { deferEntrance: true });
+  const history = [
+    { id: 'mine-original', sender: 'me', text: 'My original', time: 'Now' },
+    { id: 'incoming-to-me', sender: 'other', text: 'Incoming answer', time: 'Now', replyTo: { author: 'Mobile User', text: 'My original', messageId: 'mine-original' } },
+    { id: 'other-original', sender: 'other', text: 'Their original', time: 'Now' },
+    { id: 'incoming-self', sender: 'other', text: 'Their follow-up', time: 'Now', replyTo: { author: 'You', text: 'Their original', messageId: 'other-original' } },
+    { id: 'outgoing-to-user', sender: 'me', text: 'My answer', time: 'Now', replyTo: { author: 'Chrislyn Jewel', text: 'Their original', messageId: 'other-original' } },
+    { id: 'outgoing-self', sender: 'me', text: 'My follow-up', time: 'Now', replyTo: { author: 'You', text: 'My original', messageId: 'mine-original' } },
+  ];
+  chat.threadCache.cacheThread(JSON.stringify(['account-one', 'Chrislyn Jewel']), history, chat.threadCache.threadCacheGeneration());
+  chat.update('Chrislyn Jewel');
+  const expected = {
+    'incoming-to-me': 'Chrislyn Jewel replied to you',
+    'incoming-self': 'Chrislyn Jewel replied to themself',
+    'outgoing-to-user': 'You replied to Chrislyn Jewel',
+    'outgoing-self': 'You replied to yourself',
+  };
+  for (const [id, label] of Object.entries(expected)) {
+    const node = chat.nodes().find(item => item.props?.testID === `reply-relationship-${id}`);
+    assert.ok(node, `${id} relationship label should render`);
+    assert.equal(node.children.map(child => child.text || '').join(''), label);
+  }
+});
 
 test('switching from a loaded chat immediately removes its history and draft before the next fetch resolves', async t => {
   const chat = screen(t);
@@ -142,7 +345,7 @@ test('a late response from a closed chat cannot replace the next conversation', 
   assert.match(chat.texts(), /cats/); assert.doesNotMatch(chat.texts(), /dogs/);
 });
 
-test('reopening the same chat starts clean and ignores the previous opening response', async t => {
+test('reopening before the first load finishes ignores the previous opening response', async t => {
   const chat = screen(t);
   chat.update('A'); chat.update('A', false); chat.update('A');
   chat.requests[0].resolve(payload('old opening')); await tick();
@@ -170,7 +373,7 @@ test('a failed new conversation shows its own error and never restores the previ
   const chat = screen(t);
   chat.update('A'); chat.requests[0].resolve(payload('dogs')); await tick();
   chat.update('B'); chat.requests[1].reject(new Error('Could not load this chat.')); await tick();
-  assert.match(chat.texts(), /Could not load this chat/); assert.doesNotMatch(chat.texts(), /dogs/);
+  assert.match(chat.texts(), /Could not load messages/); assert.doesNotMatch(chat.texts(), /dogs/);
 });
 
 test('a blocked send removes its optimistic bubble, restores the editable draft and leaves recipient previews unchanged', async t => {
@@ -220,7 +423,7 @@ test('an offline contact never flashes online on opening or reopening, even with
   chat.requests[0].resolve(payload('hello')); await tick();
   assert.equal(isGreen(), false); assert.match(chat.texts(), /Inactive/);
   chat.update('offline', false); chat.update('offline', true, { isOnline: true });
-  assert.equal(isGreen(), false); assert.doesNotMatch(chat.texts(), /Active now|Inactive/);
+  assert.equal(isGreen(), false); assert.match(chat.texts(), /Inactive/);
   chat.requests[1].resolve(payload('hello')); await tick();
   assert.equal(isGreen(), false); assert.match(chat.texts(), /Inactive/);
 });
@@ -249,13 +452,8 @@ test('missing presence data stays neutral and a late online result cannot change
 });
 
 function presenceScreen(t) {
-  const events = new Set(), statuses = new Set(), watches = new Set();
-  const realtime = {
-    subscribe(callback) { events.add(callback); return () => events.delete(callback); },
-    subscribeStatus(callback) { statuses.add(callback); return () => statuses.delete(callback); },
-    watchPresence(ids) { watches.add(ids); return () => watches.delete(ids); },
-  };
-  const { useChatPresence } = compile('src/shared/realtime/useChatPresence.ts', { './index': { realtime } });
+  const live = presenceClient(t);
+  const { useChatPresence } = compile('src/shared/realtime/useChatPresence.ts', { './index': { realtime: live.client } });
   function Probe({ account, ids }) {
     const presence = useChatPresence(account, ids);
     return React.createElement('View', { a: presence('A'), b: presence('B') });
@@ -263,16 +461,17 @@ function presenceScreen(t) {
   const container = { children: [] };
   const root = renderer.createContainer(container, 0, null, false, null, '', error => { throw error; }, null);
   const update = (account, ids = ['A', 'B']) => {
+    live.start(account);
     renderer.flushSync(() => renderer.updateContainer(React.createElement(Probe, { account, ids }), root, null));
     renderer.flushPassiveEffects();
   };
   t.after(() => {
     renderer.flushSync(() => renderer.updateContainer(null, root, null)); renderer.flushPassiveEffects();
-    assert.equal(events.size, 0); assert.equal(statuses.size, 0); assert.equal(watches.size, 0);
+    assert.equal(live.watches.size, 0);
   });
-  return { update, watches, value: () => container.children[0].props,
-    event(event) { renderer.flushSync(() => events.forEach(callback => callback(event))); },
-    status(status) { renderer.flushSync(() => statuses.forEach(callback => callback(status))); },
+  return { update, watches: live.watches, value: () => container.children[0].props,
+    event(event) { renderer.flushSync(() => live.event(event)); },
+    status(status) { renderer.flushSync(() => live.status(status)); },
   };
 }
 
@@ -330,4 +529,291 @@ test('a masked-send response from an old thread never displays a notice in anoth
   chat.sends[0].resolve({ data: { chat_message_id: 'saved', message_payload: 'g*go' }, language_warning: 'Please communicate respectfully.' });
   await tick();
   assert.deepEqual(chat.alerts, []); assert.deepEqual(chat.previews, []);
+});
+
+test('a fully unmounted thread reopens immediately from cache and silently loads newer messages', async t => {
+  const chat = screen(t);
+  chat.update('A'); chat.requests[0].resolve(payload('Earlier message')); await tick();
+  chat.nodes().find(node => node.type === 'TextInput').props.onChangeText('Unsent private draft');
+  chat.unmount(); chat.update('A');
+  assert.match(chat.texts(), /Earlier message/);
+  assert.equal(chat.nodes().some(node => node.type === 'ActivityIndicator'), false);
+  assert.equal(chat.nodes().find(node => node.type === 'TextInput').props.value, '');
+  assert.equal(chat.requests.length, 2);
+  chat.requests[1].resolve({ ...payload('Earlier message'), messages: [...payload('Earlier message').messages, ...payload('New message').messages] }); await tick();
+  assert.match(chat.texts(), /Earlier message/); assert.match(chat.texts(), /New message/);
+  assert.equal(chat.nodes().filter(node => node.text === 'Earlier message').length, 1);
+});
+
+test('offline reopen preserves cached messages and retries without blocking the thread', async t => {
+  const chat = screen(t);
+  chat.update('A'); chat.requests[0].resolve(payload('Saved history')); await tick();
+  chat.update('A', false); chat.update('A');
+  chat.requests[1].reject(new Error('Network request failed: private.internal.host')); await tick();
+  assert.match(chat.texts(), /Saved history/);
+  assert.match(chat.texts(), /Could not refresh messages. Please retry./);
+  assert.doesNotMatch(chat.texts(), /private.internal.host/);
+  chat.nodes().find(node => node.type === 'Pressable' && node.children.some(child => child.text === 'Retry conversation' || child.children?.some(text => text.text === 'Retry conversation'))).props.onPress();
+  await tick();
+  assert.equal(chat.nodes().some(node => node.type === 'ActivityIndicator'), false);
+  chat.requests[2].resolve(payload('Refreshed history')); await tick();
+  assert.match(chat.texts(), /Refreshed history/); assert.doesNotMatch(chat.texts(), /Could not refresh messages/);
+});
+
+test('a successfully loaded empty thread is cached and later receives messages without an opening spinner', async t => {
+  const chat = screen(t);
+  chat.update('A'); chat.requests[0].resolve({ messages: [], partnerIsTyping: false }); await tick();
+  chat.unmount(); chat.update('A');
+  assert.equal(chat.nodes().some(node => node.type === 'ActivityIndicator'), false);
+  assert.match(chat.texts(), /No messages yet/);
+  chat.requests[1].resolve(payload('First incoming')); await tick();
+  assert.match(chat.texts(), /First incoming/);
+});
+
+test('token renewal preserves cached history and account changes isolate the same contact', async t => {
+  const chat = screen(t);
+  chat.update('A'); chat.requests[0].resolve(payload('Private history')); await tick();
+  chat.unmount(); chat.renewToken(); chat.update('A');
+  assert.match(chat.texts(), /Private history/);
+  assert.equal(chat.nodes().some(node => node.type === 'ActivityIndicator'), false);
+  assert.equal(chat.requests[1].token, 'renewed-token');
+  chat.changeAccount(); chat.update('A');
+  assert.doesNotMatch(chat.texts(), /Private history/);
+  assert.equal(chat.nodes().some(node => node.type === 'ActivityIndicator'), true);
+  chat.requests[1].resolve(payload('Late private history')); await tick();
+  assert.doesNotMatch(chat.texts(), /Late private history/);
+});
+
+test('loss of conversation access removes cached history and shows a concise error', async t => {
+  const chat = screen(t);
+  chat.update('A'); chat.requests[0].resolve(payload('Private history')); await tick();
+  chat.update('A', false); chat.update('A');
+  chat.requests[1].reject(Object.assign(new Error('Forbidden internal detail'), { status: 403 })); await tick();
+  assert.doesNotMatch(chat.texts(), /Private history|internal detail/);
+  assert.match(chat.texts(), /This conversation is unavailable/);
+  chat.update('A', false); chat.update('A');
+  assert.equal(chat.nodes().some(node => node.type === 'ActivityIndicator'), true);
+});
+
+test('confirmed sends stay cached, and unsent optimistic bubbles are never restored', async t => {
+  const chat = screen(t);
+  chat.update('A'); chat.requests[0].resolve(payload('Earlier')); await tick();
+  const send = text => {
+    chat.nodes().find(node => node.type === 'TextInput').props.onChangeText(text);
+    chat.nodes().find(node => node.type === 'Pressable' && node.children.some(child => child.type === 'Icon' && child.props.name === 'send')).props.onPress();
+  };
+  send('Confirmed outgoing');
+  chat.sends[0].resolve({ data: { chat_message_id: 'saved-send', message_payload: 'Confirmed outgoing' } }); await tick();
+  chat.unmount(); chat.update('A');
+  assert.match(chat.texts(), /Confirmed outgoing/);
+  send('Not saved yet');
+  chat.unmount(); chat.update('A');
+  assert.match(chat.texts(), /Confirmed outgoing/); assert.doesNotMatch(chat.texts(), /Not saved yet/);
+  chat.sends[1].reject(new Error('offline')); await tick();
+  assert.doesNotMatch(chat.texts(), /Not saved yet/);
+});
+
+test('background updates replace deleted messages and reactions without duplicating the cached thread', async t => {
+  const chat = screen(t);
+  chat.update('A');
+  chat.requests[0].resolve({ messages: [...payload('Keep me').messages, ...payload('Remove me').messages] }); await tick();
+  chat.event({ type: 'chat.changed', partner_id: 'A' });
+  chat.requests[1].resolve({ messages: [{ ...payload('Keep me').messages[0], my_reaction: '👍', reaction_summary: { '👍': 1 } }] }); await tick();
+  assert.doesNotMatch(chat.texts(), /Remove me/); assert.match(chat.texts(), /👍/);
+  chat.unmount(); chat.update('A');
+  assert.match(chat.texts(), /Keep me/); assert.doesNotMatch(chat.texts(), /Remove me/);
+  assert.equal(chat.nodes().filter(node => node.text === 'Keep me').length, 1);
+  assert.match(chat.texts(), /👍/);
+});
+
+test('messages deleted locally are not restored from cache or background responses', async t => {
+  const chat = screen(t);
+  chat.update('A'); chat.requests[0].resolve(payload('Hidden message')); await tick();
+  chat.deleted.add('Hidden message');
+  chat.unmount(); chat.update('A');
+  assert.doesNotMatch(chat.texts(), /Hidden message/);
+  chat.requests[1].resolve(payload('Hidden message')); await tick();
+  assert.doesNotMatch(chat.texts(), /Hidden message/);
+});
+
+test('logout clears history and older cache writes cannot repopulate it; retained threads are bounded', () => {
+  const cache = compile('src/features/chat/threadCache.ts', {});
+  const generation = cache.threadCacheGeneration();
+  const history = [{ id: 'saved', text: 'Saved', sender: 'me', time: 'Now' }, { id: 'temp-1', text: 'Pending' }, { id: 'typing', isTyping: true }];
+  cache.cacheThread('account:A', history, generation);
+  assert.deepEqual(cache.getCachedThread('account:A').map(message => message.id), ['saved']);
+  cache.clearThreadCache();
+  cache.cacheThread('account:A', history, generation);
+  assert.equal(cache.getCachedThread('account:A'), null);
+  const next = cache.threadCacheGeneration();
+  for (let index = 0; index < 21; index++) cache.cacheThread(`account:${index}`, history, next);
+  assert.equal(cache.getCachedThread('account:0'), null);
+  assert.ok(cache.getCachedThread('account:20'));
+});
+
+test('a long cached conversation renders only the latest opening batch before network sync or hidden dialogs', t => {
+  const chat = screen(t, { deferEntrance: true });
+  const history = Array.from({ length: 2000 }, (_, index) => ({ id: `message-${index}`, sender: 'other', text: `History ${index}`, time: 'Now' }));
+  chat.threadCache.cacheThread(JSON.stringify(['account-one', 'A']), history, chat.threadCache.threadCacheGeneration());
+  chat.update('A');
+  assert.match(chat.texts(), /History 1999/); assert.doesNotMatch(chat.texts(), /History 100\b/);
+  assert.equal(chat.nodes().filter(node => node.text?.startsWith('History ')).length, 12);
+  assert.equal(chat.nodes().some(node => node.type === 'ActivityIndicator'), false);
+  const list = chat.nodes().find(node => node.type === 'FlatList');
+  assert.equal(list.props.inverted, true);
+  assert.equal(list.props.data.length, 2000);
+  assert.deepEqual(list.props.maintainVisibleContentPosition, { minIndexForVisible: 0, autoscrollToTopThreshold: 40 });
+  assert.equal(chat.requests.length, 0);
+  assert.deepEqual(chat.dialogs, []);
+  renderer.flushSync(() => chat.entrances[0]()); renderer.flushPassiveEffects();
+  assert.equal(chat.requests.length, 1);
+});
+
+test('inverted chat cells display timestamps above incoming, outgoing, photo and system messages', t => {
+  const chat = screen(t, { deferEntrance: true });
+  const today = new Date();
+  const at = (dayOffset, hour, minute) => new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayOffset, hour, minute).toISOString();
+  const history = [
+    { id: 'first', sender: 'other', text: 'Earlier message', createdAtRaw: at(-1, 23, 55) },
+    { id: 'new-day', sender: 'me', text: 'New day message', createdAtRaw: at(0, 0, 1) },
+    { id: 'grouped', sender: 'me', text: 'Same group message', createdAtRaw: at(0, 0, 3) },
+    { id: 'photo', sender: 'other', imageUri: 'https://test.local/photo.jpg', createdAtRaw: at(0, 0, 25) },
+    { id: 'caption', sender: 'me', text: 'Photo caption', imageUri: 'https://test.local/caption.jpg', createdAtRaw: at(0, 0, 50) },
+    { id: 'booking', sender: 'system', bookingInfo: { title: 'BOOKING CONFIRMED', isConfirmed: true, bookedByName: 'Test Worker' }, createdAtRaw: at(0, 1, 15) },
+    { id: 'closed', sender: 'system', text: '[LISTING_CLOSED] Position filled', createdAtRaw: at(0, 1, 40) },
+  ].map(message => ({ ...message, time: message.createdAtRaw }));
+  chat.threadCache.cacheThread(JSON.stringify(['account-one', 'A']), history, chat.threadCache.threadCacheGeneration());
+  chat.update('A');
+
+  // Read top-to-bottom within each native cell, respecting column-reverse layout.
+  const visualTokens = node => {
+    if (node.text !== undefined) return [node.text];
+    if (node.type === 'Image' && node.props.source?.uri?.startsWith('https://test.local/')) return [node.props.source.uri];
+    const children = node.props?.style?.flexDirection === 'column-reverse' ? [...node.children].reverse() : node.children;
+    return children.flatMap(visualTokens);
+  };
+  const expected = [
+    ['first', 'Yesterday 11:55 PM', 'Earlier message'],
+    ['new-day', 'Today 12:01 AM', 'New day message'],
+    ['photo', 'Today 12:25 AM', 'https://test.local/photo.jpg'],
+    ['caption', 'Today 12:50 AM', 'https://test.local/caption.jpg'],
+    ['booking', 'Today 1:15 AM', 'Test Worker'],
+    ['closed', 'Today 1:40 AM', 'Job Position Acquired'],
+  ];
+  for (const [id, timestamp, content] of expected) {
+    const cell = chat.nodes().find(node => node.props?.testID === `list-cell-${id}`);
+    const tokens = visualTokens(cell);
+    assert.equal(tokens[0], timestamp, `${id}: timestamp must precede the message`);
+    assert.ok(tokens.indexOf(content) > 0, `${id}: content follows the timestamp`);
+  }
+  const groupedCell = chat.nodes().find(node => node.props?.testID === 'list-cell-grouped');
+  assert.deepEqual(visualTokens(groupedCell), ['Same group message']);
+  const list = chat.nodes().find(node => node.type === 'FlatList');
+  assert.deepEqual(list.props.data.map(message => message.id), history.map(message => message.id).reverse());
+});
+
+test('closing or switching contacts during entrance cancels the previous opening work', t => {
+  const chat = screen(t, { deferEntrance: true });
+  chat.update('A', false);
+  assert.equal(chat.entrances.length, 0); assert.equal(chat.nodes().length, 0);
+  chat.update('A'); const finishOld = chat.entrances[0];
+  chat.update('A', false); finishOld(); renderer.flushPassiveEffects();
+  assert.equal(chat.requests.length, 0);
+  chat.update('B');
+  renderer.flushSync(() => chat.entrances[1]()); renderer.flushPassiveEffects();
+  assert.equal(chat.requests.length, 1); assert.equal(chat.requests[0].partnerId, 'B');
+});
+
+test('quote jumps use reversed list indices and cancelled jumps cannot scroll a closed chat', async t => {
+  const chat = screen(t, { deferEntrance: true });
+  const history = Array.from({ length: 50 }, (_, index) => ({ id: `message-${index}`, sender: 'other', text: `History ${index}`, time: 'Now' }));
+  history[49].replyTo = { author: 'Someone', text: 'Quoted earlier message', messageId: 'message-0' };
+  chat.threadCache.cacheThread(JSON.stringify(['account-one', 'A']), history, chat.threadCache.threadCacheGeneration());
+  chat.update('A');
+  const contains = (node, value) => node.text === value || node.children?.some(child => contains(child, value));
+  const quote = chat.nodes().find(node => node.type === 'Pressable' && contains(node, 'Quoted earlier message'));
+  assert.ok(quote); quote.props.onPress();
+  assert.deepEqual(chat.scrolls[0], { type: 'index', index: 49, viewPosition: 0.5, animated: true });
+  chat.nodes().find(node => node.type === 'FlatList').props.onScrollToIndexFailed({ index: 49, averageItemLength: 80 });
+  assert.equal(chat.scrolls.at(-1).offset, 49 * 80);
+  chat.unmount();
+  const count = chat.scrolls.length;
+  await new Promise(resolve => setTimeout(resolve, 150));
+  assert.equal(chat.scrolls.length, count);
+});
+
+test('counterparty profile mounts only after its button is tapped', t => {
+  const chat = screen(t, { deferEntrance: true }); chat.update('A');
+  assert.deepEqual(chat.dialogs, []);
+  const contains = (node, value) => node.text === value || node.children?.some(child => contains(child, value));
+  chat.nodes().find(node => node.type === 'Pressable' && contains(node, 'A')).props.onPress();
+  assert.ok(chat.dialogs.includes('official'));
+  assert.equal(chat.dialogs.includes('booking'), false);
+});
+
+test('a confirmed inbox status appears in the chat header immediately before animation or messages load', t => {
+  const chat = screen(t, { autoPresence: false, deferEntrance: true });
+  chat.event({ type: 'presence.changed', partner_id: 'A', is_online: true });
+  chat.update('A');
+  assert.match(chat.texts(), /Active now/); assert.doesNotMatch(chat.texts(), /Checking…|Inactive/);
+  assert.equal(chat.nodes().some(node => node.props?.testID === 'chat-presence-online'), true);
+  assert.equal(chat.requests.length, 0);
+  chat.update('A', false); chat.update('A');
+  assert.match(chat.texts(), /Active now/);
+});
+
+test('online and offline events update the open header without reopening or refetching messages', async t => {
+  const chat = screen(t, { autoPresence: false }); chat.update('A');
+  chat.requests[0].resolve(payload('Hello')); await tick();
+  assert.match(chat.texts(), /Checking…/);
+  chat.event({ type: 'presence.changed', partner_id: 'A', is_online: true });
+  assert.match(chat.texts(), /Active now/);
+  chat.event({ type: 'presence.changed', partner_id: 'A', is_online: false });
+  assert.match(chat.texts(), /Inactive/);
+  assert.equal(chat.nodes().some(node => node.props?.testID === 'chat-presence-online'), false);
+  chat.event({ type: 'presence.changed', partner_id: 'B', is_online: true });
+  assert.match(chat.texts(), /Inactive/);
+  assert.equal(chat.requests.length, 1);
+});
+
+test('a slow HTTP offline snapshot cannot overwrite a newer live online event', async t => {
+  const chat = screen(t, { autoPresence: false }); chat.update('A');
+  chat.event({ type: 'presence.changed', partner_id: 'A', is_online: true });
+  chat.requests[0].resolve(payload('Hello')); await tick();
+  assert.match(chat.texts(), /Active now/); assert.doesNotMatch(chat.texts(), /Inactive/);
+  assert.equal(chat.live.client.getPresence('account-one', 'A'), true);
+  assert.equal(chat.live.client.getPresence('different-account', 'A'), undefined);
+});
+
+test('disconnect and reconnect keep a stable status label and wait for a fresh confirmed presence', t => {
+  const chat = screen(t, { autoPresence: false }); chat.update('A');
+  chat.event({ type: 'presence.changed', partner_id: 'A', is_online: true });
+  const width = chat.nodes().find(node => node.props?.testID === 'chat-presence-status').props.style[1].width;
+  renderer.flushSync(() => chat.live.status('reconnecting'));
+  assert.equal(chat.nodes().find(node => node.props?.testID === 'chat-presence-status').children[0].text, 'Checking…');
+  assert.equal(chat.nodes().some(node => node.props?.testID === 'chat-presence-online'), false);
+  renderer.flushSync(() => chat.live.status('connected'));
+  chat.event({ type: 'presence.changed', partner_id: 'A', is_online: false });
+  const label = chat.nodes().find(node => node.props?.testID === 'chat-presence-status');
+  assert.equal(label.children[0].text, 'Inactive'); assert.equal(label.props.style[1].width, width);
+});
+
+test('HTTP presence works as an offline-socket fallback without replacing a newer snapshot', async t => {
+  const chat = screen(t, { autoPresence: false }); chat.live.status('reconnecting'); chat.update('A');
+  chat.requests[0].resolve({ ...payload('Hello'), partnerIsOnline: true }); await tick();
+  assert.match(chat.texts(), /Active now/);
+  const version = chat.live.client.getPresenceRevision();
+  chat.live.client.recordPresence('account-one', 'A', false);
+  chat.live.client.recordPresence('account-one', 'A', true, version);
+  assert.equal(chat.live.client.getPresence('account-one', 'A'), false);
+});
+
+test('expired online snapshots return to Checking instead of showing a stale green dot', t => {
+  t.mock.timers.enable({ apis: ['setInterval', 'Date'], now: 10000 });
+  const chat = screen(t, { autoPresence: false }); chat.update('A');
+  chat.event({ type: 'presence.changed', partner_id: 'A', is_online: true });
+  assert.match(chat.texts(), /Active now/);
+  renderer.flushSync(() => t.mock.timers.tick(65000));
+  assert.equal(chat.nodes().find(node => node.props?.testID === 'chat-presence-status').children[0].text, 'Checking…');
+  assert.equal(chat.nodes().some(node => node.props?.testID === 'chat-presence-online'), false);
 });

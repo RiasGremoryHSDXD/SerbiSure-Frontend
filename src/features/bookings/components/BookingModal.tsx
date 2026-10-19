@@ -1,6 +1,8 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
+import { useUser } from '../../auth/session/UserContext';
 import type { WorkSetup } from '../workSetup';
 import { workSetupLabel } from '../workSetup';
+import { confirmBookingAcceptance, bookingResponseMessage } from '../bookingAcceptance';
 import { buildEngagementSchedule, normalizeServices, toggleService, SERVICE_CHOICES, WORK_SHIFTS, type WorkShift } from '../engagementForm';
 import { BookingOfferReview, type BookingOfferStep } from './BookingOfferReview';
 import { WorkScheduleFields } from './WorkScheduleFields';
@@ -50,6 +52,7 @@ export interface BookingConfirmData {
   days: string[];
   salary: string;
   bookingType: 'long_term' | 'short_term';
+  ongoing?: boolean;
   jobPost?: BookingJobPost | null;
 }
 
@@ -107,6 +110,7 @@ export function BookingModal({
   isAcquired = false,
 }: BookingModalProps) {
   const { tr: uiText } = useUiLanguage();
+  const { user } = useUser();
   const insets = useSafeAreaInsets();
 
   // Slide animation: Right to Left
@@ -116,6 +120,7 @@ export function BookingModal({
   // Form states
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [ongoing, setOngoing] = useState(false);
   const [workHours, setWorkHours] = useState('');
   const [savedLocation, setSavedLocation] = useState('');
   const address = useWorkLocation(visible && !readOnly);
@@ -146,7 +151,7 @@ export function BookingModal({
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   };
   useEffect(() => { scrollRef.current?.scrollTo({ y: 0, animated: false }); }, [offerStep]);
-  useEffect(() => { setFormError(null); }, [serviceCategory.join(','), workSetup, selectedBookingType, startDate, endDate,
+  useEffect(() => { setFormError(null); }, [serviceCategory.join(','), workSetup, selectedBookingType, startDate, endDate, ongoing,
     workHours, selectedShift, selectedDays.join(','), region, address.selectedProvince?.code, address.selectedCity?.code,
     address.selectedBarangay?.code, address.streetAddress, address.zipcode, salary]);
 
@@ -200,16 +205,17 @@ export function BookingModal({
 
     setStartDate(initialDetails?.startDate || '');
     setEndDate(initialDetails?.endDate || '');
+    setOngoing(defaultType === 'long_term' && !!initialDetails && !initialDetails.endDate);
     setWorkHours(initialDetails?.workHours || '');
-    setSelectedShift(WORK_SHIFTS.find(item => item.hours === initialDetails?.workHours)?.value || null);
+    setSelectedShift(WORK_SHIFTS.find(item => item.hours === initialDetails?.workHours)?.value || (initialDetails?.workHours ? 'custom' : null));
     setSavedLocation(initialDetails?.location || effectiveJobPost?.location || '');
     setSelectedDays(initialDetails?.days || []);
     setSalary(initialDetails?.salary || '');
     setServiceCategory(normalizeServices(initialDetails?.serviceCategory || []));
-    setWorkSetup(initialDetails?.workSetup || null);
+    setWorkSetup(defaultType === 'short_term' && !readOnly ? 'stay_out' : initialDetails?.workSetup || null);
     setSavedRegion(initialDetails?.region || '');
 
-  }, [visible, initialDetails, effectiveJobPost, bookingType]);
+  }, [visible, readOnly, initialDetails, effectiveJobPost, bookingType]);
 
   useEffect(() => {
     let current = true;
@@ -224,12 +230,12 @@ export function BookingModal({
   }, [visible, readOnly, token, selectedBookingType, wageLocation, region, policyAttempt]);
 
   const getSchedule = () => buildEngagementSchedule({
-    bookingType: selectedBookingType, startDate, endDate, workHours, days: selectedDays, shift: selectedShift,
+    bookingType: selectedBookingType, startDate, endDate, workHours, days: selectedDays, shift: selectedShift, ongoing,
   });
   const stepError = (step: BookingOfferStep): string | null => {
     if (step === 1) {
       if (!serviceCategory.length) return 'Choose at least one service to continue.';
-      if (!workSetup) return 'Choose Stay-in or Stay-out to continue.';
+      if (selectedBookingType === 'long_term' && !workSetup) return 'Choose Stay-in or Stay-out to continue.';
     } else if (step === 2) {
       try { getSchedule(); }
       catch (error) { return error instanceof Error ? error.message : 'Choose a valid work schedule.'; }
@@ -265,16 +271,17 @@ export function BookingModal({
     submittingRef.current = true;
     setSubmitting(true);
     void Promise.resolve().then(() => onConfirm({
-      startDate, endDate: selectedBookingType === 'short_term' ? startDate : endDate,
-      workHours: selectedBookingType === 'short_term' ? WORK_SHIFTS.find(item => item.value === selectedShift)!.hours : workHours,
+      startDate, endDate: selectedBookingType === 'short_term' ? startDate : ongoing ? '' : endDate,
+      ongoing: selectedBookingType === 'long_term' && ongoing,
+      workHours: selectedBookingType === 'short_term' && selectedShift !== 'custom' ? WORK_SHIFTS.find(item => item.value === selectedShift)!.hours : workHours,
       location: location.trim(), days: schedule.work_days,
       salary: salary.trim(), bookingType: selectedBookingType, jobPost: effectiveJobPost,
-      serviceCategory: normalizeServices(serviceCategory), workSetup: workSetup!, region,
+      serviceCategory: normalizeServices(serviceCategory), workSetup: selectedBookingType === 'short_term' ? 'stay_out' : workSetup!, region,
       province: address.selectedProvince!.name, city: address.selectedCity!.name, barangay: address.selectedBarangay!.name,
       street: address.streetAddress.trim(), floorUnit: address.floorUnit.trim(), zipCode: address.zipcode.trim(),
     })).then(handleClose).catch(error => {
       submittingRef.current = false; setSubmitting(false);
-      Alert.alert('Cannot Send Offer', error instanceof Error ? error.message : 'Please try again.');
+      Alert.alert(uiText('Cannot Send Offer'), uiText(bookingResponseMessage(error)));
     });
 
   };
@@ -284,7 +291,7 @@ export function BookingModal({
     submittingRef.current = true; setSubmitting(true);
     void Promise.resolve().then(action).then(handleClose).catch(error => {
       submittingRef.current = false; setSubmitting(false);
-      Alert.alert('Cannot Confirm', error instanceof Error ? error.message : 'Please try again.');
+      Alert.alert(uiText('Booking not updated'), uiText(bookingResponseMessage(error)));
     });
   };
 
@@ -333,7 +340,7 @@ export function BookingModal({
 
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         {!readOnly && <View style={styles.progressContainer}>
-          <View style={styles.progressMeta}><Text style={styles.progressText}>{uiText("Step")}{offerStep} {uiText("of")}{OFFER_STEPS.length}</Text>
+          <View style={styles.progressMeta}><Text style={styles.progressText}>{uiText("Step")} {offerStep} {uiText("of")} {OFFER_STEPS.length}</Text>
             <Text style={styles.progressHint}>{currentStep.label}</Text></View>
           <View style={styles.progressRow}>{OFFER_STEPS.map((item, index) => <Pressable key={item.label}
             accessibilityRole="button" accessibilityLabel={`Step ${index + 1}: ${item.label}`}
@@ -355,7 +362,7 @@ export function BookingModal({
           {!readOnly && <View style={styles.stepIntro} accessibilityLiveRegion="polite"><Text style={styles.stepTitle}>{offerStep === 1 && userRole === 'kasambahay' ? 'Which services will you offer?' : currentStep.title}</Text><Text style={styles.stepHint}>{currentStep.hint}</Text></View>}
           {!!formError && <View style={styles.errorCard} accessibilityLiveRegion="polite">
             <Ionicons name="alert-circle-outline" size={20} color="#B91C1C" />
-            <Text style={styles.errorText}>{formError}</Text>
+            <Text style={styles.errorText}>{uiText(formError)}</Text>
           </View>}
 
           {!readOnly && offerStep === 1 && <>
@@ -372,23 +379,24 @@ export function BookingModal({
               })}</View>
               <Text style={styles.helperText}>{serviceCategory.includes('All-around') ? 'All-around includes all five services.' : 'Select one or more services. All five become All-around.'}</Text>
             </View>
-            <View style={styles.formGroup}>
+            {selectedBookingType === 'long_term' && <View style={styles.formGroup}>
               <Text style={styles.fieldLabel}>{uiText("WORK SETUP")}</Text>
               <View style={styles.typeSelectorRow}>{(['stay_in', 'stay_out'] as const).map(value => <Pressable key={value}
                 accessibilityRole="button" accessibilityState={{ selected: workSetup === value }} disabled={submitting}
                 style={[styles.setupChoice, workSetup === value && styles.choiceActive]} onPress={() => setWorkSetup(value)}>
                 <Ionicons name={value === 'stay_in' ? 'home-outline' : 'walk-outline'} size={20} color="#9A3412" />
-                <Text style={styles.choiceText}>{workSetupLabel(value)}</Text>
+                <Text style={styles.choiceText}>{uiText(workSetupLabel(value))}</Text>
               </Pressable>)}</View>
-            </View>
+            </View>}
             <View style={styles.formGroup}>
               <Text style={styles.fieldLabel}>{uiText("ENGAGEMENT TYPE")}</Text>
               <View style={styles.typeSelectorRow}>{(['short_term', 'long_term'] as const).map(value => <Pressable key={value}
                 accessibilityRole="button" accessibilityState={{ selected: selectedBookingType === value }} disabled={submitting}
                 style={[styles.termChoice, selectedBookingType === value && styles.choiceActive]}
                 onPress={() => {
-                  if (value !== selectedBookingType) { setSalary(''); setWorkHours(''); setSelectedShift(null); setSelectedDays([]); setEndDate(''); }
+                  if (value !== selectedBookingType) { setSalary(''); setWorkHours(''); setSelectedShift(null); setSelectedDays([]); setEndDate(''); setOngoing(false); }
                   setSelectedBookingType(value);
+                  if (value === 'short_term') setWorkSetup('stay_out');
                 }}>
                 <Text style={styles.choiceText}>{value === 'short_term' ? uiText("Short-term") : uiText("Long-term")}</Text>
                 <Text style={styles.helperText}>{value === 'short_term' ? 'A dated shift · daily pay' : 'Ongoing work · monthly pay'}</Text>
@@ -398,11 +406,21 @@ export function BookingModal({
           {!readOnly && offerStep === 2 && <WorkScheduleFields bookingType={selectedBookingType} startDate={startDate} endDate={endDate}
             workHours={workHours} days={selectedDays} shift={selectedShift}
             onStartDate={setStartDate} onEndDate={setEndDate} onWorkHours={setWorkHours} onDays={setSelectedDays}
-            onShift={value => { setSelectedShift(value); setWorkHours(WORK_SHIFTS.find(item => item.value === value)!.hours); }}
+            onShift={value => { setSelectedShift(value); const preset = WORK_SHIFTS.find(item => item.value === value); if (preset) setWorkHours(preset.hours); }}
+            ongoing={ongoing} onOngoing={setOngoing}
             disabled={!visible || submitting} />}
           {!readOnly && offerStep === 3 && <>
             <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>{uiText("WORK ADDRESS")}</Text>
+              <View style={styles.locationHeaderRow}>
+                <Text style={styles.fieldLabel}>{uiText("WORK ADDRESS")}</Text>
+                {user && (user.barangay || user.city) ? <Pressable accessibilityRole="button"
+                  disabled={submitting || address.loadingLocations}
+                  style={[styles.useProfileAddressBtn, (submitting || address.loadingLocations) && styles.disabledBtn]}
+                  onPress={() => { if (!submittingRef.current && !address.loadingLocations) address.applyProfileAddress(user); }}>
+                  <Ionicons name="location" size={13} color="#EA580C" />
+                  <Text style={styles.useProfileAddressText}>{uiText('Use Profile Address')}</Text>
+                </Pressable> : null}
+              </View>
               <WorkLocationFields form={address} disabled={submitting} />
             </View>
             <View style={styles.formGroup}>
@@ -425,6 +443,7 @@ export function BookingModal({
           {(readOnly || offerStep === 4) && <>
             <BookingOfferReview serviceCategory={serviceCategory} workSetup={workSetup} bookingType={selectedBookingType}
               startDate={startDate} endDate={selectedBookingType === 'short_term' && !readOnly ? startDate : endDate}
+              ongoing={ongoing}
               workHours={workHours} days={selectedDays} region={region} location={previewLocation} salary={salary}
               onEdit={readOnly ? undefined : goToStep} disabled={submitting} />
             <View style={styles.policyCard}><Ionicons name="information-circle-outline" size={18} color="#9A3412" />
@@ -479,21 +498,7 @@ export function BookingModal({
 
                 <Pressable
                   disabled={submitting} style={({ pressed }) => [styles.agreeBtn, { flex: 1 }, pressed && styles.pressedBtn]}
-                  onPress={() => {
-                    Alert.alert(
-                      'Confirm Contract Agreement',
-                      'Accept these saved booking terms? Long-term signing and registration remain separate.',
-                      [
-                        { text: 'Review Details', style: 'cancel' },
-                        {
-                          text: 'Agree & Accept',
-                          onPress: () => {
-                            runResponse(onKasambahayConfirm);
-                          },
-                        },
-                      ]
-                    );
-                  }}
+                  onPress={() => confirmBookingAcceptance(selectedBookingType, uiText, () => runResponse(onKasambahayConfirm))}
                 >
                   <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
                   <Text style={styles.agreeBtnText}>{uiText("Agree & Accept")}</Text>
@@ -503,7 +508,7 @@ export function BookingModal({
               <View style={styles.pendingBanner}>
                 <Ionicons name="time-outline" size={18} color="#D97706" style={{ marginRight: 6 }} />
                 <Text style={styles.pendingBannerText}>
-                  {uiText("Offer Sent • Waiting for")}{contactName || uiText("Kasambahay")} {uiText("to accept or decline")}</Text>
+                  {uiText("Offer Sent • Waiting for")} {contactName || uiText("Kasambahay")} {uiText("to accept or decline")}</Text>
               </View>
             )
           ) : (
@@ -636,6 +641,16 @@ const styles = StyleSheet.create({
   },
   formGroup: {
     marginBottom: 16,
+  },
+  locationHeaderRow: {
+    flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8,
+  },
+  useProfileAddressBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 20, maxWidth: '100%',
+    paddingVertical: 7, paddingHorizontal: 10, backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FED7AA',
+  },
+  useProfileAddressText: {
+    flexShrink: 1, color: '#EA580C', fontSize: 11, fontFamily: THEME.typography.fontFamily.mainBold,
   },
   fieldLabel: {
     fontSize: 11,
@@ -771,14 +786,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#FFFBEB',
     borderRadius: 16,
+    paddingHorizontal: 12,
     paddingVertical: 14,
     borderWidth: 1,
     borderColor: '#FDE68A',
   },
   pendingBannerText: {
+    flex: 1,
+    flexShrink: 1,
     color: '#B45309',
     fontSize: 13,
+    lineHeight: 18,
     fontWeight: '700',
+    textAlign: 'center',
   },
   policyCard: {
     flexDirection: 'row',

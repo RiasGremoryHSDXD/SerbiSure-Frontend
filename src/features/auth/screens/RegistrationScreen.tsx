@@ -1,11 +1,12 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL } from '../../../shared/api/config';
 import { fetchWithTimeout } from '../../../shared/api/httpClient';
-import { updateUserAbout, updateUserTags } from '../../profile/api/accountApi';
+import { LivenessScreen } from '../../verification/components/LivenessScreen';
+import type { LivenessResult } from '../../verification/liveness/livenessMachine';
 import { useUser } from '../session/UserContext';
 import { SearchablePickerModal } from '../../../shared/ui/SearchablePickerModal';
 import { DateOfBirthPickerModal } from '../../../shared/ui/DateOfBirthPickerModal';
@@ -68,7 +69,7 @@ export const formatPhilippinePhoneNumber = (value: string): string => {
 type RegistrationScreenProps = {
   role: 'homeowner' | 'kasambahay';
   onBack?: () => void;
-  onNext?: (token?: string) => void;
+  onNext?: (token: string, selfie: LivenessResult) => void;
   onCancel?: () => void;
   onNavigateToLogin?: () => void;
 };
@@ -136,6 +137,16 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
 
   // Form submission loading
   const [loading, setLoading] = useState(false);
+  const [showFaceVerification, setShowFaceVerification] = useState(false);
+  const verifiedSelfie = useRef<LivenessResult | null>(null);
+  const submitting = useRef(false);
+  const created = useRef(false);
+  const registrationRequest = useRef<{ body: string; key: string } | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   // Server & Validation Error State for Error Modal
   const [serverError, setServerError] = useState<any | null>(null);
@@ -456,11 +467,8 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
     setSelectedBarangay(item as Barangay);
   };
 
-  // --- Step 3 Final Submission ---
-  const handleRegister = async () => {
-    const cleanDigits = rawPhone.replace(/\D/g, '').replace(/^0+/, '');
-    const contactNumber = `+63${cleanDigits}`;
-
+  // Location only validates the draft. Registration waits for a captured selfie.
+  const handleContinueToFace = () => {
     if (!selectedRegion) {
       setServerError({ region: ["Please select your Region."] });
       return;
@@ -491,6 +499,16 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
       return;
     }
 
+    verifiedSelfie.current = null;
+    setShowFaceVerification(true);
+  };
+
+  const handleRegister = async (selfie: LivenessResult) => {
+    if (!selfie.verified || !selfie.selfiePath || submitting.current || created.current) return;
+    verifiedSelfie.current = selfie;
+    submitting.current = true;
+    const contactNumber = `+63${rawPhone.replace(/\D/g, '').replace(/^0+/, '')}`;
+    const cleanZip = zipcode.trim();
     setLoading(true);
     try {
       const payload: any = {
@@ -506,10 +524,10 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
         account_type: isHomeowner ? "Homeowner" : "Kasambahay",
         contact_number: contactNumber,
         country: "Philippines",
-        region: selectedRegion.displayName || selectedRegion.name,
-        province: selectedProvince.name,
-        city: selectedCity.name,
-        barangay: selectedBarangay.name,
+        region: selectedRegion!.displayName || selectedRegion!.name,
+        province: selectedProvince!.name,
+        city: selectedCity!.name,
+        barangay: selectedBarangay!.name,
         street: streetAddress.trim(),
         zipcode: cleanZip,
       };
@@ -528,19 +546,24 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
         });
       };
 
-      const idempotencyKey = generateUUID();
+      const body = JSON.stringify(payload);
+      if (registrationRequest.current?.body !== body) {
+        registrationRequest.current = { body, key: generateUUID() };
+      }
 
       const response = await fetchWithTimeout(`${API_BASE_URL}/api/v1/accounts/register/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Idempotency-Key": idempotencyKey
+          "Idempotency-Key": registrationRequest.current.key
         },
-        body: JSON.stringify(payload)
+        body
       });
 
       const result = await readRegistrationResponse(response);
+      if (!mounted.current) return;
       if (result.ok) {
+        created.current = true;
         // Save user location & details globally in UserContext ONLY upon successful account creation
         updateUser({
           firstName: firstName.trim(),
@@ -553,29 +576,25 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
           email: email.trim().toLowerCase(),
           contactNumber,
           country: "Philippines",
-          region: selectedRegion.displayName || selectedRegion.name,
-          province: selectedProvince.name,
-          city: selectedCity.name,
-          barangay: selectedBarangay.name,
+          region: selectedRegion!.displayName || selectedRegion!.name,
+          province: selectedProvince!.name,
+          city: selectedCity!.name,
+          barangay: selectedBarangay!.name,
           street: streetAddress.trim(),
           zipcode: cleanZip,
           userAbout: !isHomeowner ? finalBio : undefined,
           userTags: !isHomeowner ? generatedTags : undefined,
         });
 
-        if (!isHomeowner) {
-          updateUserAbout(result.access, finalBio).catch(() => { });
-          updateUserTags(result.access, generatedTags).catch(() => { });
-        }
-        Alert.alert("Success", "Account created successfully!");
-        if (onNext) onNext(result.access);
+        onNext?.(result.access, selfie);
       } else {
         setServerError(result.error);
       }
     } catch (error: any) {
-      setServerError(error);
+      if (mounted.current) setServerError(error);
     } finally {
-      setLoading(false);
+      submitting.current = false;
+      if (mounted.current) setLoading(false);
     }
   };
 
@@ -589,6 +608,38 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
       if (onBack) onBack();
     }
   };
+
+  const errorModal = (
+    <RegistrationErrorModal
+      visible={Boolean(serverError)}
+      errorData={serverError}
+      onClose={() => setServerError(null)}
+      onGoToStep={(step) => {
+        setServerError(null);
+        setShowFaceVerification(false);
+        verifiedSelfie.current = null;
+        setSubStep(step);
+      }}
+      onNavigateToLogin={onNavigateToLogin}
+    />
+  );
+
+  if (showFaceVerification) {
+    return <>
+      <LivenessScreen
+        role={role}
+        submitting={loading}
+        submissionFailed={!!verifiedSelfie.current && !loading}
+        onVerified={result => { void handleRegister(result); }}
+        onRetrySubmission={() => { if (verifiedSelfie.current) void handleRegister(verifiedSelfie.current); }}
+        onBack={loading ? undefined : () => {
+          setShowFaceVerification(false);
+          verifiedSelfie.current = null;
+        }}
+      />
+      {errorModal}
+    </>;
+  }
 
   return (
     <KeyboardAvoidingView
@@ -1048,13 +1099,13 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
                   </Pressable>
                   <Pressable
                     style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
-                    onPress={handleRegister}
+                    onPress={handleContinueToFace}
                     disabled={loading}
                   >
                     {loading ? (
                       <ActivityIndicator color="#FFFFFF" />
                     ) : (
-                      <Text style={styles.primaryButtonText}>{uiText("Create Account")}</Text>
+                      <Text style={styles.primaryButtonText}>{uiText("Continue")}</Text>
                     )}
                   </Pressable>
                 </View>
@@ -1150,16 +1201,7 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
         />
 
         {/* Branded & Idiot-Proof Registration Error Modal */}
-        <RegistrationErrorModal
-          visible={Boolean(serverError)}
-          errorData={serverError}
-          onClose={() => setServerError(null)}
-          onGoToStep={(step) => {
-            setServerError(null);
-            setSubStep(step);
-          }}
-          onNavigateToLogin={onNavigateToLogin}
-        />
+        {errorModal}
 
         <PrivacyPolicyModal
           visible={legalDocument !== null}

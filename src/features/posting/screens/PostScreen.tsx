@@ -5,6 +5,7 @@ import { Text, View, Image, Pressable, Modal, KeyboardAvoidingView, Platform, An
 import { Ionicons } from '@expo/vector-icons';
 
 import { VerificationRequiredModal } from '../../verification/components/VerificationRequiredModal';
+import { BookingRestrictionModal } from '../../bookings/components/BookingRestrictionModal';
 
 const logoSource = require('../../../../assets/serbisure-logo.png');
 
@@ -31,6 +32,8 @@ export function PostScreen(props: PostScreenProps) {
     isPosting,
     showVerificationRequired,
     setShowVerificationRequired,
+    showBookingRestricted,
+    setShowBookingRestricted,
     verificationStatus,
     scaleAnim,
     spin,
@@ -72,29 +75,29 @@ export function PostScreen(props: PostScreenProps) {
 
           {/* Step Pill Counter */}
           <View style={styles.stepBadge}>
-            <Text style={styles.stepBadgeText}>{uiText("Step")}{step} {uiText("of 4")}</Text>
+            <Text style={styles.stepBadgeText}>{uiText('Step {step} of {total}', { step, total: 4 })}</Text>
           </View>
 
           {/* Step Main Title */}
           <View style={styles.titleBlock}>
             {step === 1 && (
               <Text style={styles.mainTitle}>
-                {uiText("What")}<Text style={styles.titleHighlight}>{uiText(config.roleWord)}</Text> {uiText(config.questionSuffix)}
+                {uiText("What")}{' '}<Text style={styles.titleHighlight}>{uiText(config.roleWord)}</Text>{' '}{uiText(config.questionSuffix)}
               </Text>
             )}
             {step === 2 && (
               <Text style={styles.mainTitle}>
-                {uiText("Job type &")}<Text style={styles.titleHighlight}>{uiText("setup")}</Text>
+                {uiText("Job type & schedule")}
               </Text>
             )}
             {step === 3 && (
               <Text style={styles.mainTitle}>
-                {uiText("Location &")}<Text style={styles.titleHighlight}>{uiText(config.rateHeading)}</Text>
+                {uiText("Location &")}{' '}<Text style={styles.titleHighlight}>{uiText(config.rateHeading)}</Text>
               </Text>
             )}
             {step === 4 && (
               <Text style={styles.mainTitle}>
-                {uiText("Review your")}<Text style={styles.titleHighlight}>{uiText(config.postHeading)}</Text>
+                {uiText("Review your")}{' '}<Text style={styles.titleHighlight}>{uiText(config.postHeading)}</Text>
               </Text>
             )}
           </View>
@@ -149,6 +152,11 @@ export function PostScreen(props: PostScreenProps) {
             </Animated.View>
           </View>
         )}
+
+        <BookingRestrictionModal
+          visible={showBookingRestricted}
+          onClose={() => setShowBookingRestricted(false)}
+        />
 
         {/* Verification Required Modal */}
         <VerificationRequiredModal

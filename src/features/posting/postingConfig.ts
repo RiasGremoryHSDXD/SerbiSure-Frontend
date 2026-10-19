@@ -42,15 +42,50 @@ export function engagementRate(mode: PostingMode, currentRate: string, type: 'sh
   return currentRate;
 }
 
+export function buildPostLocation(input: {
+  street?: string | null;
+  floorUnit?: string | null;
+  barangay?: string | null;
+  city?: string | null;
+  zipcode?: string | null;
+}, fallback = 'Cagayan de Oro'): string {
+  const street = input.street?.trim();
+  const floorUnit = input.floorUnit?.trim();
+  const barangay = input.barangay?.trim();
+  const city = input.city?.trim();
+  const zipcode = input.zipcode?.trim();
+  const parts = [
+    street,
+    floorUnit ? `Floor/Unit ${floorUnit}` : undefined,
+    barangay,
+    city,
+  ].filter((part): part is string => Boolean(part));
+
+  if (parts.length === 0) return fallback;
+  return `${parts.join(', ')}${zipcode ? ` (${zipcode})` : ''}`;
+}
+
+function buildPostRateText(rate: string | undefined, shortTerm: boolean): string {
+  const amount = rate?.trim().replace(/^₱\s*/, '');
+  return amount ? `₱${amount} / ${shortTerm ? 'day' : 'month'}` : '';
+}
+
 export function buildPostDescription(mode: PostingMode, input: {
-  service: string; location: string; setup: string; time: string; shortTerm: boolean; instructions: string;
+  service: string; location: string; setup: string; time: string; shortTerm: boolean; instructions: string; rate?: string;
 }): string {
-  const { service, location, setup, time, shortTerm, instructions } = input;
+  const { service, location, setup, time, shortTerm, instructions, rate } = input;
   let message = mode === 'job'
-    ? `I am looking for ${service} at ${location}, capable of working on ${shortTerm ? `${time} on a ` : 'a '}${setup} setup.`
+    ? shortTerm
+      ? `I am looking for ${service} at ${location}, available ${time}.`
+      : `I am looking for ${service} at ${location}, capable of working on a ${setup} setup.`
     : shortTerm
-      ? `I am offering ${service} service in ${location}, available ${time} on a ${setup} arrangement.`
+      ? `I am offering ${service} service in ${location}, available ${time}.`
       : `I am looking for long-term ${service} work in ${location} on a ${setup} arrangement.`;
+  const rateText = buildPostRateText(rate, shortTerm);
+  if (rateText) {
+    const rateLabel = mode === 'job' ? 'offer rate' : 'expected rate';
+    message = `${message.replace(/\.$/, '')} with an ${rateLabel} of ${rateText}.`;
+  }
   if (instructions.trim()) message += `\n\n${mode === 'job' ? 'Specific instructions' : 'About my experience'}:\n${instructions.trim()}`;
   return message;
 }

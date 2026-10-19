@@ -13,6 +13,7 @@ interface Props {
   workSetup: WorkSetup | null;
   bookingType: 'short_term' | 'long_term';
   startDate: string; endDate: string; workHours: string; days: string[];
+  ongoing?: boolean;
   region: string; location: string; salary: string;
   onEdit?: (step: BookingOfferStep) => void;
   disabled?: boolean;
@@ -25,14 +26,15 @@ export function BookingOfferReview(props: Props) {
   const amount = props.salary.trim() && Number.isFinite(Number(props.salary))
     ? `₱${Number(props.salary).toLocaleString('en-PH', { maximumFractionDigits: 2 })}` : props.salary || 'Not provided';
   const services = props.serviceCategory.map(value => SERVICE_CHOICES.find(item => item.id === value)?.label || value.replace(/_/g, ' ')).join(', ');
-  const days = WORK_DAYS.filter(day => props.days.includes(day.value)).map(day => day.label).join(', ');
+  const days = WORK_DAYS.filter(day => props.days.includes(day.value)).map(day => uiText(day.label)).join(', ');
   const sections = [
     { title: 'Service & setup', icon: 'briefcase-outline' as const, step: 1 as const, rows: [
-      ['Services', services], ['Engagement', short ? 'Short-term' : 'Long-term'], ['Work setup', workSetupLabel(props.workSetup)],
+      ['Services', services], ['Engagement', short ? 'Short-term' : 'Long-term'],
+      ...(!short ? [['Work setup', workSetupLabel(props.workSetup)]] : []),
     ] },
     { title: 'Schedule', icon: 'calendar-outline' as const, step: 2 as const, rows: [
       [short ? 'Service date' : 'Starts', props.startDate],
-      ...(!short || (props.endDate && props.endDate !== props.startDate) ? [['Ends', props.endDate]] : []),
+      ...(!short || (props.endDate && props.endDate !== props.startDate) ? [['Ends', props.ongoing ? uiText('No end date') : props.endDate]] : []),
       ['Work hours (PH)', props.workHours], ...(!short ? [['Work days', days]] : []),
     ] },
     { title: 'Location & pay', icon: 'location-outline' as const, step: 3 as const, rows: [
@@ -43,12 +45,12 @@ export function BookingOfferReview(props: Props) {
     {sections.map(section => <View key={section.title} style={styles.card}>
       <View style={styles.headingRow}>
         <Ionicons name={section.icon} size={18} color={THEME.colors.brandDark} />
-        <Text style={styles.heading}>{section.title}</Text>
+        <Text style={styles.heading}>{uiText(section.title)}</Text>
         {props.onEdit && <Pressable accessibilityRole="button" accessibilityLabel={`Edit ${section.title}`} disabled={props.disabled}
           hitSlop={8} onPress={() => props.onEdit?.(section.step)}><Text style={styles.edit}>{uiText("Edit")}</Text></Pressable>}
       </View>
       {section.rows.map(([label, value]) => <View key={label} style={styles.row}>
-        <Text style={styles.label}>{label}</Text><Text style={styles.value}>{value || 'Not provided'}</Text>
+        <Text style={styles.label}>{uiText(label || '')}</Text><Text style={styles.value}>{uiText(value || 'Not provided')}</Text>
       </View>)}
       {section.step === 3 && <View style={styles.pay}>
         <Text style={styles.label}>{short ? 'Agreed daily rate' : 'Agreed monthly salary'}</Text>

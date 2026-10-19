@@ -2,13 +2,15 @@ import { useLanguage as useUiLanguage } from '../../../shared/localization/Langu
 import { realtime } from '../../../shared/realtime';
 import { AppState } from 'react-native';
 import { workSetupLabel } from '../workSetup';
+import { getBookingCounterparty, isBookingPoster } from '../bookingParticipants';
 import { useUser } from '../../auth/session/UserContext';
 import { ContractDownloadCard } from './ContractDownloadCard';
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, Pressable, Modal, ActivityIndicator, Alert, ScrollView, RefreshControl, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { BookingItem, formatBookingAddress, fetchMyBookings, fetchMyAssignedBookings, startBooking, completeBooking, cancelBooking } from '../api/bookingApi';
+import { BookingItem, formatBookingAddress, fetchMyBookings, fetchMyAssignedBookings, startBooking, completeBooking, fetchBookingPenaltyStatus, type BookingPenaltyStatus } from '../api/bookingApi';
+import { CancelBookingModal } from './CancelBookingModal';
 import { ReviewModal } from '../../reviews/components/ReviewModal';
 import { ProposalsModal } from './ProposalsModal';
 import { UserProfileModal } from '../../profile/components/UserProfileModal';
@@ -16,6 +18,7 @@ import { UserProfileModal } from '../../profile/components/UserProfileModal';
 export interface MyBookingsModalProps {
   visible: boolean;
   onClose: () => void;
+  onSafetyAcknowledged?: () => void;
   token?: string | null;
   accountType?: string; // 'Homeowner' | 'Kasambahay'
   initialTab?: TabType;
@@ -33,13 +36,15 @@ const TABS: { key: TabType; label: string }[] = [
 export function MyBookingsModal({
   visible,
   onClose,
+  onSafetyAcknowledged,
   token,
   accountType = 'Homeowner',
   initialTab = 'active',
 }: MyBookingsModalProps) {
-  const { tr: uiText } = useUiLanguage();
+  const { tr: uiText, formatDate } = useUiLanguage();
   const insets = useSafeAreaInsets();
-  const { user } = useUser();
+  const { user, updateUser } = useUser();
+  const [penalty, setPenalty] = useState<BookingPenaltyStatus | null>(null);
 
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [bookings, setBookings] = useState<BookingItem[]>([]);
@@ -85,14 +90,16 @@ export function MyBookingsModal({
     try {
       let data: BookingItem[] = [];
 
-      const [posted, assigned] = await Promise.all([
-        fetchMyBookings(token, currentTab), fetchMyAssignedBookings(token, currentTab),
+      const [posted, assigned, penaltyState] = await Promise.all([
+        fetchMyBookings(token, currentTab), fetchMyAssignedBookings(token, currentTab), fetchBookingPenaltyStatus(token),
       ]);
       data = Array.from(new Map([...posted, ...assigned].map(item => [item.booking_id, item])).values());
 
       // Concurrency guard: ignore if tab changed while in-flight
       if (activeTabRef.current !== currentTab) return;
 
+      setPenalty(penaltyState);
+      updateUser({ penaltyPoints: penaltyState.penalty_points, isRestricted: penaltyState.is_restricted });
       setBookings(data);
     } catch (err: any) {
       console.warn('[MyBookingsModal] loadData failed:', err);
@@ -167,7 +174,7 @@ export function MyBookingsModal({
             if (res.success) {
               loadData();
               const matchingBooking = bookings.find((b) => b.booking_id === bookingId);
-              const target = accountType === 'Homeowner' ? matchingBooking?.assigned_partner : matchingBooking?.poster;
+              const target = matchingBooking ? getBookingCounterparty(matchingBooking, user.id) : null;
               const targetName = target ? target.name : 'Partner';
 
               Alert.alert(
@@ -191,136 +198,9 @@ export function MyBookingsModal({
     ]);
   };
 
-  const handleConfirmCancellation = async (bookingId: string) => {
-    if (!token || actionInProgress) return;
-    Alert.alert(
-      'Confirm Cancellation',
-      'Are you sure you want to approve this cancellation? Both parties will have confirmed, and the booking will be cancelled.',
-      [
-        { text: 'Keep Booking', style: 'cancel' },
-        {
-          text: 'Confirm Cancellation',
-          style: 'destructive',
-          onPress: async () => {
-            setActionInProgress(true);
-            try {
-              const res = await cancelBooking(token, bookingId, { action: 'confirm' });
-              if (res.success) {
-                Alert.alert('Booking Cancelled', 'Both parties agreed. The booking has been cancelled.');
-                loadData();
-              } else {
-                Alert.alert('Error', res.error || 'Failed to confirm cancellation.');
-              }
-            } finally {
-              setActionInProgress(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleDeclineCancellation = async (bookingId: string, isWithdrawal = false) => {
-    if (!token || actionInProgress) return;
-    Alert.alert(
-      isWithdrawal ? 'Withdraw Request' : 'Decline Cancellation',
-      isWithdrawal
-        ? 'Do you want to withdraw your cancellation request? The booking will remain active.'
-        : 'Do you want to decline this cancellation request? The booking will remain active.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: isWithdrawal ? 'Withdraw Request' : 'Decline Request',
-          onPress: async () => {
-            setActionInProgress(true);
-            try {
-              const res = await cancelBooking(token, bookingId, { action: 'decline' });
-              if (res.success) {
-                Alert.alert(
-                  isWithdrawal ? 'Request Withdrawn' : 'Request Declined',
-                  isWithdrawal ? 'Your cancellation request was withdrawn.' : 'Cancellation request was declined. The booking remains active.'
-                );
-                loadData();
-              } else {
-                Alert.alert('Error', res.error || 'Failed to update cancellation.');
-              }
-            } finally {
-              setActionInProgress(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleCancel = async (bookingId: string) => {
-    if (!token || actionInProgress) return;
-    const booking = bookings.find((b) => b.booking_id === bookingId);
-    if (!booking) return;
-
-    if (booking.booking_status === 'Pending') {
-      Alert.alert('Cancel Booking', 'Are you sure you want to cancel this booking posting?', [
-        { text: 'Keep Booking', style: 'cancel' },
-        {
-          text: 'Yes, Cancel',
-          style: 'destructive',
-          onPress: async () => {
-            setActionInProgress(true);
-            try {
-              const res = await cancelBooking(token, bookingId);
-              if (res.success) {
-                Alert.alert('Cancelled', 'Booking has been cancelled.');
-                loadData();
-              } else {
-                Alert.alert('Error', res.error || 'Failed to cancel booking.');
-              }
-            } finally {
-              setActionInProgress(false);
-            }
-          },
-        },
-      ]);
-      return;
-    }
-
-    // Confirmed booking ('Accepted' or 'InProgress')
-    if (booking.can_cancel === false) {
-      Alert.alert(
-        'Cancellation Window Expired',
-        'Under SerbiSure policy, cancellations are only applicable within 2 hours of booking confirmation.\n\nBeyond 2 hours, contracts cannot be cancelled. Please contact support if you need assistance.'
-      );
-      return;
-    }
-
-    Alert.alert(
-      'Request Cancellation (2-Hour Policy)',
-      'Are you sure you want to request cancellation?\n\n' +
-      '• Cancellation is only permitted within 2 hours of confirmation.\n' +
-      '• BOTH you and the other party must confirm before cancellation takes effect.\n' +
-      '• Cancelling confirmed bookings three (3) times will lead to account restriction.\n\n' +
-      'Do you wish to submit this cancellation request?',
-      [
-        { text: 'Keep Booking', style: 'cancel' },
-        {
-          text: 'Request Cancellation',
-          style: 'destructive',
-          onPress: async () => {
-            setActionInProgress(true);
-            try {
-              const res = await cancelBooking(token, bookingId, { action: 'request' });
-              if (res.success) {
-                Alert.alert('Cancellation Requested', res.message || 'Waiting for the other party to confirm.');
-                loadData();
-              } else {
-                Alert.alert('Cannot Cancel', res.error || 'Failed to request cancellation.');
-              }
-            } finally {
-              setActionInProgress(false);
-            }
-          },
-        },
-      ]
-    );
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null);
+  const handleCancel = (bookingId: string) => {
+    if (token && !actionInProgress) setCancelTarget(bookingId);
   };
 
   const getStatusBadgeStyle = (status: string) => {
@@ -347,16 +227,22 @@ export function MyBookingsModal({
             <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
           </Pressable>
           <Text style={styles.headerTitle}>
-            {accountType === 'Kasambahay' ? uiText("My Jobs & Contracts") : 'My Bookings'}
+            {uiText(accountType === 'Kasambahay' ? 'My Jobs & Contracts' : 'My Bookings & Hires')}
           </Text>
           <View style={{ width: 40 }} />
         </View>
+
+        {penalty && penalty.penalty_points > 0 && <View style={{ paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#FFF7ED' }}>
+          <Text style={{ color: '#9A3412', fontSize: 13, lineHeight: 19 }}>
+            {penalty.penalty_points}/3 penalty points this month. {penalty.is_restricted ? 'Booking and posting are restricted until the 1st of next month.' : 'Points reset on the 1st of next month.'}
+          </Text>
+        </View>}
 
         {/* Mandatory Quality Feedback Banner for Completed Bookings */}
         {(() => {
           const pendingFeedback = bookings.find((b) => b.booking_status === 'Completed' && !b.has_reviewed);
           if (!pendingFeedback) return null;
-          const target = accountType === 'Homeowner' ? pendingFeedback.assigned_partner : pendingFeedback.poster;
+          const target = getBookingCounterparty(pendingFeedback, user.id);
           const targetName = target ? target.name : 'Partner';
 
           return (
@@ -376,7 +262,7 @@ export function MyBookingsModal({
               <View style={{ flex: 1 }}>
                 <Text style={styles.mandatoryFeedbackTitle}>{uiText("Mandatory Service Feedback")}</Text>
                 <Text style={styles.mandatoryFeedbackSub} numberOfLines={2}>
-                  {uiText("You have a completed booking with")}{targetName} {uiText("awaiting required review. Tap to complete.")}</Text>
+                  {uiText("You have a completed booking with")} {targetName} {uiText("awaiting required review. Tap to complete.")}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color="#D97706" />
             </Pressable>
@@ -434,12 +320,17 @@ export function MyBookingsModal({
             </View>
           ) : bookings.length > 0 ? (
             bookings.map((booking) => {
-              const counterparty =
-                String(booking.poster?.id) === String(user.id) ? booking.assigned_partner || booking.recipient : booking.poster;
+              const counterparty = getBookingCounterparty(booking, user.id);
               const statusStyle = getStatusBadgeStyle(booking.booking_status);
               const categories = Array.isArray(booking.service_category)
                 ? booking.service_category
                 : [booking.service_category];
+              const startDate = booking.start_time ? formatDate(booking.start_time, 'compact') : '';
+              const safeStartDate = startDate || uiText('Date unavailable');
+              const endDate = booking.end_time ? formatDate(booking.end_time, 'compact') : '';
+              const safeEndDate = endDate || (booking.booking_type === 'long_term'
+                ? uiText('No end date')
+                : startDate ? uiText('Same day') : uiText('Date unavailable'));
 
               return (
                 <View key={booking.booking_id} style={styles.card}>
@@ -486,10 +377,14 @@ export function MyBookingsModal({
 
                   {/* Date/Time */}
                   <View style={styles.infoRow}>
-                    <Ionicons name="time-outline" size={14} color="#6B7280" />
+                    <Ionicons name="calendar-outline" size={14} color="#6B7280" />
                     <Text style={styles.infoText}>
-                      {uiText("Start:")}{new Date(booking.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {uiText("Start:")} {safeStartDate}
                     </Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Ionicons name="calendar-outline" size={14} color="#6B7280" />
+                    <Text style={styles.infoText}>{uiText('Ends')}: {safeEndDate}</Text>
                   </View>
 
                   {/* Special Instruction preview */}
@@ -536,54 +431,7 @@ export function MyBookingsModal({
                     </View>
                   )}
 
-                  {/* Mutual Cancellation Request Alert (Counterparty requested) */}
-                  {booking.pending_cancel_approval && (
-                    <View style={styles.cancelRequestBanner}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                        <Ionicons name="alert-circle" size={18} color="#DC2626" style={{ marginRight: 6 }} />
-                        <Text style={styles.cancelRequestTitle}>
-                          {uiText("Cancellation Requested by")}{booking.cancel_requested_by?.name || counterparty?.name || 'Partner'}
-                        </Text>
-                      </View>
-                      <Text style={styles.cancelRequestSub}>
-                        {uiText("Both parties must confirm cancellation within the 2-hour window. If you decline, this booking remains active.")}</Text>
-                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                        <Pressable
-                          style={[styles.cancelBannerBtn, { backgroundColor: '#EF4444' }]}
-                          disabled={actionInProgress}
-                          onPress={() => handleConfirmCancellation(booking.booking_id)}
-                        >
-                          <Text style={styles.cancelBannerBtnText}>{uiText("Confirm Cancel")}</Text>
-                        </Pressable>
-                        <Pressable
-                          style={[styles.cancelBannerBtn, { backgroundColor: '#4B5563' }]}
-                          disabled={actionInProgress}
-                          onPress={() => handleDeclineCancellation(booking.booking_id)}
-                        >
-                          <Text style={styles.cancelBannerBtnText}>{uiText("Decline & Keep")}</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  )}
 
-                  {/* Cancellation Request Pending (Current user requested) */}
-                  {booking.cancel_requested_by_me && (
-                    <View style={styles.cancelPendingMyBanner}>
-                      <Ionicons name="time" size={16} color="#D97706" style={{ marginRight: 6 }} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.cancelPendingMyTitle}>{uiText("Cancellation Pending Approval")}</Text>
-                        <Text style={styles.cancelPendingMySub}>
-                          {uiText("Waiting for")}{counterparty?.name || 'Partner'} {uiText("to confirm or decline.")}</Text>
-                      </View>
-                      <Pressable
-                        style={styles.cancelWithdrawBtn}
-                        disabled={actionInProgress}
-                        onPress={() => handleDeclineCancellation(booking.booking_id, true)}
-                      >
-                        <Text style={styles.cancelWithdrawBtnText}>{uiText("Withdraw")}</Text>
-                      </Pressable>
-                    </View>
-                  )}
 
                   {/* Action Buttons Row */}
                   <View style={styles.actionRow}>
@@ -593,7 +441,7 @@ export function MyBookingsModal({
                       onPress={() =>
                         setProposalsTarget({
                           id: booking.booking_id,
-                          isPoster: accountType === 'Homeowner',
+                          isPoster: isBookingPoster(booking, user.id),
                           currentRate: booking.rate_amount,
                           ratePeriod: booking.rate_period,
                           rateNeedsReview: booking.rate_needs_review,
@@ -602,7 +450,7 @@ export function MyBookingsModal({
                     >
                       <Ionicons name="pricetag-outline" size={14} color="#4B5563" style={{ marginRight: 4 }} />
                       <Text style={styles.actionBtnOutlineText}>
-                        {uiText("Offers")}{booking.proposals_count ? `(${booking.proposals_count})` : ''}
+                        {uiText("Offers")}{booking.proposals_count ? ` (${booking.proposals_count})` : ''}
                       </Text>
                     </Pressable>
 
@@ -659,25 +507,10 @@ export function MyBookingsModal({
                       </Pressable>
                     )}
 
-                    {['Pending', 'Accepted'].includes(booking.booking_status) && !booking.cancel_requested_by_me && !booking.pending_cancel_approval && (
-                      booking.can_cancel === false ? (
-                        <Pressable
-                          style={[styles.actionBtnDanger, { backgroundColor: '#F3F4F6', borderColor: '#E5E7EB' }]}
-                          disabled={actionInProgress}
-                          onPress={() => handleCancel(booking.booking_id)}
-                        >
-                          <Ionicons name="lock-closed" size={12} color="#9CA3AF" style={{ marginRight: 3 }} />
-                          <Text style={[styles.actionBtnDangerText, { color: '#9CA3AF' }]}>{uiText("Locked (2h Expired)")}</Text>
-                        </Pressable>
-                      ) : (
-                        <Pressable
-                          style={styles.actionBtnDanger}
-                          disabled={actionInProgress}
-                          onPress={() => handleCancel(booking.booking_id)}
-                        >
-                          <Text style={styles.actionBtnDangerText}>{uiText("Cancel")}</Text>
-                        </Pressable>
-                      )
+                    {['Pending', 'Accepted', 'InProgress'].includes(booking.booking_status) && (
+                      <Pressable style={styles.actionBtnDanger} disabled={actionInProgress} onPress={() => handleCancel(booking.booking_id)}>
+                        <Text style={styles.actionBtnDangerText}>{uiText("Cancel")}</Text>
+                      </Pressable>
                     )}
                   </View>
                 </View>
@@ -721,6 +554,12 @@ export function MyBookingsModal({
         </ScrollView>
 
         {/* Modals */}
+        {cancelTarget && token && <CancelBookingModal key={cancelTarget} bookingId={cancelTarget} token={token}
+          onClose={() => setCancelTarget(null)} onCancelled={safety => {
+            setCancelTarget(null);
+            if (safety) { onClose(); onSafetyAcknowledged?.(); }
+            else void loadData();
+          }} />}
         {reviewBooking && (
           <ReviewModal
             visible={!!reviewBooking}

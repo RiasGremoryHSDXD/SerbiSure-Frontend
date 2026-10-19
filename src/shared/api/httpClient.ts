@@ -1,4 +1,5 @@
 import { buildApiUrl, DEFAULT_TIMEOUT_MS } from './config';
+import { getSession, refreshSession, SessionError } from '../auth/session';
 
 export type AccountSuspensionListener = (message: string) => void;
 
@@ -96,14 +97,33 @@ export async function fetchWithTimeout(
   options: RequestInit = {},
   timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<Response> {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
+  let controller = new AbortController();
+  let id = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(url, {
+    const session = getSession();
+    const headers = new Headers(options.headers);
+    const sessionRequest = session && headers.get('Authorization') === `Bearer ${session.access}`
+      && url.startsWith(buildApiUrl('/'));
+    const requestedToken = session?.access;
+    let response = await fetch(url, {
       ...options,
       signal: controller.signal,
     });
+    if (response.status === 401 && sessionRequest && getSession() === session) {
+      try {
+        const renewed = session.access !== requestedToken ? session : await refreshSession();
+        if (renewed && getSession() === session) {
+          headers.set('Authorization', `Bearer ${renewed.access}`);
+          clearTimeout(id);
+          controller = new AbortController();
+          id = setTimeout(() => controller.abort(), timeoutMs);
+          response = await fetch(url, { ...options, headers, signal: controller.signal });
+        }
+      } catch (error) {
+        if (!(error instanceof SessionError) || error.kind !== 'ended') throw error;
+      }
+    }
     inspectAccountSuspensionResponse(response);
     return response;
   } catch (error: any) {

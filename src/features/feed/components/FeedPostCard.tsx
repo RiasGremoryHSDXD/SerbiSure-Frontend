@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import THEME from '../../../shared/theme/theme';
 import type { FeedPost } from '../types';
 
-export function WorkerPostCard({ post, saved, onViewProfile, onDetails, onToggleSave }: { post: FeedPost; saved: boolean; onViewProfile: () => void; onDetails: () => void; onToggleSave: () => void }) {
+export function FeedPostCard({ post, saved, applied = false, onViewProfile, onDetails, onToggleSave }: { post: FeedPost; saved: boolean; applied?: boolean; onViewProfile: () => void; onDetails: () => void; onToggleSave: () => void }) {
   const { tr: uiText } = useUiLanguage();
   return (
     <View style={styles.workerCard}>
@@ -79,7 +79,7 @@ export function WorkerPostCard({ post, saved, onViewProfile, onDetails, onToggle
           style={styles.seeDetailsBtn}
           onPress={onDetails}
         >
-          <Text style={styles.seeDetailsBtnText}>{uiText("See Details")}</Text>
+          <Text style={styles.seeDetailsBtnText}>{uiText(applied ? 'Applied' : 'See Details')}</Text>
         </Pressable>
       </View>
     </View>

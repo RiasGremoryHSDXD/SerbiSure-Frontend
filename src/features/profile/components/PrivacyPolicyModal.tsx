@@ -50,7 +50,7 @@ export function PrivacyPolicyModal({ visible, onClose, document = 'privacy' }: P
             <View style={styles.sectionCard}>
               <Text style={styles.introHeading}>{uiText("Commitment to Data Privacy")}</Text>
               <Text style={styles.paragraph}>
-                {uiText("At SerbiSure, we value your trust and are dedicated to safeguarding your personal data. This Privacy Policy describes our practices regarding the collection, processing, and protection of information gathered through the SerbiSure mobile application, in compliance with Republic Act No. 10173, otherwise known as the")}<Text style={styles.boldText}>{uiText("Data Privacy Act of 2012 (DPA)")}</Text> {uiText("of the Philippines.")}</Text>
+                {uiText("At SerbiSure, we value your trust and are dedicated to safeguarding your personal data. This Privacy Policy describes our practices regarding the collection, processing, and protection of information gathered through the SerbiSure mobile application, in compliance with Republic Act No. 10173, otherwise known as the")}{' '}<Text style={styles.boldText}>{uiText("Data Privacy Act of 2012 (DPA)")}</Text> {uiText("of the Philippines.")}</Text>
             </View>
 
             {/* 1. Information We Collect */}

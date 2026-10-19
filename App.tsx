@@ -1,6 +1,6 @@
 import { AppProviders } from './src/app/providers/AppProviders';
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, LogBox, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, LogBox, Pressable, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
 LogBox.ignoreLogs(['Unable to activate keep awake', '[PostService]', '[PostJob]']);
@@ -15,7 +15,6 @@ import {
 
 import {
   LandingScreen,
-  LoginScreen,
   UserSelectionScreen,
   RegistrationStep1,
   RegistrationStep2,
@@ -24,10 +23,13 @@ import {
 } from './src/features/auth';
 import { clearExploreFeedCache } from './src/features/feed/feedCache';
 import { chatStore } from './src/features/chat/store/chatStore';
+import { clearSupportContactsCache } from './src/features/chat/supportContactsCache';
+import { clearThreadCache } from './src/features/chat/threadCache';
 import { AppNavigator, type Role } from './src/app/AppNavigator';
 import { preloadPostLoginAssets } from './src/app/services/preloadAssets';
 import { realtime } from './src/shared/realtime';
 import { createSelfieUploadTask, uploadSelfie, type SelfieUploadTask } from './src/features/verification/api/selfieUpload';
+import { forgetSession, restoreSession, SessionError, startSession, subscribeSession } from './src/shared/auth/session';
 
 // Clean App Navigation Flow matching Figma structure:
 // landing -> login -> user_selection -> registration1-3 -> dashboard (bottom tab navigator)
@@ -60,32 +62,82 @@ export default function App() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [suspensionMessage, setSuspensionMessage] = useState<string | null>(null);
   const [selfieUpload, setSelfieUpload] = useState<SelfieUploadTask | undefined>();
+  const [restoringSession, setRestoringSession] = useState(true);
+  const [restoreError, setRestoreError] = useState('');
+  const [loginMessage, setLoginMessage] = useState('');
 
   const clearSession = useCallback(() => {
     realtime.stop();
     clearExploreFeedCache();
     chatStore.clearCache();
+    clearSupportContactsCache();
+    clearThreadCache();
     setAccessToken(null);
     setAvatarUri(null);
     setSelfieUpload(undefined);
   }, []);
 
   const handleLogout = useCallback(() => {
+    void forgetSession().catch(error => Alert.alert('Sign out', error.message));
     clearSession();
     setSuspensionMessage(null);
     setFlowState('login');
   }, [clearSession]);
 
   const handleAccountSuspended = useCallback((message: string) => {
+    void forgetSession().catch(error => Alert.alert('Sign out', error.message));
     clearSession();
     setSuspensionMessage(message);
     setFlowState('suspended');
   }, [clearSession]);
 
-  if (!fontsLoaded) {
+  const restoreSavedLogin = useCallback(async () => {
+    setRestoringSession(true);
+    setRestoreError('');
+    try { await restoreSession(); }
+    catch (error) {
+      if (error instanceof SessionError && error.kind === 'ended') {
+        setLoginMessage(error.message);
+        setFlowState('login');
+      } else {
+        setRestoreError(error instanceof Error ? error.message : 'Could not restore your login. Please try again.');
+      }
+    } finally { setRestoringSession(false); }
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeSession((tokens, message) => {
+      if (tokens) {
+        setAccessToken(tokens.access);
+        setFlowState('dashboard');
+      } else {
+        clearSession();
+        setLoginMessage(message || '');
+        setFlowState('login');
+      }
+    });
+    void restoreSavedLogin();
+    return unsubscribe;
+  }, [clearSession, restoreSavedLogin]);
+
+  if (!fontsLoaded || restoringSession) {
     return (
       <View style={{ flex: 1, backgroundColor: '#F6F5F2', alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator size="large" color="#0D0D11" />
+      </View>
+    );
+  }
+
+  if (restoreError) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#F6F5F2', justifyContent: 'center', alignItems: 'center', padding: 28, gap: 20 }}>
+        <Text style={{ textAlign: 'center', color: '#0D0D11', fontSize: 16 }}>{restoreError}</Text>
+        <Pressable accessibilityRole="button" onPress={() => void restoreSavedLogin()} style={{ backgroundColor: '#0D0D11', borderRadius: 24, paddingVertical: 14, paddingHorizontal: 32 }}>
+          <Text style={{ color: '#FFFFFF', fontSize: 16 }}>Try Again</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => { setRestoreError(''); setFlowState('login'); }} style={{ padding: 14 }}>
+          <Text style={{ color: '#6B7280', fontSize: 16 }}>Sign in instead</Text>
+        </Pressable>
       </View>
     );
   }
@@ -106,12 +158,11 @@ export default function App() {
           onGetStarted={() => setFlowState('user_selection')}
           onLoginPress={() => setFlowState('login')}
           onBackToLanding={() => setFlowState('landing')}
-          onLoginSuccess={(token?: string) => {
-            if (token) {
-              setAccessToken(token);
-              preloadPostLoginAssets(token, avatarUri);
-            }
-            setFlowState('dashboard');
+          sessionMessage={loginMessage}
+          onLoginSuccess={async (tokens) => {
+            await startSession(tokens);
+            setLoginMessage('');
+            preloadPostLoginAssets(tokens.access, avatarUri);
           }}
           onSignUp={() => setFlowState('user_selection')}
         />
@@ -130,9 +181,13 @@ export default function App() {
         <RegistrationStep1
           role={selectedRole}
           onBack={() => setFlowState('user_selection')}
-          onNext={(token?: string) => {
-            if (token) setAccessToken(token);
-            setFlowState('registration2');
+          onNext={(token, result) => {
+            if (!result.selfiePath) return;
+            const uri = result.selfiePath.startsWith('file:') ? result.selfiePath : `file://${result.selfiePath}`;
+            setAccessToken(token);
+            setAvatarUri(uri);
+            setSelfieUpload(createSelfieUploadTask(() => uploadSelfie(token, uri)));
+            setFlowState('registration3');
           }}
           onCancel={() => setFlowState('landing')}
           onNavigateToLogin={() => setFlowState('login')}

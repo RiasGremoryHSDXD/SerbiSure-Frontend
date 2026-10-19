@@ -1,13 +1,15 @@
 import { FACE_LANDMARKS } from '../face/landmarkIndexes';
-import { distance, landmark } from '../face/geometry';
+import { landmark } from '../face/geometry';
 import type { FaceAlignment, FaceLandmarks, HeadPoseDirection, LandmarkFrame } from '../face/types';
 
 const CENTER_TOLERANCE = 0.16;
 const MIN_FACE_SIZE = 0.2;
 const MAX_FACE_SIZE = 0.72;
-const BLINK_EAR_THRESHOLD = 0.2;
 const HEAD_TURN_THRESHOLD = 0.055;
-const STILLNESS_DURATION_MS = 3000;
+const STILLNESS_DURATION_MS = 1000;
+const MOVEMENT_TOLERANCE = 0.15;
+const STILLNESS_GRACE_MS = 600;
+const MAX_STILL_FRAME_GAP_MS = 500;
 
 export function getFaceAlignment(frame: LandmarkFrame): FaceAlignment {
   if (!frame.face) {
@@ -39,47 +41,10 @@ export function getFaceAlignment(frame: LandmarkFrame): FaceAlignment {
   };
 }
 
-function eyeAspectRatio(face: FaceLandmarks, side: 'leftEye' | 'rightEye') {
-  const eye = FACE_LANDMARKS[side];
-  const outer = landmark(face, eye.outer);
-  const inner = landmark(face, eye.inner);
-  const upper = landmark(face, eye.upper);
-  const lower = landmark(face, eye.lower);
-
-  if (!outer || !inner || !upper || !lower) {
-    return null;
-  }
-
-  return distance(upper, lower) / Math.max(distance(outer, inner), 1);
-}
-
-export function getAverageEyeAspectRatio(face: FaceLandmarks) {
-  const left = eyeAspectRatio(face, 'leftEye');
-  const right = eyeAspectRatio(face, 'rightEye');
-
-  if (left === null || right === null) {
-    return null;
-  }
-
-  return (left + right) / 2;
-}
-
-export function isBlinking(face: FaceLandmarks) {
-  const leftEyeOpen = face.signals?.leftEyeOpenProbability;
-  const rightEyeOpen = face.signals?.rightEyeOpenProbability;
-
-  if (typeof leftEyeOpen === 'number' && typeof rightEyeOpen === 'number') {
-    return leftEyeOpen < 0.35 && rightEyeOpen < 0.35;
-  }
-
-  const ear = getAverageEyeAspectRatio(face);
-  return ear !== null && ear < BLINK_EAR_THRESHOLD;
-}
-
 export function getHeadPoseDirection(face: FaceLandmarks): HeadPoseDirection {
   const yawAngle = face.signals?.yawAngle;
 
-  if (typeof yawAngle === 'number') {
+  if (typeof yawAngle === 'number' && Number.isFinite(yawAngle)) {
     if (yawAngle > 10) {
       return 'right';
     }
@@ -101,7 +66,9 @@ export function getHeadPoseDirection(face: FaceLandmarks): HeadPoseDirection {
 
   const faceMidline = (leftCheek.x + rightCheek.x) / 2;
   const faceWidth = Math.max(Math.abs(rightCheek.x - leftCheek.x), 1);
-  const rawOffset = (nose.x - faceMidline) / faceWidth;
+  // Mirroring changes screen coordinates, not the applicant's left/right.
+  const rawOffset = (nose.x - faceMidline) / faceWidth * (face.signals?.mirrored ? -1 : 1);
+  if (!Number.isFinite(rawOffset)) return 'unknown';
 
   if (rawOffset > HEAD_TURN_THRESHOLD) {
     return 'left';
@@ -115,26 +82,40 @@ export function getHeadPoseDirection(face: FaceLandmarks): HeadPoseDirection {
 }
 
 export function getStillnessProgress(
-  current: FaceLandmarks,
-  previousStableFace: FaceLandmarks | null,
-  stableSince: number | null,
+  current: FaceLandmarks | null,
+  previous: { stableFace: FaceLandmarks | null; progress: number; pausedAt: number | null },
   now: number,
+  lastFrameAt: number | null,
 ) {
-  if (!previousStableFace || stableSince === null) {
+  const before = previous.stableFace?.bounds;
+  const bounds = current?.bounds;
+  const scale = bounds ? Math.max(bounds.width, bounds.height, 1) : 1;
+  const moved = before && bounds && Math.max(
+    Math.abs(bounds.x - before.x), Math.abs(bounds.y - before.y),
+    Math.abs(bounds.width - before.width), Math.abs(bounds.height - before.height),
+  ) / scale > MOVEMENT_TOLERANCE;
+  const delta = lastFrameAt === null ? 0 : Math.max(0, now - lastFrameAt);
+  if (!current || moved || delta > MAX_STILL_FRAME_GAP_MS) {
+    const pausedAt = previous.pausedAt ?? lastFrameAt ?? now;
+    const expired = now - pausedAt > STILLNESS_GRACE_MS;
     return {
       isStill: false,
-      progress: 0,
-      stableSince: now,
-      stableFace: current,
+      progress: expired ? 0 : previous.progress,
+      pausedAt,
+      stableFace: expired ? null : previous.stableFace,
     };
   }
 
-  const elapsed = now - stableSince;
+  const expired = previous.pausedAt !== null && now - previous.pausedAt > STILLNESS_GRACE_MS;
+  // Only observed steady intervals count. Brief interruptions preserve progress
+  // without counting missing frames or the time spent moving.
+  const increment = previous.stableFace && previous.pausedAt === null ? delta / STILLNESS_DURATION_MS : 0;
+  const progress = expired ? 0 : Math.min(previous.progress + increment, 1);
 
   return {
-    isStill: elapsed >= STILLNESS_DURATION_MS,
-    progress: Math.min(elapsed / STILLNESS_DURATION_MS, 1),
-    stableSince,
+    isStill: progress >= 1 - Number.EPSILON,
+    progress,
+    pausedAt: null,
     stableFace: current,
   };
 }
