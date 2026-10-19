@@ -2,6 +2,7 @@ import { useLanguage as useUiLanguage } from '../../../shared/localization/Langu
 import { realtime } from '../../../shared/realtime';
 import { AppState } from 'react-native';
 import { workSetupLabel } from '../workSetup';
+import { getBookingCounterparty, isBookingPoster } from '../bookingParticipants';
 import { useUser } from '../../auth/session/UserContext';
 import { ContractDownloadCard } from './ContractDownloadCard';
 import React, { useState, useEffect, useRef } from 'react';
@@ -173,7 +174,7 @@ export function MyBookingsModal({
             if (res.success) {
               loadData();
               const matchingBooking = bookings.find((b) => b.booking_id === bookingId);
-              const target = accountType === 'Homeowner' ? matchingBooking?.assigned_partner : matchingBooking?.poster;
+              const target = matchingBooking ? getBookingCounterparty(matchingBooking, user.id) : null;
               const targetName = target ? target.name : 'Partner';
 
               Alert.alert(
@@ -226,7 +227,7 @@ export function MyBookingsModal({
             <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
           </Pressable>
           <Text style={styles.headerTitle}>
-            {accountType === 'Kasambahay' ? uiText("My Jobs & Contracts") : 'My Bookings'}
+            {uiText(accountType === 'Kasambahay' ? 'My Jobs & Contracts' : 'My Bookings & Hires')}
           </Text>
           <View style={{ width: 40 }} />
         </View>
@@ -241,7 +242,7 @@ export function MyBookingsModal({
         {(() => {
           const pendingFeedback = bookings.find((b) => b.booking_status === 'Completed' && !b.has_reviewed);
           if (!pendingFeedback) return null;
-          const target = accountType === 'Homeowner' ? pendingFeedback.assigned_partner : pendingFeedback.poster;
+          const target = getBookingCounterparty(pendingFeedback, user.id);
           const targetName = target ? target.name : 'Partner';
 
           return (
@@ -319,8 +320,7 @@ export function MyBookingsModal({
             </View>
           ) : bookings.length > 0 ? (
             bookings.map((booking) => {
-              const counterparty =
-                String(booking.poster?.id) === String(user.id) ? booking.assigned_partner || booking.recipient : booking.poster;
+              const counterparty = getBookingCounterparty(booking, user.id);
               const statusStyle = getStatusBadgeStyle(booking.booking_status);
               const categories = Array.isArray(booking.service_category)
                 ? booking.service_category
@@ -441,7 +441,7 @@ export function MyBookingsModal({
                       onPress={() =>
                         setProposalsTarget({
                           id: booking.booking_id,
-                          isPoster: accountType === 'Homeowner',
+                          isPoster: isBookingPoster(booking, user.id),
                           currentRate: booking.rate_amount,
                           ratePeriod: booking.rate_period,
                           rateNeedsReview: booking.rate_needs_review,
