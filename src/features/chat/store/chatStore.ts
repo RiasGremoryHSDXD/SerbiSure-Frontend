@@ -1,5 +1,6 @@
 import { Image } from 'react-native';
 import { fetchChatInbox, ConversationPartner } from '../api/chatApi';
+import { containsOffensiveLanguage } from '../offensiveLanguage';
 
 export interface ChatConversation {
   id: string | number;
@@ -17,6 +18,7 @@ type ChatListener = () => void;
 
 export function cleanMessagePreview(text?: string | null): string {
   if (!text) return '';
+  if (containsOffensiveLanguage(text)) return 'Sensitive message';
 
   let cleanText = text;
   const replyMatch = text.match(/^> \[[^\]]+\]:\s*.*?\n\n([\s\S]*)$/);
