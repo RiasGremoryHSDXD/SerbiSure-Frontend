@@ -16,6 +16,7 @@ import { confirmBookingAcceptance, bookingResponseMessage } from '../../bookings
 import { UserProfileView } from '../../profile/components/UserProfileView';
 import { OfficialProfileModal } from '../../profile/components/OfficialProfileModal';
 import { useChatSafety } from '../hooks/useChatSafety';
+import { containsOffensiveLanguage, OFFENSIVE_LANGUAGE_ADVISORY } from '../offensiveLanguage';
 
 import { useUser } from '../../auth/session/UserContext';
 import THEME from '../../../shared/theme/theme';
@@ -53,6 +54,7 @@ export const formatBookingStartDate = (dateStr?: string) => {
 export function parseBookingInfoFromText(..._args: unknown[]): null { return null; }
 
 export interface ChatMessage {
+  isSensitive?: boolean;
   id: string;
   sender: 'other' | 'me' | 'system';
   text?: string;
@@ -471,6 +473,12 @@ function ChatDetailSession({
   const [reactingMessageId, setReactingMessageId] = useState<string | null>(null);
   const [activeActionMenuMsg, setActiveActionMenuMsg] = useState<ChatMessage | null>(null);
   const [removeTarget, setRemoveTarget] = useState<ChatMessage | null>(null);
+  const [languageWarning, setLanguageWarning] = useState<{ send: () => void } | null>(null);
+  const [sensitiveTarget, setSensitiveTarget] = useState<string | null>(null);
+  const [revealedMessages, setRevealedMessages] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!visible) { setLanguageWarning(null); setSensitiveTarget(null); setRevealedMessages(new Set()); }
+  }, [visible]);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
   const removalPending = useRef(false);
@@ -852,6 +860,7 @@ function ChatDetailSession({
               return {
                 id: m.chat_message_id,
                 sender: m.is_sender ? ('me' as const) : ('other' as const),
+                isSensitive: m.is_sensitive,
                 text: cleanText,
                 imageUri: m.image_url || undefined,
                 reaction: displayReaction,
@@ -899,6 +908,13 @@ function ChatDetailSession({
               ? `> [${initialReplyTo.author}|${initialReplyTo.imageUri || ''}|${initialReplyTo.messageId || ''}]: ${initialReplyTo.text}\n\n`
               : '';
             const payload = `${replyHeader}${initialMessage}`;
+            if (containsOffensiveLanguage(payload)) {
+              // Imported drafts must go through the same explicit Send confirmation.
+              setMessages([]);
+              setInputMessage(initialMessage);
+              setReplyingTo(initialReplyTo ? { ...initialReplyTo, id: initialReplyTo.messageId || '' } : null);
+              return;
+            }
             const tempId = `temp-${Date.now()}`;
             setMessages([
               {
@@ -988,10 +1004,15 @@ function ChatDetailSession({
     }
   }, [visible, transitionReady, partnerId, effectiveToken, resolvedAvatar, initialMessage, threadReload, threadKey, presenceAccount]);
 
-  const handleSend = () => {
+  const handleSend = (acknowledged = false) => {
     const trimmed = inputMessage.trim();
     if (!trimmed || sendingText.current || chatPaused) return;
     if (!partnerId || !effectiveToken) { Alert.alert('Sign in required', 'Please sign in before sending messages.'); return; }
+    const quoted = replyingTo ? `> [${replyingTo.author}]: ${replyingTo.text}\n\n` : '';
+    if (acknowledged !== true && containsOffensiveLanguage(quoted + trimmed)) {
+      setLanguageWarning({ send: () => { if (sessionActive.current) handleSend(true); } });
+      return;
+    }
     sendingText.current = true;
     threadVersion.current++;
     setIsSendingText(true);
@@ -1056,7 +1077,7 @@ function ChatDetailSession({
 
     // Call real backend API if partnerId and token exist
     if (partnerId && effectiveToken) {
-      sendChatMessage(effectiveToken, partnerId, payloadToSend)
+      sendChatMessage(effectiveToken, partnerId, payloadToSend, undefined, acknowledged === true)
         .then((res) => {
           if (!sessionActive.current) return;
           if (res?.data?.chat_message_id) {
@@ -1079,6 +1100,10 @@ function ChatDetailSession({
           setMessages(current => current.filter(message => message.id !== tempId));
           setInputMessage(current => current || trimmed);
           setReplyingTo(current => current || currentReply);
+          if (err?.details?.code === 'offensive_language_warning') {
+            setLanguageWarning({ send: () => { if (sessionActive.current) handleSend(true); } });
+            return;
+          }
           Alert.alert('Message not sent', err.message || 'Could not send message. Please try again.');
         }).finally(() => {
           sendingText.current = false;
@@ -1440,6 +1465,51 @@ function ChatDetailSession({
                   </View>
                 ) : null;
 
+                // Share grouping with concealed messages so the last incoming bubble owns the avatar.
+                const nextMsg = index < messages.length - 1 ? messages[index + 1] : null;
+                const isSameSenderAsPrev =
+                  !!prevMsg &&
+                  prevMsg.sender === item.sender &&
+                  prevMsg.sender !== 'system' &&
+                  !prevMsg.bookingInfo &&
+                  !item.bookingInfo &&
+                  !item.replyTo;
+                const isSameSenderAsNext =
+                  !!nextMsg &&
+                  nextMsg.sender === item.sender &&
+                  nextMsg.sender !== 'system' &&
+                  !nextMsg.bookingInfo &&
+                  !item.bookingInfo &&
+                  !nextMsg.replyTo;
+                const isSameGroupAsPrev = isSameSenderAsPrev && prevMsg.time === item.time;
+                const isSameGroupAsNext = isSameSenderAsNext && nextMsg.time === item.time;
+                const hasReaction = !!item.reaction || Object.values(item.reactionSummary || {}).some((c) => c > 0);
+                const rowSpacingStyle = isSameGroupAsNext
+                  ? (hasReaction ? styles.messageRowGroupedWithReaction : styles.messageRowGrouped)
+                  : null;
+
+                const sensitive = item.isSensitive || containsOffensiveLanguage(`${item.replyTo?.text || ''}\n${item.text || ''}`);
+                if (item.sender === 'other' && sensitive && !revealedMessages.has(item.id)) return (
+                  <View key={`sensitive-${item.id}`}>
+                    {datePillElement}
+                    <View style={[styles.leftMessageRow, rowSpacingStyle]}>
+                      <Pressable onPress={() => { if (partnerId) setProfileModalVisible(true); }} hitSlop={6}>
+                        {!isSameGroupAsNext ? (
+                          <Image source={{ uri: item.avatar || contactAvatar || resolvedAvatar }} style={styles.msgAvatar} />
+                        ) : (
+                          <View style={styles.msgAvatarPlaceholder} />
+                        )}
+                      </Pressable>
+                      <View style={styles.leftMessageCol}>
+                        <Pressable accessibilityRole="button" accessibilityLabel="Open sensitive message"
+                          onPress={() => setSensitiveTarget(item.id)} style={styles.sensitiveBubble}>
+                          <Text accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.sensitiveBlur}>━━━━━━━━━━━━{ '\n' }━━━━━━━━</Text>
+                          <Text style={styles.sensitiveLabel}>Sensitive message · Tap to view</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </View>
+                );
                 // Inverted list cells reverse their direct children. Keep each timestamp
                 // and message inside one View so the timestamp stays above its message.
                 // FB Marketplace Style Listing Closed / Acquired Message
@@ -1590,28 +1660,6 @@ function ChatDetailSession({
                   );
                 }
 
-                // Grouping calculations (Messenger style)
-                const nextMsg = index < messages.length - 1 ? messages[index + 1] : null;
-
-                const isSameSenderAsPrev =
-                  !!prevMsg &&
-                  prevMsg.sender === item.sender &&
-                  prevMsg.sender !== 'system' &&
-                  !prevMsg.bookingInfo &&
-                  !item.bookingInfo &&
-                  !item.replyTo;
-
-                const isSameSenderAsNext =
-                  !!nextMsg &&
-                  nextMsg.sender === item.sender &&
-                  nextMsg.sender !== 'system' &&
-                  !nextMsg.bookingInfo &&
-                  !item.bookingInfo &&
-                  !nextMsg.replyTo;
-
-                const isSameGroupAsPrev = isSameSenderAsPrev && prevMsg.time === item.time;
-                const isSameGroupAsNext = isSameSenderAsNext && nextMsg.time === item.time;
-
                 const quotedMessage = item.replyTo?.messageId
                   ? messages.find(message => message.id === item.replyTo?.messageId)
                   : undefined;
@@ -1624,11 +1672,6 @@ function ChatDetailSession({
                 const replyShowsPhotoOnly = item.replyTo
                   ? isGenericPhotoReply(item.replyTo.text, item.replyTo.imageUri)
                   : false;
-
-                const hasReaction = !!item.reaction || Object.values(item.reactionSummary || {}).some((c) => c > 0);
-                const rowSpacingStyle = isSameGroupAsNext
-                  ? (hasReaction ? styles.messageRowGroupedWithReaction : styles.messageRowGrouped)
-                  : null;
 
                 if (item.sender === 'other') {
                   const isEmoji = isEmojiOnly(item.text);
@@ -1937,7 +1980,7 @@ function ChatDetailSession({
                 (!inputMessage.trim() || chatPaused) && styles.sendBtnDisabled,
                 pressed && { opacity: 0.8 },
               ]}
-              onPress={handleSend}
+              onPress={() => handleSend()}
               disabled={!inputMessage.trim() || isSendingText || chatPaused}
             >
               {isSendingText ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name="send" size={16} color="#FFFFFF" style={{ marginLeft: 2 }} />}
@@ -2204,6 +2247,27 @@ function ChatDetailSession({
             </View>
           );
         })() : null}
+        <Modal visible={!!languageWarning || !!sensitiveTarget} transparent animationType="fade"
+          onRequestClose={() => { const sending = !!languageWarning; setLanguageWarning(null); setSensitiveTarget(null); if (sending) inputRef.current?.focus(); }}>
+          <View style={styles.removeBackdrop}>
+            <View accessibilityViewIsModal style={styles.removeDialog}>
+              <Text accessibilityRole="header" style={styles.removeTitle}>{languageWarning ? 'Review your message' : 'Sensitive message'}</Text>
+              <Text style={styles.removeDescription}>{languageWarning ? OFFENSIVE_LANGUAGE_ADVISORY : 'This message may contain offensive or sensitive language. Would you like to show it?'}</Text>
+              <View style={styles.removeButtons}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => {
+                  const sending = !!languageWarning; setLanguageWarning(null); setSensitiveTarget(null);
+                  if (sending) requestAnimationFrame(() => inputRef.current?.focus());
+                }} style={styles.removeButton}><Text style={styles.removeCancelText}>Close</Text></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel={languageWarning ? 'Send Anyway' : 'Show Message'} onPress={() => {
+                  if (languageWarning) { const warning = languageWarning; setLanguageWarning(null); warning.send(); }
+                  else if (sensitiveTarget) { const id = sensitiveTarget; setRevealedMessages(current => new Set([...current, id])); setSensitiveTarget(null); }
+                }} style={[styles.removeButton, { backgroundColor: '#FFB380' }]}>
+                  <Text style={[styles.removeConfirmText, { color: '#0D0D11' }]}>{languageWarning ? 'Send Anyway' : 'Show Message'}</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
         <Modal visible={!!removeTarget} transparent animationType="fade" onRequestClose={() => { if (!removalPending.current) setRemoveTarget(null); }}>
           <View style={styles.removeBackdrop}>
             <View accessibilityViewIsModal style={styles.removeDialog}>
@@ -2227,6 +2291,9 @@ function ChatDetailSession({
 }
 
 const styles = StyleSheet.create({
+  sensitiveBubble: { alignSelf: 'flex-start', width: 235, maxWidth: '100%', padding: 16, borderRadius: 20, backgroundColor: '#F0F0EC' },
+  sensitiveBlur: { color: 'transparent', textShadowColor: '#999999', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 7, lineHeight: 18 },
+  sensitiveLabel: { marginTop: 8, fontSize: 12, fontWeight: '600', color: '#52525B' },
   removeBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', padding: 24 },
   removeDialog: { width: '100%', maxWidth: 420, borderRadius: 20, backgroundColor: '#FFFFFF', padding: 24 },
   removeTitle: { fontSize: 18, fontWeight: '700', color: '#0D0D11' },

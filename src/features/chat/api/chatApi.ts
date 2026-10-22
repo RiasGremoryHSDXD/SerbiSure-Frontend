@@ -51,6 +51,7 @@ export interface ConversationPartner {
 }
 
 export interface ChatMessageItem {
+  is_sensitive?: boolean;
   chat_message_id: string;
   sender_id: string;
   receiver_id: string;
@@ -182,7 +183,8 @@ export async function sendChatMessage(
   token: string,
   receiverId: string,
   messagePayload: string,
-  bookingId?: string | null
+  bookingId?: string | null,
+  languageWarningAcknowledged = false,
 ): Promise<SendMessageResponse> {
   const idempotencyKey = generateUUID();
 
@@ -197,6 +199,7 @@ export async function sendChatMessage(
       receiver_id: receiverId,
       message_payload: messagePayload.trim(),
       booking_id: bookingId || null,
+      language_warning_acknowledged: languageWarningAcknowledged,
     }),
   });
 
@@ -244,7 +247,8 @@ export async function sendChatImage(
   receiverId: string,
   imageUri: string,
   caption?: string,
-  bookingId?: string | null
+  bookingId?: string | null,
+  languageWarningAcknowledged = false,
 ): Promise<SendMessageResponse> {
   const idempotencyKey = generateUUID();
 
@@ -259,6 +263,7 @@ export async function sendChatImage(
   const filename = imageUri.split('/').pop() || `chat_${Date.now()}.${ext}`;
 
   const formData = new FormData();
+  formData.append('language_warning_acknowledged', String(languageWarningAcknowledged));
   formData.append('receiver_id', receiverId);
   formData.append('image', {
     uri: imageUri,

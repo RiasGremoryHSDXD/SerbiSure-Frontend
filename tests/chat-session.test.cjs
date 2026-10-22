@@ -134,7 +134,7 @@ function screen(t, options = {}) {
         return result;
       });
     },
-    sendChatMessage() { const request = deferred(); sends.push(request); return request.promise; },
+    sendChatMessage(...args) { const request = { ...deferred(), args }; sends.push(request); return request.promise; },
     deleteChatMessage(token, id) { const request = { ...deferred(), token, id }; removals.push(request); return request.promise; },
     sendChatTyping() {},
   };
@@ -161,6 +161,7 @@ function screen(t, options = {}) {
     '../api/chatApi': api, '../threadRefreshQueue': { createThreadRefreshQueue },
     '../threadCache': threadCache,
     '../replyRelationships': replyRelationships,
+    '../offensiveLanguage': compile('src/features/chat/offensiveLanguage.ts', {}),
     '../store/chatStore': { chatStore: { isMessageDeleted: id => deleted.has(id), markMessageDeleted: id => deleted.add(id), loadInbox: async () => [], addOrUpdateChat: entry => previews.push(entry) } },
     '../../bookings/store/savedJobsStore': { savedJobsStore: { markJobClosed: id => closedBookings.push(id) } }, '../../../shared/api/config': {}, '../../../shared/api/httpClient': {},
   });
@@ -508,25 +509,120 @@ test('mobile avatar presence expires, does not resubscribe on a list reorder, an
 });
 
 
-test('a successful masked send updates the bubble and inbox preview and shows exactly one notice', async t => {
+test('a flagged mobile draft waits for consent, Close preserves it, and Send Anyway sends original text once', async t => {
   const chat = screen(t);
   chat.update('A'); chat.requests[0].resolve(payload('Earlier message')); await tick();
   chat.nodes().find(node => node.type === 'TextInput').props.onChangeText('gago');
   chat.nodes().find(node => node.type === 'Pressable' && node.children.some(child => child.type === 'Icon' && child.props.name === 'send')).props.onPress();
-  chat.sends[0].resolve({ data: { chat_message_id: 'saved', message_payload: 'g*go' }, language_warning: 'Please communicate respectfully.' });
+  assert.equal(chat.sends.length, 0);
+  assert.match(chat.texts(), /This message may contain offensive content/);
+  assert.equal(chat.nodes().find(node => node.type === 'TextInput').props.value, 'gago');
+  renderer.flushSync(() => chat.nodes().find(node => node.props?.accessibilityLabel === 'Close').props.onPress());
+  assert.equal(chat.nodes().find(node => node.type === 'TextInput').props.value, 'gago');
+  renderer.flushSync(() => chat.nodes().find(node => node.type === 'Pressable' && node.children.some(child => child.type === 'Icon' && child.props.name === 'send')).props.onPress());
+  const confirm = chat.nodes().find(node => node.props?.accessibilityLabel === 'Send Anyway').props.onPress;
+  renderer.flushSync(() => { confirm(); confirm(); });
+  assert.equal(chat.sends.length, 1);
+  assert.deepEqual(chat.sends[0].args, ['token-one', 'A', 'gago', undefined, true]);
+  chat.sends[0].resolve({ data: { chat_message_id: 'saved', message_payload: 'gago', is_sensitive: true } });
   await tick();
-  assert.match(chat.texts(), /g\*go/); assert.doesNotMatch(chat.texts(), /gago/);
-  assert.equal(chat.alerts.length, 1); assert.equal(chat.alerts[0][0], 'Notice');
-  assert.equal(chat.previews[0].message, 'g*go');
+  assert.match(chat.texts(), /gago/);
+  assert.equal(chat.alerts.length, 0);
+  assert.equal(chat.previews[0].message, 'gago');
 });
 
-test('a masked-send response from an old thread never displays a notice in another chat', async t => {
+test('mobile retains the sender Notice when the server returns a language warning', async t => {
+  const chat = screen(t);
+  chat.update('A'); chat.requests[0].resolve(payload('Earlier message')); await tick();
+  renderer.flushSync(() => chat.nodes().find(node => node.type === 'TextInput').props.onChangeText('kill'));
+  renderer.flushSync(() => chat.nodes().find(node => node.type === 'Pressable' && node.children.some(child => child.type === 'Icon' && child.props.name === 'send')).props.onPress());
+  assert.match(chat.texts(), /Review your message/);
+  renderer.flushSync(() => chat.nodes().find(node => node.props?.accessibilityLabel === 'Send Anyway').props.onPress());
+  const notice = 'Inappropriate or threatening language was detected. Harassment can be reported to your Barangay or SerbiSure Support.';
+  chat.sends[0].resolve({ data: { chat_message_id: 'saved-notice', message_payload: 'kill', is_sensitive: true }, language_warning: notice });
+  await tick();
+  assert.deepEqual(chat.alerts, [['Notice', notice]]);
+});
+
+test('a received sensitive message stays hidden until Show Message, and Close preserves concealment', async t => {
+  const chat = screen(t);
+  chat.update('A');
+  chat.requests[0].resolve({ ...payload('gago ka'), messages: [{ ...payload('gago ka').messages[0], is_sensitive: true }] }); await tick();
+  assert.doesNotMatch(chat.texts(), /gago ka/);
+  renderer.flushSync(() => chat.nodes().find(node => node.props?.accessibilityLabel === 'Open sensitive message').props.onPress());
+  assert.match(chat.texts(), /Would you like to show it/);
+  renderer.flushSync(() => chat.nodes().find(node => node.props?.accessibilityLabel === 'Close').props.onPress());
+  assert.doesNotMatch(chat.texts(), /gago ka/);
+  renderer.flushSync(() => chat.nodes().find(node => node.props?.accessibilityLabel === 'Open sensitive message').props.onPress());
+  renderer.flushSync(() => chat.nodes().find(node => node.props?.accessibilityLabel === 'Show Message').props.onPress());
+  assert.match(chat.texts(), /gago ka/);
+  chat.unmount(); chat.update('A');
+  assert.doesNotMatch(chat.texts(), /gago ka/);
+});
+
+test('sensitive incoming bubbles share normal avatar grouping and alignment before and after reveal', t => {
+  const chat = screen(t);
+  const avatar = 'https://test.local/sender-avatar.jpg';
+  const history = [
+    { id: 'plain-first', sender: 'other', text: 'Hello', time: 'Now', avatar },
+    { id: 'hidden-last', sender: 'other', text: 'kill', isSensitive: true, time: 'Now', avatar },
+    { id: 'own-divider', sender: 'me', text: 'Okay', time: 'Now' },
+    { id: 'hidden-first', sender: 'other', text: 'gago', isSensitive: true, time: 'Now', avatar },
+    { id: 'plain-last', sender: 'other', text: 'Goodbye', time: 'Now', avatar },
+  ];
+  chat.threadCache.cacheThread(JSON.stringify(['account-one', 'A']), history, chat.threadCache.threadCacheGeneration());
+  chat.update('A');
+  const descendants = node => [node, ...node.children.flatMap(descendants)];
+  const cell = id => chat.nodes().find(node => node.props?.testID === `list-cell-${id}`);
+  const avatars = id => descendants(cell(id)).filter(node => node.type === 'Image' && node.props.source?.uri === avatar);
+  const row = id => descendants(cell(id)).find(node => node.type === 'View' && Array.isArray(node.props.style) && node.props.style[0]?.flexDirection === 'row');
+
+  assert.equal(avatars('plain-first').length, 0);
+  assert.equal(avatars('hidden-last').length, 1, 'last concealed bubble must display the sender avatar');
+  assert.equal(avatars('hidden-first').length, 0);
+  assert.equal(avatars('plain-last').length, 1);
+  assert.deepEqual(row('hidden-last').props.style[0], row('plain-last').props.style[0]);
+  assert.deepEqual(row('hidden-last').children[1].props.style, row('plain-last').children[1].props.style);
+  assert.deepEqual(row('hidden-first').children[0].children[0].props.style, row('plain-first').children[0].children[0].props.style);
+  assert.doesNotMatch(chat.texts(), /\bkill\b|\bgago\b/);
+  const hidden = descendants(cell('hidden-last')).find(node => node.props?.accessibilityLabel === 'Open sensitive message');
+  assert.equal(hidden.props.style.marginLeft, undefined, 'the avatar column supplies spacing');
+  renderer.flushSync(() => hidden.props.onPress());
+  renderer.flushSync(() => chat.nodes().find(node => node.props?.accessibilityLabel === 'Show Message').props.onPress());
+  assert.equal(avatars('hidden-last').length, 1);
+  assert.match(chat.texts(), /\bkill\b/);
+});
+
+test('a server-only language match restores the draft and requires explicit mobile consent', async t => {
+  const chat = screen(t); chat.update('A'); chat.requests[0].resolve(payload('Earlier message')); await tick();
+  renderer.flushSync(() => chat.nodes().find(node => node.type === 'TextInput').props.onChangeText('Newly flagged wording'));
+  renderer.flushSync(() => chat.nodes().find(node => node.type === 'Pressable' && node.children.some(child => child.type === 'Icon' && child.props.name === 'send')).props.onPress());
+  chat.sends[0].reject(Object.assign(new Error('Review message'), { status: 409, details: { code: 'offensive_language_warning' } })); await tick();
+  assert.equal(chat.nodes().find(node => node.type === 'TextInput').props.value, 'Newly flagged wording');
+  renderer.flushSync(() => chat.nodes().find(node => node.props?.accessibilityLabel === 'Send Anyway').props.onPress());
+  assert.deepEqual(chat.sends[1].args, ['token-one', 'A', 'Newly flagged wording', undefined, true]);
+});
+
+test('a sensitive initial draft is never automatically sent, and stale confirmation cannot send after switching', async t => {
+  const chat = screen(t);
+  chat.update('A', true, { initialMessage: 'putangina' });
+  chat.requests[0].resolve({ messages: [], partnerIsTyping: false, partnerIsOnline: false }); await tick();
+  assert.equal(chat.sends.length, 0);
+  assert.equal(chat.nodes().find(node => node.type === 'TextInput').props.value, 'putangina');
+  renderer.flushSync(() => chat.nodes().find(node => node.type === 'Pressable' && node.children.some(child => child.type === 'Icon' && child.props.name === 'send')).props.onPress());
+  const confirm = chat.nodes().find(node => node.props?.accessibilityLabel === 'Send Anyway').props.onPress;
+  chat.update('B'); renderer.flushSync(confirm);
+  assert.equal(chat.sends.length, 0);
+});
+
+test('a confirmed sensitive-send response from an old thread never affects another chat', async t => {
   const chat = screen(t);
   chat.update('A'); chat.requests[0].resolve(payload('Earlier message')); await tick();
   chat.nodes().find(node => node.type === 'TextInput').props.onChangeText('gago');
   chat.nodes().find(node => node.type === 'Pressable' && node.children.some(child => child.type === 'Icon' && child.props.name === 'send')).props.onPress();
+  renderer.flushSync(() => chat.nodes().find(node => node.props?.accessibilityLabel === 'Send Anyway').props.onPress());
   chat.update('B');
-  chat.sends[0].resolve({ data: { chat_message_id: 'saved', message_payload: 'g*go' }, language_warning: 'Please communicate respectfully.' });
+  chat.sends[0].resolve({ data: { chat_message_id: 'saved', message_payload: 'gago', is_sensitive: true } });
   await tick();
   assert.deepEqual(chat.alerts, []); assert.deepEqual(chat.previews, []);
 });

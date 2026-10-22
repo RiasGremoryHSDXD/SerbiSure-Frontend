@@ -10,6 +10,12 @@ function store(fetchInbox) {
   new Function('require', 'module', 'exports', output)(name => {
     if (name === 'react-native') return { Image: { prefetch: async () => {} } };
     if (name.includes('chatApi')) return { fetchChatInbox: fetchInbox };
+    if (name === '../offensiveLanguage') {
+      const language = { exports: {} };
+      const source = fs.readFileSync(path.resolve(__dirname, '../src/features/chat/offensiveLanguage.ts'), 'utf8');
+      new Function('module', 'exports', ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText)(language, language.exports);
+      return language.exports;
+    }
     throw new Error(`Unexpected dependency ${name}`);
   }, module, module.exports);
   return module.exports.chatStore;
