@@ -1,22 +1,28 @@
-# Railway staging mobile build
+# Railway production mobile build
 
 Branch: `chore/railway-api-url`.
 
-Backend: `https://serbisure-backend-staging-production.up.railway.app`.
-It uses the isolated Neon `staging-environment` database. Both API configuration
-entrypoints select this backend by default. HTTP and WebSocket traffic use that
-same address without automatic server fallback.
+Backend: `https://serbisure-production-backend.up.railway.app`.
+Both API configuration entrypoints select this backend for release builds.
+HTTP and WebSocket traffic use that same address without automatic server
+fallback. The backend's `DATABASE_URL` selects the database; this mobile change
+does not modify it.
 
 From this repository in PowerShell:
 
 ```powershell
-$env:EXPO_PUBLIC_API_URL = 'https://serbisure-backend-staging-production.up.railway.app'
 npm run build:android
 ```
 
-The URL is compiled into the APK. Rebuild/reinstall after changing it; existing
-installed production APKs are not changed by deployment or Git checkout. Sign
-out/in when moving between isolated datasets. This branch changes configuration,
+The production URL is compiled into the APK. `EXPO_PUBLIC_API_URL` is honored
+only in development (`__DEV__`); release builds ignore stale environment overrides.
+For local development, set it to the PC's Django URL (including port 8000) in an
+ignored `.env.local`, then restart Metro. Without an override, development uses
+the production Railway backend too.
+
+Rebuild/reinstall after changing the production URL; existing installed APKs are
+not changed by deployment or Git checkout. Sign out/in when moving between
+datasets. This branch changes configuration,
 not the Android application ID; installing its APK replaces the existing app.
 
 Rollback: return to `main` or `backup/pre-railway-staging-20261024`
