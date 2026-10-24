@@ -35,6 +35,9 @@
       "bundleIdentifier": "com.serbisure.frontend",
       "infoPlist": {
         "NSCameraUsageDescription": "SerbiSure needs camera access for liveness detection."
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
       }
     },
     "android": {
@@ -46,16 +49,24 @@
         "android.permission.CAMERA",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.RECORD_AUDIO"
       ],
       "package": "com.serbisure.frontend",
-      "versionCode": 7
+      "versionCode": 7,
+      "runtimeVersion": "1.0.0"
     },
-    "owner": "davenarchives",
+    "owner": "serbisure",
     "extra": {
       "eas": {
-        "projectId": "fc20ba55-db50-4c24-bc21-7f22b9903356"
+        "projectId": "79f64eec-b8ec-4630-9c25-86bc5ac703a3"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/79f64eec-b8ec-4630-9c25-86bc5ac703a3"
     }
   }
 }
