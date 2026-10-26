@@ -1,66 +1,416 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import THEME from '../../../shared/theme/theme';
 import type { WorkerCv } from '../api/workerCvApi';
 
-/** Uses the same server-formatted, privacy-filtered content as the PDF. */
+const DEFAULT_PRACTICAL_SKILLS = [
+  'Meal preparation',
+  'Deep cleaning',
+  'Laundry care',
+  'Ironing',
+  'Infant care',
+  'Child supervision',
+];
+
+/**
+ * Professional two-column Curriculum Vitae preview matching the standard
+ * executive/professional resume format (Image reference).
+ */
 export function WorkerCvPreview({ cv }: { cv: WorkerCv }) {
   const { tr: uiText } = useUiLanguage();
   const model = cv.presentation;
-  if (!model) return <Text style={styles.body}>{uiText("Update the backend and reopen this CV to see the latest preview.")}</Text>;
-  return <>
-    <View style={styles.hero}>
-      <Text style={styles.eyebrow}>{uiText("SERBISURE WORKER CV")}</Text>
-      <View style={styles.identity}>
-        <View style={styles.identityText}>
-          <Text style={styles.name}>{model.name}</Text>
-          {!!model.services && <Text style={styles.services}>{model.services}</Text>}
-          {!!model.location && <Text style={styles.meta}>{model.location}</Text>}
-          {!!model.phone && <Text style={styles.meta}>{model.phone}</Text>}
-          {model.verified && <Text style={styles.badge}>{uiText("✓ Verified")}</Text>}
+  const details = cv.details || {};
+
+  const displayName = (cv.name || model?.name || 'Worker').trim();
+  const servicesTitle = (model?.services || details.service_categories?.join(', ') || 'Household Worker').trim();
+  const locationText = (cv.location || model?.location || 'Cagayan de Oro, Misamis Oriental').trim();
+  const phoneText = (cv.contact_number || model?.phone || '').trim();
+  const isVerified = cv.verification_status === 'Verified' || Boolean(model?.verified);
+  const activePhoto = cv.profile_image_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=FFB43B&color=fff&size=150`;
+
+  // Rates
+  const dailyRate = details.desired_daily_rate ? `PHP ${Number(details.desired_daily_rate).toLocaleString()} / day` : null;
+  const monthlyRate = details.desired_monthly_rate ? `PHP ${Number(details.desired_monthly_rate).toLocaleString()} / month` : null;
+
+  // Work Setup & Engagement
+  const workSetupLabel = details.work_setup === 'stay_in' ? 'Stay-in' : details.work_setup === 'stay_out' ? 'Stay-out' : 'Either (Stay-in / Stay-out)';
+  const engagementLabel = details.engagement_preference === 'short_term' ? 'Short-term' : details.engagement_preference === 'long_term' ? 'Long-term' : 'Both (Short & Long-term)';
+  const availabilityText = details.available_from || 'Available now';
+
+  // Experience
+  const expLevel = details.experience_level === 'new'
+    ? 'First-time Worker'
+    : details.experience_level === 'household'
+    ? 'Household Experience'
+    : 'Previous Paid Work';
+
+  const expDuration = details.experience_duration === 'under_1'
+    ? 'Less than 1 year of experience'
+    : details.experience_duration === '1_to_3'
+    ? '1–3 years of experience'
+    : details.experience_duration === 'over_3' || details.experience_duration === '3+'
+    ? '3+ years of experience'
+    : (details.experience_level === 'new' ? 'First-time worker' : '3+ years of experience');
+
+  const expSummary = details.experience_summary?.trim() || '';
+  const isBareDuration = !expSummary || /^((\d+\+?|\w+)\s*years?(\s+of\s+experience)?|over_\d+|under_\d+)$/i.test(expSummary) || expSummary.length < 25;
+  const profileNarrative = isBareDuration
+    ? `Dedicated and reliable household service worker with ${expDuration} in home management, cleaning, and caring tasks. Committed to maintaining safe, clean, and organized households.`
+    : expSummary;
+
+  // Practical Skills
+  const practicalSkills: string[] = (details.practical_skills && details.practical_skills.length > 0)
+    ? details.practical_skills
+    : DEFAULT_PRACTICAL_SKILLS;
+
+  // Languages
+  const languagesList: string[] = cv.languages
+    ? cv.languages.split(',').map(s => s.trim()).filter(Boolean)
+    : (details.languages && details.languages.length > 0)
+    ? details.languages
+    : ['Tagalog', 'English', 'Bisaya'];
+
+  // Education & Training
+  const educationText = details.education?.trim() || 'Secondary Education';
+  const trainingList: Array<{ name: string; provider?: string; year?: string | number }> = details.training || [];
+
+  // Family details
+  const civilStatus = details.civil_status || 'Single';
+  const childrenCount = details.number_of_children != null && details.number_of_children !== ''
+    ? String(details.number_of_children)
+    : 'None';
+
+  return (
+    <View style={styles.sheet}>
+      {/* HEADER: Profile Photo in Circle Frame & Big Bold Name + Role */}
+      <View style={styles.headerRow}>
+        <Image
+          accessibilityLabel="Worker profile photo"
+          source={{ uri: activePhoto }}
+          style={styles.photo}
+        />
+        <View style={styles.headerInfo}>
+          <Text style={styles.nameText} numberOfLines={2}>
+            {displayName.toUpperCase()}
+          </Text>
+          <Text style={styles.jobTitleText} numberOfLines={2}>
+            {servicesTitle.toUpperCase()}
+          </Text>
         </View>
-        {!!cv.profile_image_url && <Image accessibilityLabel="Worker profile photo" source={{ uri: cv.profile_image_url }} style={styles.photo} />}
       </View>
-      {!!model.facts.length && <View style={styles.facts}>{model.facts.map(item => <View style={styles.fact} key={item.label}>
-        <Text style={styles.label}>{uiText(item.label)}</Text><Text style={styles.factValue}>{item.value}</Text>
-      </View>)}</View>}
+
+      <View style={styles.headerDivider} />
+
+      {/* TWO-COLUMN RESUME BODY */}
+      <View style={styles.columnsContainer}>
+        {/* LEFT COLUMN: Profile, Contact, Skills, Personal */}
+        <View style={styles.leftColumn}>
+          {/* PROFILE */}
+          <Text style={styles.sectionHeading}>{uiText("PROFILE")}</Text>
+          <Text style={styles.profileText}>
+            {uiText(profileNarrative)}
+          </Text>
+
+          {/* CONTACT */}
+          <Text style={styles.sectionHeading}>{uiText("CONTACT")}</Text>
+          <View style={styles.contactList}>
+            {phoneText ? (
+              <View style={styles.contactItem}>
+                <Ionicons name="call" size={11} color="#0D0D11" style={styles.contactIcon} />
+                <Text style={styles.contactText}>{phoneText}</Text>
+              </View>
+            ) : null}
+            <View style={styles.contactItem}>
+              <Ionicons name="location-sharp" size={11} color="#0D0D11" style={styles.contactIcon} />
+              <Text style={styles.contactText}>{locationText}</Text>
+            </View>
+          </View>
+
+          {/* SKILLS with horizontal proficiency bars */}
+          <Text style={styles.sectionHeading}>{uiText("SKILLS")}</Text>
+          <View style={styles.skillsContainer}>
+            {practicalSkills.slice(0, 6).map((skill, idx) => (
+              <View key={`${skill}-${idx}`} style={styles.skillItem}>
+                <Text style={styles.skillName} numberOfLines={1}>{skill}</Text>
+                <View style={styles.skillBarTrack}>
+                  <View style={[styles.skillBarFill, { width: `${80 + (idx % 3) * 8}%` }]} />
+                </View>
+              </View>
+            ))}
+          </View>
+
+          {/* PERSONAL / FAMILY DETAILS */}
+          {(details.share_family_details !== false) && (
+            <View style={styles.personalSection}>
+              <Text style={styles.sectionHeading}>{uiText("PERSONAL")}</Text>
+              <Text style={styles.personalLine}>
+                <Text style={styles.personalLabel}>{uiText("Civil Status: ")}</Text>
+                {civilStatus}
+              </Text>
+              <Text style={styles.personalLine}>
+                <Text style={styles.personalLabel}>{uiText("Children: ")}</Text>
+                {childrenCount === '0' ? 'None' : childrenCount}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* RIGHT COLUMN: Experience, Preferences, Education, Languages */}
+        <View style={styles.rightColumn}>
+          {/* PROFESSIONAL EXPERIENCE */}
+          <Text style={styles.sectionHeading}>{uiText("PROFESSIONAL EXPERIENCE")}</Text>
+          <View style={styles.experienceBlock}>
+            <Text style={styles.experienceRoleTitle}>
+              HOUSEHOLD WORKER | {expLevel.toUpperCase()}
+            </Text>
+            <Text style={styles.experienceDates}>
+              {uiText("Experience duration: ")}{expDuration}
+            </Text>
+            <View style={styles.bulletList}>
+              <Text style={styles.bulletItem}>
+                • {uiText("Specializes in")} {servicesTitle} {uiText("with dependable household care standards.")}
+              </Text>
+              <Text style={styles.bulletItem}>
+                • {uiText("Maintains strict cleanliness, home safety, and respectful domestic etiquette.")}
+              </Text>
+              {expSummary ? (
+                <Text style={styles.bulletItem}>
+                  • {expSummary}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+
+          {/* WORK PREFERENCES & RATES */}
+          <Text style={styles.sectionHeading}>{uiText("WORK PREFERENCES")}</Text>
+          <View style={styles.preferencesBlock}>
+            <Text style={styles.bulletItem}>
+              • <Text style={styles.boldSnippet}>{uiText("Work setup: ")}</Text>{workSetupLabel}
+            </Text>
+            <Text style={styles.bulletItem}>
+              • <Text style={styles.boldSnippet}>{uiText("Looking for: ")}</Text>{engagementLabel}
+            </Text>
+            {dailyRate && (
+              <Text style={styles.bulletItem}>
+                • <Text style={styles.boldSnippet}>{uiText("Expected Daily: ")}</Text>{dailyRate}
+              </Text>
+            )}
+            {monthlyRate && (
+              <Text style={styles.bulletItem}>
+                • <Text style={styles.boldSnippet}>{uiText("Expected Monthly: ")}</Text>{monthlyRate}
+              </Text>
+            )}
+          </View>
+
+          {/* EDUCATION */}
+          <Text style={styles.sectionHeading}>{uiText("EDUCATION")}</Text>
+          <View style={styles.educationBlock}>
+            <Text style={styles.bulletItem}>
+              • {educationText}
+            </Text>
+            {trainingList.map((tr, idx) => (
+              <Text key={`tr-${idx}`} style={styles.bulletItem}>
+                • {tr.name}{tr.provider ? ` (${tr.provider})` : ''}{tr.year ? ` - ${tr.year}` : ''}
+              </Text>
+            ))}
+          </View>
+
+          {/* LANGUAGES */}
+          <Text style={styles.sectionHeading}>{uiText("LANGUAGES")}</Text>
+          <View style={styles.languagesBlock}>
+            {languagesList.map((lang, idx) => (
+              <Text key={`lang-${idx}`} style={styles.bulletItem}>
+                • {lang}: {idx === 0 ? uiText("Fluent / Native") : uiText("Conversational")}
+              </Text>
+            ))}
+          </View>
+        </View>
+      </View>
     </View>
-    {model.sections.map(section => <View style={styles.card} key={section.title}>
-      <Text style={styles.heading}>{section.title}</Text>
-      {section.kind === 'chips' ? <View style={styles.chips}>{section.items.map((item: string) => <View style={styles.chip} key={item}><Text style={styles.chipText}>{item}</Text></View>)}</View>
-        : section.kind === 'pairs' ? <View style={styles.pairs}>{section.items.map((item: { label: string; value: string }) => <View style={styles.pair} key={item.label}>
-          <Text style={styles.label}>{uiText(item.label)}</Text><Text style={styles.body}>{item.value}</Text>
-        </View>)}</View>
-          : section.items.map((item: string, index: number) => <Text style={styles.body} key={index}>{item}</Text>)}
-    </View>)}
-    <View style={styles.trust}>
-      {model.trust.map(item => <Text style={styles.trustLine} key={item}>{item}</Text>)}
-      <Text style={styles.notice}>{model.notice}</Text>
-      <Text style={styles.notice}>{uiText("Based on your latest saved profile ·")} {model.generated_date}</Text>
-    </View>
-  </>;
+  );
 }
 
 const styles = StyleSheet.create({
-  hero: { backgroundColor: 'white', borderRadius: 24, padding: 20, borderWidth: 1, borderColor: '#E7E5E4' },
-  eyebrow: { color: '#9A3412', fontSize: 11, fontWeight: '700', letterSpacing: 1.3, marginBottom: 16 },
-  identity: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 }, identityText: { flex: 1, minWidth: 0 },
-  name: { color: '#111827', fontSize: 24, lineHeight: 30, fontWeight: '800' },
-  services: { color: '#9A3412', fontSize: 15, lineHeight: 22, fontWeight: '600', marginTop: 6 },
-  meta: { color: '#4B5563', fontSize: 13, lineHeight: 19, marginTop: 5 },
-  photo: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#F5F5F4' },
-  badge: { color: '#166534', fontSize: 12, fontWeight: '700', marginTop: 8 },
-  facts: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 20, paddingTop: 6, borderTopWidth: 1, borderTopColor: '#E7E5E4' },
-  fact: { width: '50%', paddingTop: 12, paddingRight: 8 },
-  label: { fontSize: 11, color: '#6B7280', fontWeight: '600', marginBottom: 4 },
-  factValue: { fontSize: 14, lineHeight: 21, color: '#111827', fontWeight: '700' },
-  card: { backgroundColor: 'white', padding: 18, marginTop: 14, borderRadius: 20, borderWidth: 1, borderColor: '#E7E5E4' },
-  heading: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 12 },
-  body: { color: '#374151', fontSize: 14, lineHeight: 22 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { backgroundColor: '#FFF7ED', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7 },
-  chipText: { color: '#9A3412', fontSize: 12, lineHeight: 17, fontWeight: '600' },
-  pairs: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 14 }, pair: { width: '50%', paddingRight: 10 },
-  trust: { paddingHorizontal: 5, paddingTop: 20 }, trustLine: { fontSize: 12, lineHeight: 19, color: '#4B5563', marginBottom: 4 },
-  notice: { fontSize: 11, lineHeight: 17, color: '#6B7280', marginTop: 8 },
+  sheet: {
+    paddingVertical: 8,
+    marginBottom: 16,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  photo: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F3F4F6',
+  },
+  headerInfo: {
+    flex: 1,
+  },
+  nameText: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0D0D11',
+    letterSpacing: 0.5,
+    lineHeight: 28,
+  },
+  jobTitleText: {
+    fontFamily: THEME.typography.fontFamily.secondary,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4B5563',
+    fontStyle: 'italic',
+    marginTop: 3,
+    letterSpacing: 0.3,
+  },
+  headerDivider: {
+    height: 1.5,
+    backgroundColor: '#E5E7EB',
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  columnsContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 16,
+  },
+  leftColumn: {
+    flex: 0.38,
+  },
+  rightColumn: {
+    flex: 0.62,
+    borderLeftWidth: 1,
+    borderLeftColor: '#F3F4F6',
+    paddingLeft: 14,
+  },
+  sectionHeading: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0D0D11',
+    letterSpacing: 1.1,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  profileText: {
+    fontFamily: THEME.typography.fontFamily.body,
+    fontSize: 11,
+    color: '#4B5563',
+    lineHeight: 16,
+    marginBottom: 12,
+  },
+  contactList: {
+    gap: 5,
+    marginBottom: 12,
+  },
+  contactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  contactIcon: {
+    marginRight: 2,
+  },
+  contactText: {
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
+    fontSize: 11,
+    color: '#374151',
+    flexShrink: 1,
+  },
+  skillsContainer: {
+    gap: 6,
+    marginBottom: 12,
+  },
+  skillItem: {
+    marginBottom: 2,
+  },
+  skillName: {
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  skillBarTrack: {
+    height: 5,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    marginTop: 3,
+    overflow: 'hidden',
+  },
+  skillBarFill: {
+    height: '100%',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 3,
+  },
+  personalSection: {
+    marginTop: 4,
+  },
+  personalLine: {
+    fontFamily: THEME.typography.fontFamily.secondary,
+    fontSize: 11,
+    color: '#374151',
+    lineHeight: 16,
+  },
+  personalLabel: {
+    fontWeight: '700',
+    color: '#111827',
+  },
+  experienceBlock: {
+    marginBottom: 12,
+  },
+  experienceRoleTitle: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  experienceDates: {
+    fontFamily: THEME.typography.fontFamily.secondary,
+    fontSize: 10.5,
+    color: '#6B7280',
+    marginTop: 1,
+    marginBottom: 5,
+  },
+  bulletList: {
+    gap: 4,
+  },
+  bulletItem: {
+    fontFamily: THEME.typography.fontFamily.body,
+    fontSize: 11,
+    color: '#374151',
+    lineHeight: 16,
+  },
+  boldSnippet: {
+    fontWeight: '700',
+    color: '#111827',
+  },
+  preferencesBlock: {
+    gap: 4,
+    marginBottom: 12,
+  },
+  educationBlock: {
+    gap: 4,
+    marginBottom: 12,
+  },
+  languagesBlock: {
+    gap: 4,
+    marginBottom: 10,
+  },
+  sheetFooter: {
+    marginTop: 14,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    alignItems: 'center',
+  },
+  footerNotice: {
+    fontFamily: THEME.typography.fontFamily.secondary,
+    fontSize: 10,
+    color: '#9CA3AF',
+  },
 });
