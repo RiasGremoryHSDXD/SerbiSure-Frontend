@@ -1,634 +1,742 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TextInput, Pressable, Modal, ScrollView, ActivityIndicator, Alert, Switch, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  Pressable,
+  Modal,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Image,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchUserSocialLinks, updateUserSocialLinks, SocialLinkItem } from '../api/accountApi';
+
+const logoSource = require('../../../../assets/serbisure-logo.png');
 
 export interface ManageSocialLinksModalProps {
   visible: boolean;
   onClose: () => void;
   token?: string | null;
+  currentTags?: string[];
+  onSaveTags?: (newTags: string[]) => Promise<void>;
   onSaved?: () => void;
+  accountType?: string;
 }
 
-export interface PlatformConfig {
+const SUGGESTED_TAGS = [
+  'Non-Smoker',
+  'Respectful',
+  'Pet Friendly',
+  'Family-Oriented',
+  'Organized',
+  'Punctual',
+  'Child Friendly',
+  'Trustworthy',
+  'Experienced',
+];
+
+interface PlatformDefinition {
   key: string;
   name: string;
-  icon: string;
-  color: string;
   placeholder: string;
+  renderIcon: () => React.ReactNode;
 }
 
-const PLATFORMS: PlatformConfig[] = [
-  { key: 'facebook', name: 'Facebook', icon: 'logo-facebook', color: '#1877F2', placeholder: 'https://facebook.com/username or @handle' },
-  { key: 'instagram', name: 'Instagram', icon: 'logo-instagram', color: '#E1306C', placeholder: 'https://instagram.com/username or @handle' },
-  { key: 'tiktok', name: 'TikTok', icon: 'logo-tiktok', color: '#000000', placeholder: 'https://tiktok.com/@username or @handle' },
-  { key: 'twitter', name: 'Twitter / X', icon: 'logo-twitter', color: '#1DA1F2', placeholder: 'https://x.com/username or @handle' },
-  { key: 'linkedin', name: 'LinkedIn', icon: 'logo-linkedin', color: '#0A66C2', placeholder: 'https://linkedin.com/in/username' },
-  { key: 'telegram', name: 'Telegram', icon: 'paper-plane', color: '#0088CC', placeholder: 'https://t.me/username or @handle' },
-  { key: 'whatsapp', name: 'WhatsApp', icon: 'logo-whatsapp', color: '#25D366', placeholder: 'https://wa.me/639123456789' },
-  { key: 'viber', name: 'Viber', icon: 'chatbubble-ellipses', color: '#7360F2', placeholder: 'viber://chat?number=...' },
-  { key: 'website', name: 'Personal Website', icon: 'globe-outline', color: '#4B5563', placeholder: 'https://yourwebsite.com' },
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+
+export function isValidSocialLink(platform: string, url: string): boolean {
+  const trimmed = (url || '').trim();
+  if (!trimmed) return true;
+
+  switch (platform.toLowerCase()) {
+    case 'facebook':
+    case 'fb':
+      return /^(?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)*(?:facebook\.com|fb\.com|fb\.watch|fb\.me)\/[^\s]+$/i.test(trimmed);
+
+    case 'instagram':
+    case 'ig':
+      return /^(?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)*(?:instagram\.com|instagr\.am|ig\.me)\/[^\s]+$/i.test(trimmed);
+
+    case 'tiktok':
+      return /^(?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)*tiktok\.com\/[^\s]+$/i.test(trimmed);
+
+    case 'telegram':
+    case 'tg':
+      return /^(?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)*(?:t\.me|telegram\.me|telegram\.org)\/[^\s]+$/i.test(trimmed);
+
+    case 'twitter':
+    case 'x':
+      return /^(?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)*(?:twitter\.com|x\.com)\/[^\s]+$/i.test(trimmed);
+
+    case 'website':
+      return /^(?:https?:\/\/)?(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(?:\/[^\s]*)?$/i.test(trimmed);
+
+    default:
+      return true;
+  }
+}
+
+const SOCIAL_PLATFORMS: PlatformDefinition[] = [
+  {
+    key: 'facebook',
+    name: 'Facebook',
+    placeholder: 'Your facebook profile link',
+    renderIcon: () => <Ionicons name="logo-facebook" size={26} color="#0D0D11" />,
+  },
+  {
+    key: 'instagram',
+    name: 'Instagram',
+    placeholder: 'Your instagram profile link',
+    renderIcon: () => <Ionicons name="logo-instagram" size={26} color="#0D0D11" />,
+  },
+  {
+    key: 'tiktok',
+    name: 'TikTok',
+    placeholder: 'Your tiktok profile link',
+    renderIcon: () => (
+      <View
+        style={{
+          width: 25,
+          height: 25,
+          backgroundColor: '#0D0D11',
+          borderRadius: 6,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Ionicons name="logo-tiktok" size={17} color="#FFFFFF" />
+      </View>
+    ),
+  },
+  {
+    key: 'telegram',
+    name: 'Telegram',
+    placeholder: 'Your telegram profile link',
+    renderIcon: () => (
+      <Ionicons
+        name="paper-plane-outline"
+        size={23}
+        color="#0D0D11"
+        style={{ transform: [{ rotate: '-10deg' }] }}
+      />
+    ),
+  },
+  {
+    key: 'twitter',
+    name: 'Twitter / X',
+    placeholder: 'Your twitter profile link',
+    renderIcon: () => (
+      <View
+        style={{
+          width: 25,
+          height: 25,
+          backgroundColor: '#0D0D11',
+          borderRadius: 6,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Text
+          style={{
+            fontSize: 14,
+            fontWeight: '900',
+            color: '#FFFFFF',
+            fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+            lineHeight: 16,
+          }}
+        >
+          𝕏
+        </Text>
+      </View>
+    ),
+  },
+  {
+    key: 'website',
+    name: 'Website',
+    placeholder: 'Your personal website link',
+    renderIcon: () => (
+      <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+        <Ionicons name="globe-outline" size={25} color="#0D0D11" />
+        <MaterialCommunityIcons
+          name="cursor-default"
+          size={14}
+          color="#0D0D11"
+          style={{ position: 'absolute', bottom: -2, left: -2 }}
+        />
+      </View>
+    ),
+  },
 ];
 
 export function ManageSocialLinksModal({
   visible,
   onClose,
   token,
+  currentTags = [],
+  onSaveTags,
   onSaved,
 }: ManageSocialLinksModalProps) {
   const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
+
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [links, setLinks] = useState<SocialLinkItem[]>([]);
-  const [showPublic, setShowPublic] = useState(true);
 
-  const [selectedPlatform, setSelectedPlatform] = useState<PlatformConfig>(PLATFORMS[0]!);
-  const [inputUrl, setInputUrl] = useState('');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Tags State
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+
+  // Social Links Map: platformKey -> url string
+  const [socialMap, setSocialMap] = useState<Record<string, string>>({
+    facebook: '',
+    instagram: '',
+    tiktok: '',
+    telegram: '',
+    twitter: '',
+    website: '',
+  });
+
+  const inputRefs = useRef<Record<string, TextInput | null>>({});
 
   useEffect(() => {
-    if (visible && token) {
-      setLoading(true);
-      setErrorMessage(null);
-      fetchUserSocialLinks(token)
-        .then((res) => {
-          setLinks(res.social_links || []);
-          setShowPublic(res.show_social_links !== false);
-        })
-        .catch((err) => {
-          console.warn('[ManageSocialLinksModal] fetch error:', err);
-          setErrorMessage('Could not load existing links.');
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    }
-  }, [visible, token]);
+    if (visible) {
+      setTags([...(currentTags || [])]);
+      setTagInput('');
 
-  const handleAddLink = () => {
-    setErrorMessage(null);
-    const trimmed = inputUrl.trim();
-    if (!trimmed) {
-      setErrorMessage('Please enter a profile link or username handle.');
-      return;
-    }
+      if (token) {
+        setLoading(true);
+        fetchUserSocialLinks(token)
+          .then((res) => {
+            const initialMap: Record<string, string> = {
+              facebook: '',
+              instagram: '',
+              tiktok: '',
+              telegram: '',
+              twitter: '',
+              website: '',
+            };
 
-    if (links.length >= 5) {
-      setErrorMessage('You can add a maximum of 5 social accounts.');
-      return;
-    }
+            const existingList: SocialLinkItem[] = res.social_links || [];
+            for (const item of existingList) {
+              const p = (item.platform || '').toLowerCase().trim();
+              if (p === 'fb' || p === 'facebook' || p.includes('facebook')) {
+                initialMap.facebook = item.url;
+              } else if (p === 'ig' || p === 'instagram' || p.includes('instagram')) {
+                initialMap.instagram = item.url;
+              } else if (p === 'tiktok' || p.includes('tiktok')) {
+                initialMap.tiktok = item.url;
+              } else if (p === 'tg' || p === 'telegram' || p.includes('telegram')) {
+                initialMap.telegram = item.url;
+              } else if (p === 'twitter' || p === 'x' || p.includes('twitter') || p === 'x.com') {
+                initialMap.twitter = item.url;
+              } else if (p === 'website' || p.includes('website') || p.includes('http')) {
+                initialMap.website = item.url;
+              }
+            }
 
-    // Check duplicate platform (except personal website)
-    if (selectedPlatform.key !== 'website') {
-      const alreadyHasPlatform = links.some(
-        (l) => l.platform?.toLowerCase() === selectedPlatform.key
-      );
-      if (alreadyHasPlatform) {
-        setErrorMessage(`You have already added a ${selectedPlatform.name} account.`);
-        return;
+            setSocialMap(initialMap);
+          })
+          .catch((err) => {
+            console.log('[ManageSocialLinksModal] fetch error:', err?.message || err);
+          })
+          .finally(() => {
+            setLoading(false);
+          });
       }
     }
+  }, [visible, token, currentTags]);
 
-    const newLinkItem: SocialLinkItem = {
-      platform: selectedPlatform.key,
-      platform_name: selectedPlatform.name,
-      url: trimmed,
-      handle: trimmed.startsWith('@') ? trimmed.slice(1) : undefined,
-    };
-
-    setLinks((prev) => [...prev, newLinkItem]);
-    setInputUrl('');
+  const handleClose = () => {
+    if (saving) return;
+    onClose();
   };
 
-  const handleRemoveLink = (idxToRemove: number) => {
-    setErrorMessage(null);
-    setLinks((prev) => prev.filter((_, idx) => idx !== idxToRemove));
+  const handleAddTag = (textToAdd?: string) => {
+    const rawTag = (textToAdd !== undefined ? textToAdd : tagInput).trim();
+    if (!rawTag) return;
+
+    if (tags.length >= 10) {
+      Alert.alert(uiText('Limit Reached'), uiText('You can add up to 10 tags only.'));
+      return;
+    }
+
+    if (rawTag.length > 20) {
+      Alert.alert(uiText('Tag Too Long'), uiText('Each tag must be 20 characters or fewer.'));
+      return;
+    }
+
+    const isDuplicate = tags.some((t) => t.toLowerCase() === rawTag.toLowerCase());
+    if (isDuplicate) return;
+
+    setTags((prev) => [...prev, rawTag]);
+    if (textToAdd === undefined) {
+      setTagInput('');
+    }
+  };
+
+  const handleRemoveTag = (indexToRemove: number) => {
+    setTags((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
   const handleSave = async () => {
     if (!token) {
-      Alert.alert('Error', 'You must be logged in.');
+      Alert.alert(uiText('Error'), uiText('You must be logged in.'));
       return;
     }
 
-    setSaving(true);
-    setErrorMessage(null);
+    for (const platform of SOCIAL_PLATFORMS) {
+      const val = (socialMap[platform.key] || '').trim();
+      if (val && !isValidSocialLink(platform.key, val)) {
+        Alert.alert(
+          uiText('Invalid Link'),
+          uiText(`Please enter a valid ${platform.name} profile link.`)
+        );
+        inputRefs.current[platform.key]?.focus();
+        return;
+      }
+    }
 
+    setSaving(true);
     try {
+      if (onSaveTags) {
+        await onSaveTags(tags);
+      }
+
+      const activeLinks = Object.entries(socialMap)
+        .filter(([_, url]) => url && url.trim().length > 0)
+        .map(([platform, url]) => {
+          const trimmed = url.trim();
+          const normalizedUrl = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+          return {
+            platform,
+            url: normalizedUrl,
+          };
+        });
+
       await updateUserSocialLinks(token, {
-        social_links: links.map((l) => ({ platform: l.platform, url: l.url })),
-        show_social_links: showPublic,
+        social_links: activeLinks,
+        show_social_links: true,
       });
 
-      Alert.alert('Success', 'Social links updated successfully!');
       onSaved?.();
-      onClose();
+      handleClose();
     } catch (err: any) {
-      const msg = err?.message || 'Failed to update social links.';
-      setErrorMessage(msg);
+      Alert.alert(uiText('Unable to Save'), err?.message || uiText('Failed to update details.'));
     } finally {
       setSaving(false);
     }
   };
 
-  const getPlatformMeta = (platformKey: string) => {
-    const found = PLATFORMS.find((p) => p.key === platformKey.toLowerCase());
-    return (
-      found || {
-        key: platformKey,
-        name: platformKey.charAt(0).toUpperCase() + platformKey.slice(1),
-        icon: 'globe-outline',
-        color: '#4B5563',
-      }
-    );
-  };
-
   return (
     <Modal
       visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={() => {
-        if (!saving) onClose();
-      }}
+      transparent={false}
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.modalOverlay}
+      <View
+        style={[
+          styles.container,
+          {
+            paddingTop: Math.max(insets.top, 14),
+            paddingBottom: Math.max(insets.bottom, 14),
+          },
+        ]}
       >
-        <Pressable
-          style={styles.backdrop}
-          onPress={() => {
-            if (!saving) onClose();
-          }}
-        />
+        {/* Top Header */}
+        <View style={styles.header}>
+          <Pressable onPress={handleClose} disabled={saving} style={styles.backBtn} hitSlop={12}>
+            <Ionicons name="arrow-back" size={24} color="#0D0D11" />
+          </Pressable>
 
-        <View
-          style={[
-            styles.modalSheet,
-            { paddingBottom: Math.max(insets.bottom, 20) },
-          ]}
-        >
-          {/* Header */}
-          <View style={styles.sheetHeader}>
-            <View>
-              <Text style={styles.sheetTitle}>{uiText("Social Links & Contacts")}</Text>
-              <Text style={styles.sheetSubtitle}>
-                {uiText("Add external accounts so clients can connect (")}{links.length}/5)
-              </Text>
-            </View>
-            <Pressable
-              onPress={onClose}
-              hitSlop={10}
-              style={styles.closeBtn}
-              disabled={saving}
-            >
-              <Ionicons name="close" size={22} color="#666" />
-            </Pressable>
+          <View style={styles.headerTitleCenter}>
+            <Text style={styles.headerTitle}>Tags & Socials</Text>
           </View>
 
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#FFB43B" />
-              <Text style={styles.loadingText}>{uiText("Loading social accounts...")}</Text>
-            </View>
-          ) : (
+          <View style={styles.headerRight}>
+            <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+          </View>
+        </View>
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#FFB380" />
+            <Text style={styles.loadingText}>{uiText("Loading profile details...")}</Text>
+          </View>
+        ) : (
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
             <ScrollView
-              style={styles.sheetBody}
+              style={styles.scrollBody}
+              contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              {/* Error Banner */}
-              {errorMessage && (
-                <View style={styles.errorBanner}>
-                  <Ionicons name="alert-circle" size={16} color="#C0392B" />
-                  <Text style={styles.errorText}>{errorMessage}</Text>
-                </View>
-              )}
+              {/* 1. PROFILE TAGS SECTION */}
+              <Text style={styles.sectionHeader}>{uiText("PROFILE TAGS")}</Text>
 
-              {/* Public Visibility Toggle */}
-              <View style={styles.toggleRow}>
-                <View style={{ flex: 1, marginRight: 12 }}>
-                  <Text style={styles.toggleLabel}>{uiText("Display on Public Profile")}</Text>
-                  <Text style={styles.toggleSubtext}>
-                    {uiText("When enabled, clients viewing your profile can see these links.")}</Text>
-                </View>
-                <Switch
-                  value={showPublic}
-                  onValueChange={setShowPublic}
-                  trackColor={{ false: '#E0E0E0', true: '#FFB43B' }}
-                  thumbColor="#FFFFFF"
-                />
-              </View>
-
-              {/* Existing Links List */}
-              <Text style={styles.sectionLabel}>{uiText("YOUR LINKED ACCOUNTS")}</Text>
-              {links.length === 0 ? (
-                <View style={styles.emptyCard}>
-                  <Ionicons name="link-outline" size={26} color="#BDBDBD" />
-                  <Text style={styles.emptyText}>{uiText("No social accounts added yet.")}</Text>
-                  <Text style={styles.emptySubtext}>
-                    {uiText("Add your Facebook, WhatsApp, or Instagram below.")}</Text>
-                </View>
-              ) : (
-                <View style={styles.linksList}>
-                  {links.map((item, idx) => {
-                    const meta = getPlatformMeta(item.platform);
-                    return (
-                      <View key={`${item.platform}-${idx}`} style={styles.linkCard}>
-                        <View
-                          style={[
-                            styles.platformIconWrap,
-                            { backgroundColor: `${meta.color}15` },
-                          ]}
-                        >
-                          <Ionicons
-                            name={meta.icon as any}
-                            size={20}
-                            color={meta.color}
-                          />
-                        </View>
-                        <View style={{ flex: 1, marginLeft: 10 }}>
-                          <Text style={styles.linkPlatformTitle}>
-                            {item.platform_name || meta.name}
-                          </Text>
-                          <Text style={styles.linkUrlText} numberOfLines={1}>
-                            {item.handle ? `@${item.handle}` : item.url}
-                          </Text>
-                        </View>
-                        <Pressable
-                          onPress={() => handleRemoveLink(idx)}
-                          hitSlop={8}
-                          style={styles.deleteLinkBtn}
-                        >
-                          <Ionicons name="trash-outline" size={18} color="#E74C3C" />
-                        </Pressable>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-
-              {/* Add New Link Section */}
-              {links.length < 5 && (
-                <View style={styles.addSection}>
-                  <Text style={styles.sectionLabel}>{uiText("ADD A NEW ACCOUNT")}</Text>
-
-                  {/* Horizontal Platform Picker */}
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.platformsScroll}
-                    contentContainerStyle={styles.platformsContent}
-                  >
-                    {PLATFORMS.map((p) => {
-                      const isSelected = selectedPlatform.key === p.key;
-                      return (
-                        <Pressable
-                          key={p.key}
-                          style={[
-                            styles.platformChip,
-                            isSelected && {
-                              borderColor: p.color,
-                              backgroundColor: `${p.color}15`,
-                            },
-                          ]}
-                          onPress={() => {
-                            setSelectedPlatform(p);
-                            setErrorMessage(null);
-                          }}
-                        >
-                          <Ionicons
-                            name={p.icon as any}
-                            size={16}
-                            color={isSelected ? p.color : '#666'}
-                            style={{ marginRight: 6 }}
-                          />
-                          <Text
-                            style={[
-                              styles.platformChipText,
-                              isSelected && { color: p.color, fontWeight: '700' },
-                            ]}
-                          >
-                            {p.name}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
-
-                  {/* Input Box */}
-                  <View style={styles.inputRow}>
-                    <View style={styles.inputWrapper}>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder={selectedPlatform.placeholder}
-                        placeholderTextColor="#999"
-                        value={inputUrl}
-                        onChangeText={(val) => {
-                          setInputUrl(val);
-                          if (errorMessage) setErrorMessage(null);
-                        }}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        keyboardType="url"
-                      />
+              {/* Active Tags Wrap */}
+              {tags.length > 0 && (
+                <View style={styles.tagsWrap}>
+                  {tags.map((tagItem, idx) => (
+                    <View key={`${tagItem}-${idx}`} style={styles.tagPill}>
+                      <Text style={styles.tagPillText}>{tagItem}</Text>
+                      <Pressable
+                        onPress={() => handleRemoveTag(idx)}
+                        hitSlop={8}
+                        style={styles.tagCloseBtn}
+                        accessibilityLabel={`Remove ${tagItem}`}
+                      >
+                        <Ionicons name="close-circle" size={17} color="#0D0D11" />
+                      </Pressable>
                     </View>
-                    <Pressable
-                      style={[
-                        styles.addBtn,
-                        !inputUrl.trim() && styles.addBtnDisabled,
-                      ]}
-                      onPress={handleAddLink}
-                      disabled={!inputUrl.trim()}
-                    >
-                      <Ionicons name="add" size={20} color="#FFFFFF" />
-                      <Text style={styles.addBtnText}>{uiText("Add")}</Text>
-                    </Pressable>
-                  </View>
+                  ))}
                 </View>
               )}
 
-              {/* Action Buttons */}
-              <View style={styles.footerBtns}>
+              {/* Custom Tag Input Row */}
+              <View style={styles.customTagRow}>
+                <TextInput
+                  style={styles.customTagInput}
+                  placeholder={uiText("Custom tag (e.g. Non-Smoker)")}
+                  placeholderTextColor="#9CA3AF"
+                  value={tagInput}
+                  onChangeText={setTagInput}
+                  maxLength={20}
+                  returnKeyType="done"
+                  onSubmitEditing={() => handleAddTag()}
+                />
                 <Pressable
-                  style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
-                  onPress={handleSave}
-                  disabled={saving}
+                  style={styles.addCustomTagBtn}
+                  onPress={() => handleAddTag()}
                 >
-                  {saving ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name="checkmark-circle-outline"
-                        size={18}
-                        color="#FFFFFF"
-                        style={{ marginRight: 6 }}
-                      />
-                      <Text style={styles.saveBtnText}>{uiText("Save Changes")}</Text>
-                    </>
-                  )}
+                  <Text style={styles.addCustomTagBtnText}>+ Add</Text>
                 </Pressable>
               </View>
+
+              {/* 2. QUICK SUGGESTIONS SECTION */}
+              <Text style={[styles.sectionHeader, { marginTop: 18 }]}>{uiText("QUICK SUGGESTIONS")}</Text>
+              <View style={styles.suggestionsWrap}>
+                {SUGGESTED_TAGS.map((sug) => {
+                  const isAdded = tags.some((t) => t.toLowerCase() === sug.toLowerCase());
+                  return (
+                    <Pressable
+                      key={sug}
+                      style={[styles.suggestionPill, isAdded && styles.suggestionPillAdded]}
+                      onPress={() => handleAddTag(sug)}
+                      disabled={isAdded}
+                    >
+                      <Text style={[styles.suggestionPillText, isAdded && styles.suggestionPillTextAdded]}>
+                        + {sug}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* 3. SOCIAL MEDIA SECTION */}
+              <Text style={[styles.sectionHeader, { marginTop: 22 }]}>{uiText("SOCIAL MEDIA")}</Text>
+
+              <View style={styles.socialList}>
+                {SOCIAL_PLATFORMS.map((platform) => {
+                  const currentVal = socialMap[platform.key] || '';
+                  const hasVal = currentVal.trim().length > 0;
+                  const isInvalid = hasVal && !isValidSocialLink(platform.key, currentVal);
+
+                  return (
+                    <View key={platform.key} style={styles.socialRow}>
+                      <View style={styles.socialIconBox}>
+                        {platform.renderIcon()}
+                      </View>
+
+                      <TextInput
+                        ref={(r) => {
+                          inputRefs.current[platform.key] = r;
+                        }}
+                        style={[styles.socialInput, isInvalid && styles.socialInputError]}
+                        placeholder={platform.placeholder}
+                        placeholderTextColor="#9CA3AF"
+                        value={currentVal}
+                        onChangeText={(val) =>
+                          setSocialMap((prev) => ({ ...prev, [platform.key]: val }))
+                        }
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+
+                      {hasVal ? (
+                        <Pressable
+                          style={styles.removeBtn}
+                          onPress={() =>
+                            setSocialMap((prev) => ({ ...prev, [platform.key]: '' }))
+                          }
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${platform.name}`}
+                        >
+                          <Text style={styles.removeBtnText}>{uiText("Remove")}</Text>
+                        </Pressable>
+                      ) : (
+                        <Pressable
+                          style={styles.addBtn}
+                          onPress={() => inputRefs.current[platform.key]?.focus()}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Add ${platform.name}`}
+                        >
+                          <Text style={styles.addBtnText}>+ Add</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
             </ScrollView>
-          )}
-        </View>
-      </KeyboardAvoidingView>
+
+            {/* Bottom Sticky Action Bar with Save Changes */}
+            <View style={styles.bottomBar}>
+              <View style={styles.dividerLine} />
+              <Pressable
+                style={[styles.saveChangesBtn, saving && { opacity: 0.7 }]}
+                onPress={handleSave}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.saveChangesBtnText}>{uiText("Save Changes")}</Text>
+                )}
+              </Pressable>
+            </View>
+          </KeyboardAvoidingView>
+        )}
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
+  container: {
     flex: 1,
-    justifyContent: 'flex-end',
+    backgroundColor: '#F6F5F2',
   },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  modalSheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '88%',
-    paddingTop: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  sheetHeader: {
+  header: {
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    paddingHorizontal: 18,
+    backgroundColor: '#F6F5F2',
   },
-  sheetTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1A1A1A',
+  backBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
   },
-  sheetSubtitle: {
-    fontSize: 12,
-    color: '#777777',
-    marginTop: 2,
-  },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F5F5F5',
+  headerTitleCenter: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0D0D11',
+  },
+  headerRight: {
+    width: 40,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  logo: {
+    width: 30,
+    height: 30,
   },
   loadingContainer: {
-    padding: 40,
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 24,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#666',
+    color: '#6B7280',
   },
-  sheetBody: {
-    paddingHorizontal: 20,
-    paddingTop: 14,
-  },
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FDEDEC',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#FADBD8',
-  },
-  errorText: {
-    marginLeft: 8,
-    fontSize: 12,
-    color: '#C0392B',
+  scrollBody: {
     flex: 1,
   },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FAFAFA',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#EEEEEE',
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 24,
   },
-  toggleLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1A1A1A',
-  },
-  toggleSubtext: {
-    fontSize: 11,
-    color: '#777777',
-    marginTop: 2,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#8E8E93',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  emptyCard: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 20,
-    backgroundColor: '#FAFAFA',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
-    borderStyle: 'dashed',
-    marginBottom: 16,
-  },
-  emptyText: {
-    marginTop: 6,
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#757575',
-  },
-  emptySubtext: {
-    fontSize: 11,
-    color: '#9E9E9E',
-    marginTop: 2,
-  },
-  linksList: {
-    gap: 8,
-    marginBottom: 16,
-  },
-  linkCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  platformIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  linkPlatformTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  linkUrlText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 1,
-  },
-  deleteLinkBtn: {
-    padding: 6,
-  },
-  addSection: {
-    marginTop: 6,
-    marginBottom: 20,
-  },
-  platformsScroll: {
+  sectionHeader: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#111827',
+    letterSpacing: 0.4,
     marginBottom: 10,
   },
-  platformsContent: {
+  tagsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
-    paddingVertical: 2,
+    marginBottom: 12,
   },
-  platformChip: {
+  tagPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
+    backgroundColor: '#FFAA7A',
+    paddingLeft: 14,
+    paddingRight: 8,
     paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    backgroundColor: '#FFFFFF',
+    borderRadius: 9999,
   },
-  platformChipText: {
-    fontSize: 12,
-    color: '#555555',
+  tagPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0D0D11',
+    marginRight: 6,
   },
-  inputRow: {
+  tagCloseBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customTagRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
+    marginBottom: 6,
   },
-  inputWrapper: {
+  customTagInput: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    paddingHorizontal: 12,
     height: 44,
-    justifyContent: 'center',
-  },
-  textInput: {
-    fontSize: 13,
-    color: '#1A1A1A',
-  },
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFB43B',
+    backgroundColor: '#EBEBED',
+    borderRadius: 12,
     paddingHorizontal: 14,
+    fontSize: 13,
+    color: '#0D0D11',
+  },
+  addCustomTagBtn: {
+    backgroundColor: '#000000',
     height: 44,
+    paddingHorizontal: 20,
     borderRadius: 12,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  addBtnDisabled: {
-    backgroundColor: '#FFD99B',
-  },
-  addBtnText: {
-    fontSize: 13,
+  addCustomTagBtnText: {
+    fontSize: 13.5,
     fontWeight: '700',
     color: '#FFFFFF',
-    marginLeft: 2,
   },
-  footerBtns: {
-    marginTop: 4,
-    marginBottom: 14,
+  suggestionsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
   },
-  saveBtn: {
-    backgroundColor: '#FFB43B',
-    height: 48,
-    borderRadius: 14,
+  suggestionPill: {
+    backgroundColor: '#FFAA7A',
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 9999,
+  },
+  suggestionPillAdded: {
+    opacity: 0.45,
+  },
+  suggestionPillText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#0D0D11',
+  },
+  suggestionPillTextAdded: {
+    color: '#374151',
+  },
+  socialList: {
+    gap: 12,
+  },
+  socialRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  socialIconBox: {
+    width: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    shadowColor: '#FFB43B',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 3,
   },
-  saveBtnDisabled: {
-    opacity: 0.6,
+  socialInput: {
+    flex: 1,
+    height: 42,
+    backgroundColor: '#EBEBED',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    fontSize: 12,
+    color: '#0D0D11',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
   },
-  saveBtnText: {
-    fontSize: 15,
+  socialInputError: {
+    borderColor: '#EF4444',
+  },
+  removeBtn: {
+    backgroundColor: '#FF3B30',
+    height: 38,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 72,
+  },
+  removeBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  addBtn: {
+    backgroundColor: '#000000',
+    height: 38,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 72,
+  },
+  addBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  bottomBar: {
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    backgroundColor: '#F6F5F2',
+  },
+  dividerLine: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginBottom: 14,
+  },
+  saveChangesBtn: {
+    backgroundColor: '#0D0D11',
+    height: 52,
+    borderRadius: 9999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveChangesBtnText: {
+    fontSize: 15.5,
     fontWeight: '700',
     color: '#FFFFFF',
   },
