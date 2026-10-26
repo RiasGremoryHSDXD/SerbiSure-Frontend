@@ -3,10 +3,11 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import THEME from '../../../shared/theme/theme';
+import { APP_HEADER_BACK_ICON_COLOR, APP_HEADER_BACK_ICON_SIZE, APP_HEADER_LOGO_SIZE, APP_HEADER_SIDE_WIDTH } from '../../../shared/components/AppHeader';
 
 const logoSource = require('../../../../assets/serbisure_new_clean.png');
-const homeownerSource = require('../../../../assets/homeowner.png');
-const kasambahaySource = require('../../../../assets/kasambahay.png');
+const homeownerSource = require('../../../../assets/homeowner1.png');
+const kasambahaySource = require('../../../../assets/kasambahay1.png');
 
 type RoleSelectionScreenProps = {
   onSelectRole?: (role: 'homeowner' | 'kasambahay') => void;
@@ -22,8 +23,8 @@ export function RoleSelectionScreen({ onSelectRole, onBack }: RoleSelectionScree
       <View style={styles.header}>
         <View style={styles.headerSide}>
           {onBack ? (
-            <Pressable onPress={onBack} style={styles.backBtn}>
-              <Ionicons name="arrow-back" size={24} color={THEME.colors.ink} />
+            <Pressable onPress={onBack} hitSlop={10}>
+              <Ionicons name="arrow-back" size={APP_HEADER_BACK_ICON_SIZE} color={APP_HEADER_BACK_ICON_COLOR} />
             </Pressable>
           ) : null}
         </View>
@@ -34,26 +35,29 @@ export function RoleSelectionScreen({ onSelectRole, onBack }: RoleSelectionScree
       <View style={styles.titleContainer}>
         <Text style={styles.title}>
           {uiText("How would")}{' '}<Text style={styles.titleHighlight}>{uiText("you")}</Text>{'\n'}{uiText("like to join?")}</Text>
-        <Text style={styles.subtitle}>{uiText("Choose your path to get started")}</Text>
       </View>
 
-      <View style={styles.cardsContainer}>
+      <View style={styles.optionsContainer}>
         <Pressable
-          style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+          accessibilityRole="button"
+          accessibilityLabel={uiText("I am a Homeowner")}
+          style={({ pressed }) => [styles.roleOption, styles.homeownerOption, pressed && styles.cardPressed]}
           onPress={() => onSelectRole?.('homeowner')}
         >
-          <Image source={homeownerSource} style={styles.cardImage} />
-          <View style={[styles.cardLabel, styles.homeownerLabel]}>
+          <Image source={homeownerSource} style={styles.homeownerImage} resizeMode="contain" />
+          <View style={[styles.roleButton, styles.homeownerButton, styles.homeownerLabel]}>
             <Text style={styles.cardLabelText}>{uiText("I am a Homeowner")}</Text>
           </View>
         </Pressable>
 
         <Pressable
-          style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+          accessibilityRole="button"
+          accessibilityLabel={uiText("I am a Kasambahay")}
+          style={({ pressed }) => [styles.roleOption, styles.kasambahayOption, pressed && styles.cardPressed]}
           onPress={() => onSelectRole?.('kasambahay')}
         >
-          <Image source={kasambahaySource} style={styles.cardImage} />
-          <View style={[styles.cardLabel, styles.kasambahayLabel]}>
+          <Image source={kasambahaySource} style={styles.kasambahayImage} resizeMode="contain" />
+          <View style={[styles.roleButton, styles.kasambahayButton, styles.kasambahayLabel]}>
             <Text style={styles.cardLabelText}>{uiText("I am a Kasambahay")}</Text>
           </View>
         </Pressable>
@@ -72,72 +76,75 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 8,
     width: '100%',
   },
   headerSide: {
-    width: 44,
+    width: APP_HEADER_SIDE_WIDTH,
     justifyContent: 'center',
   },
-  backBtn: {
-    padding: 8,
-    backgroundColor: THEME.colors.white,
-    borderRadius: THEME.roundness.pill,
-  },
   logo: {
-    height: 52,
-    width: 52,
+    height: APP_HEADER_LOGO_SIZE,
+    width: APP_HEADER_LOGO_SIZE,
   },
   titleContainer: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 14,
   },
   title: {
     color: THEME.colors.ink,
-    fontSize: 34,
+    fontSize: 30,
     fontFamily: THEME.typography.fontFamily.displayExtraBold,
     textAlign: 'center',
-    lineHeight: 40,
+    lineHeight: 36,
     letterSpacing: THEME.typography.tracking.tighter,
-    marginBottom: 10,
   },
   titleHighlight: {
     color: THEME.colors.brandDark,
   },
-  subtitle: {
-    color: THEME.colors.textSecondary,
-    fontSize: 16,
-    fontFamily: THEME.typography.fontFamily.bodyMedium,
-    textAlign: 'center',
-  },
-  cardsContainer: {
+  optionsContainer: {
     flex: 1,
-    gap: 20,
-    paddingBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingBottom: 6,
   },
-  card: {
-    flex: 1,
-    borderRadius: THEME.roundness.cardLg,
-    overflow: 'hidden',
+  roleOption: {
+    alignItems: 'center',
+    width: '100%',
     position: 'relative',
-    backgroundColor: THEME.colors.white,
+  },
+  homeownerOption: {
+    height: '51%',
+  },
+  kasambahayOption: {
+    height: '43%',
   },
   cardPressed: {
     opacity: 0.92,
     transform: [{ scale: 0.98 }],
   },
-  cardImage: {
+  homeownerImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
   },
-  cardLabel: {
+  kasambahayImage: {
+    width: '88%',
+    height: '100%',
+  },
+  roleButton: {
     position: 'absolute',
-    bottom: 22,
     alignSelf: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 42,
+    width: '68%',
     borderRadius: THEME.roundness.pill,
+  },
+  homeownerButton: {
+    bottom: 42,
+  },
+  kasambahayButton: {
+    bottom: 8,
   },
   homeownerLabel: {
     backgroundColor: THEME.colors.ink,
@@ -147,7 +154,7 @@ const styles = StyleSheet.create({
   },
   cardLabelText: {
     color: THEME.colors.white,
-    fontSize: 17,
+    fontSize: 16,
     fontFamily: THEME.typography.fontFamily.display,
     textAlign: 'center',
     letterSpacing: THEME.typography.tracking.tight,
