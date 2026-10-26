@@ -1,7 +1,7 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Canvas, Circle, Path, Skia } from '@shopify/react-native-skia';
+import { Canvas, Path, Skia } from '@shopify/react-native-skia';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system';
@@ -12,6 +12,7 @@ import { advanceLiveness, initialLivenessState, retryCurrentStep, type LivenessR
 
 import THEME from '../../../shared/theme/theme';
 import { RegistrationStepper } from '../../auth/components/RegistrationStepper';
+import { APP_HEADER_BACK_ICON_COLOR, APP_HEADER_BACK_ICON_SIZE, APP_HEADER_LOGO_SIZE, APP_HEADER_SIDE_WIDTH } from '../../../shared/components/AppHeader';
 
 const logoSource = require('../../../../assets/serbisure_new_clean.png');
 const faceSource = require('../../../../assets/face-placeholder.png');
@@ -60,11 +61,15 @@ function LivenessRing({ progress, showFaceIcon, showCheck }: LivenessRingProps) 
 
   return (
     <View style={styles.ringBox}>
-      <Canvas style={styles.ringCanvas}>
-        <Circle cx={size / 2} cy={size / 2} r={(size - 2) / 2} color="#FFB43B" style="stroke" strokeWidth={2} />
-        <Path path={arcPath} color="#0AA018" style="stroke" strokeWidth={strokeWidth} strokeCap="round" />
-      </Canvas>
-      {showFaceIcon ? <Image source={faceSource} style={styles.faceIcon} resizeMode="contain" /> : null}
+      {showFaceIcon ? (
+        <View style={styles.circleFrame}>
+          <Image source={faceSource} style={styles.faceIcon} resizeMode="contain" />
+        </View>
+      ) : (
+        <Canvas style={styles.ringCanvas}>
+          <Path path={arcPath} color="#0AA018" style="stroke" strokeWidth={strokeWidth} strokeCap="round" />
+        </Canvas>
+      )}
       {showCheck ? (
         <View style={styles.checkCircle}>
           <View style={styles.checkShort} />
@@ -272,8 +277,8 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
     <View style={[styles.root, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 14) }]}>
       <View style={styles.header}>
         <View style={styles.headerSide}>
-          <Pressable onPress={onBack} disabled={submitting}>
-            <Ionicons name="arrow-back" size={26} color="#2A2925" />
+          <Pressable onPress={onBack} disabled={submitting} hitSlop={10}>
+            <Ionicons name="arrow-back" size={APP_HEADER_BACK_ICON_SIZE} color={APP_HEADER_BACK_ICON_COLOR} />
           </Pressable>
         </View>
         <Image source={logoSource} style={styles.logo} resizeMode="contain" />
@@ -281,20 +286,27 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
       </View>
 
       <View style={styles.titleBlock}>
-        <Text style={styles.title}>{uiText("Verify Your Identity")}</Text>
-        <Text style={styles.subtitle}>{uiText("Take a selfie to verify your identity")}</Text>
+        <Text style={styles.title}>
+          {role === 'homeowner' ? (
+            <>Join as <Text style={styles.titleHighlight}>Homeowner</Text></>
+          ) : (
+            <>Join as <Text style={styles.titleHighlight}>Kasambahay</Text></>
+          )}
+        </Text>
+        {role !== 'homeowner' ? (
+          <Text style={styles.subtitle}>{uiText("Join as a kasambahay to offer your trusted household services.")}</Text>
+        ) : null}
       </View>
 
       <View style={styles.card}>
-        <RegistrationStepper
-          currentStep={role === 'kasambahay' ? 4 : 3}
-          totalSteps={role === 'kasambahay' ? 5 : 4}
-          title={role === 'kasambahay' ? uiText("Step 4: Face Verification") : uiText("Step 3: Face Verification")}
-          help={uiText('Position your face within the circle in a well-lit area.')}
-        />
-
         <View style={styles.cardContent}>
           <View>
+            <RegistrationStepper
+              currentStep={role === 'kasambahay' ? 4 : 3}
+              totalSteps={role === 'kasambahay' ? 5 : 4}
+              title={role === 'kasambahay' ? uiText("Step 4: Face Verification") : uiText("Step 3: Face Verification")}
+            />
+
             <View style={styles.verificationFrame}>
               {selfie ? (
                 <View style={styles.cameraCircle}>
@@ -349,14 +361,14 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
                     disabled={photoAccepted}
                     onPress={handleRetakePhoto}
                   >
-                    <Text style={[styles.primaryButtonText, styles.reviewButtonText, styles.retakeButtonText]}>{uiText('Retake Photo')}</Text>
+                    <Text style={[styles.primaryButtonText, styles.reviewButtonText, styles.retakeButtonText]}>{uiText('Retake')}</Text>
                   </Pressable>
                   <Pressable
                     style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, (!photoReady || previewError || photoAccepted) && { opacity: 0.6 }]}
                     disabled={!photoReady || previewError || photoAccepted}
                     onPress={handleUsePhoto}
                   >
-                    <Text style={[styles.primaryButtonText, styles.reviewButtonText]}>{uiText('Use This Photo')}</Text>
+                    <Text style={[styles.primaryButtonText, styles.reviewButtonText]}>{uiText('Next')}</Text>
                   </Pressable>
                 </>
               ) : !started ? (
@@ -409,13 +421,13 @@ const styles = StyleSheet.create({
   },
   card: {
     alignSelf: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: THEME.roundness.card,
+    backgroundColor: 'transparent',
+    borderRadius: 0,
     flex: 1,
-    marginTop: 10,
-    paddingBottom: 14,
+    marginTop: 6,
+    paddingBottom: 10,
     paddingHorizontal: 18,
-    paddingTop: 12,
+    paddingTop: 8,
     width: '92%',
   },
   cardContent: {
@@ -428,7 +440,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   previewImage: { width: '100%', height: '100%' },
-  retakeButton: { backgroundColor: THEME.colors.canvas },
+  retakeButton: { backgroundColor: '#ECECEC' },
   retakeButtonText: { color: THEME.colors.ink },
   reviewButtonText: { fontSize: 13, textAlign: 'center', paddingHorizontal: 6 },
   checkCircle: {
@@ -472,7 +484,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   headerSide: {
-    width: 44,
+    width: APP_HEADER_SIDE_WIDTH,
     justifyContent: 'center',
   },
   headerSideRight: {
@@ -482,14 +494,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginHorizontal: 12,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   divider: {
     height: 1,
     backgroundColor: THEME.colors.divider,
     marginTop: 6,
-    marginBottom: 10,
+    marginBottom: 12,
     width: '100%',
   },
   primaryButton: {
@@ -511,17 +522,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: THEME.typography.fontFamily.bodyMedium,
     lineHeight: 20,
-    marginTop: 16,
+    marginTop: 20,
+    paddingHorizontal: 12,
     minHeight: 40,
     textAlign: 'center',
   },
   helperInstruction: {
-    color: THEME.colors.textSecondary,
+    color: '#1F2937',
     fontFamily: THEME.typography.fontFamily.body,
+    fontSize: 14,
+    lineHeight: 20,
   },
   logo: {
-    height: 44,
-    width: 44,
+    height: APP_HEADER_LOGO_SIZE,
+    width: APP_HEADER_LOGO_SIZE,
   },
   ringBox: {
     alignItems: 'center',
@@ -529,6 +543,15 @@ const styles = StyleSheet.create({
     height: 226,
     justifyContent: 'center',
     width: 226,
+  },
+  circleFrame: {
+    width: 226,
+    height: 226,
+    borderRadius: 113,
+    borderWidth: 3,
+    borderColor: '#FFBB47',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   ringCanvas: {
     ...StyleSheet.absoluteFillObject,
@@ -543,9 +566,8 @@ const styles = StyleSheet.create({
     fontFamily: THEME.typography.fontFamily.bodyBold,
   },
   titleBlock: {
-    marginTop: 8,
+    marginTop: -2,
     paddingHorizontal: 24,
-    minHeight: 58,
   },
   title: {
     color: THEME.colors.ink,
@@ -553,6 +575,9 @@ const styles = StyleSheet.create({
     fontFamily: THEME.typography.fontFamily.display,
     lineHeight: 28,
     marginBottom: 4,
+  },
+  titleHighlight: {
+    color: THEME.colors.brand,
   },
   subtitle: {
     color: THEME.colors.textSecondary,
@@ -565,7 +590,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     height: 226,
     justifyContent: 'center',
-    marginTop: 12,
+    marginTop: 24,
     width: 226,
   },
 });
