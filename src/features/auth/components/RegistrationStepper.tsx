@@ -37,22 +37,17 @@ export function RegistrationStepper({ currentStep, title, help, totalSteps = 4 }
               <View
                 style={[
                   styles.stepCircle,
-                  isActive && styles.stepCircleActive,
-                  isDone && styles.stepCircleDone,
+                  (isActive || isDone) && styles.stepCircleActive,
                 ]}
               >
-                {isDone ? (
-                  <Ionicons name="checkmark" size={14} color={THEME.colors.white} />
-                ) : (
-                  <Text
-                    style={[
-                      styles.stepNumber,
-                      isActive && styles.stepNumberActive,
-                    ]}
-                  >
-                    {step}
-                  </Text>
-                )}
+                <Text
+                  style={[
+                    styles.stepNumber,
+                    (isActive || isDone) && styles.stepNumberActive,
+                  ]}
+                >
+                  {step}
+                </Text>
               </View>
             </View>
           );
@@ -68,14 +63,14 @@ export function RegistrationStepper({ currentStep, title, help, totalSteps = 4 }
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    marginBottom: 14,
-    paddingTop: 4,
+    marginBottom: 10,
+    paddingTop: 2,
   },
   stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 7,
   },
   stepItemWrapper: {
     flexDirection: 'row',
@@ -83,35 +78,37 @@ const styles = StyleSheet.create({
   },
   stepConnector: {
     width: 28,
-    height: 2.5,
-    backgroundColor: '#EBEBE6',
+    height: 2,
+    backgroundColor: '#E5E7EB',
     marginHorizontal: 4,
     borderRadius: 2,
   },
   stepConnectorActive: {
-    backgroundColor: THEME.colors.ink,
+    backgroundColor: THEME.colors.brand,
   },
   stepCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#F0F0EC',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#E5E7EB',
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepCircleActive: {
-    backgroundColor: THEME.colors.ink,
+    backgroundColor: THEME.colors.brand,
   },
   stepCircleDone: {
-    backgroundColor: THEME.colors.ink,
+    backgroundColor: THEME.colors.brand,
   },
   stepNumber: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: THEME.typography.fontFamily.display,
-    color: THEME.colors.textMuted,
+    color: '#1F2937',
+    fontWeight: '700',
   },
   stepNumberActive: {
     color: THEME.colors.white,
+    fontWeight: '700',
   },
   stepTitle: {
     fontSize: 15,
