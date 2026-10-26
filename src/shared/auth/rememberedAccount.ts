@@ -14,18 +14,18 @@ export async function getRememberedAccount(): Promise<RememberedAccount | null> 
   try {
     const raw = await SecureStore.getItemAsync(STORAGE_KEY);
     if (!raw) {
-      return { firstName: 'Daven', identifier: 'daventheabyss@gmail.com' };
+      return null;
     }
     const data = JSON.parse(raw);
     if (data && typeof data.firstName === 'string' && data.firstName.trim()) {
       return {
         firstName: data.firstName.trim(),
-        identifier: typeof data.identifier === 'string' && data.identifier.trim() ? data.identifier.trim() : 'daventheabyss@gmail.com',
+        identifier: typeof data.identifier === 'string' && data.identifier.trim() ? data.identifier.trim() : '',
       };
     }
-    return { firstName: 'Daven', identifier: 'daventheabyss@gmail.com' };
+    return null;
   } catch {
-    return { firstName: 'Daven', identifier: 'daventheabyss@gmail.com' };
+    return null;
   }
 }
 
