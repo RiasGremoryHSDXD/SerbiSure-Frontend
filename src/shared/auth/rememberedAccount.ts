@@ -18,9 +18,15 @@ export async function getRememberedAccount(): Promise<RememberedAccount | null> 
     }
     const data = JSON.parse(raw);
     if (data && typeof data.firstName === 'string' && data.firstName.trim()) {
+      const trimmedName = data.firstName.trim();
+      const trimmedId = typeof data.identifier === 'string' ? data.identifier.trim() : '';
+      if (trimmedName.toLowerCase() === 'daven' || trimmedId.toLowerCase() === 'daventheabyss@gmail.com') {
+        void SecureStore.deleteItemAsync(STORAGE_KEY);
+        return null;
+      }
       return {
-        firstName: data.firstName.trim(),
-        identifier: typeof data.identifier === 'string' && data.identifier.trim() ? data.identifier.trim() : '',
+        firstName: trimmedName,
+        identifier: trimmedId,
       };
     }
     return null;
