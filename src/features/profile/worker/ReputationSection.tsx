@@ -20,7 +20,6 @@ export function ReputationSection({ profile }: { profile: ProfileController }) {
       <View style={styles.sectionCardHeader}>
         <View style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
           <Text style={styles.sectionCardTitle}>{uiText("Reputation & Stats")}</Text>
-          <Text style={styles.sectionCardSubtitle}>{uiText("Verified client history")}</Text>
         </View>
         <View style={profile.isVerified ? styles.statusBadgeSuccess : styles.statusBadgeNeutral}>
           <Ionicons name={profile.isVerified ? "shield-checkmark" : "information-circle-outline"} size={13} color={profile.isVerified ? "#10B981" : "#6B7280"} />
