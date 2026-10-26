@@ -1,8 +1,28 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, Modal, Pressable, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  Modal,
+  Pressable,
+  TextInput,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Animated,
+  Dimensions,
+  Image,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import THEME from '../../../shared/theme/theme';
 import { changePassword } from '../api/accountApi';
+
+const logoSource = require('../../../../assets/serbisure-logo.png');
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 interface PasswordSecurityModalProps {
   visible: boolean;
@@ -16,6 +36,8 @@ export function PasswordSecurityModal({
   token,
 }: PasswordSecurityModalProps) {
   const { tr: uiText } = useUiLanguage();
+  const insets = useSafeAreaInsets();
+
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -91,7 +113,7 @@ export function PasswordSecurityModal({
             text: 'OK',
             onPress: () => {
               resetForm();
-              onClose();
+              handleClose();
             },
           },
         ]
@@ -103,178 +125,214 @@ export function PasswordSecurityModal({
       setIsSubmitting(false);
     }
   };
+  if (!visible) return null;
 
   return (
     <Modal
       visible={visible}
-      transparent
-      animationType="slide"
+      transparent={false}
+      animationType="none"
+      statusBarTranslucent
       onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
-        style={styles.modalOverlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <View
+        style={[
+          styles.container,
+          {
+            paddingTop: Math.max(insets.top, 14),
+            paddingBottom: Math.max(insets.bottom, 14),
+          },
+        ]}
       >
-        <View style={styles.modalContainer}>
-          {/* Header */}
-          <View style={styles.modalHeader}>
-            <View style={styles.headerTitleRow}>
-              <View style={styles.iconCircle}>
-                <Ionicons name="lock-closed" size={20} color="#FFB43B" />
-              </View>
-              <View style={{ marginLeft: 12 }}>
-                <Text style={styles.modalTitle}>{uiText("Password & Security")}</Text>
-                <Text style={styles.modalSubtitle}>{uiText("Manage your account credentials")}</Text>
-              </View>
-            </View>
-            <Pressable
-              onPress={handleClose}
-              disabled={isSubmitting}
-              hitSlop={10}
-              style={styles.closeButton}
-            >
-              <Ionicons name="close" size={22} color="#777" />
-            </Pressable>
+        {/* Global Aligned Header Matching Chat Screen & Booking Screens */}
+        <View style={styles.header}>
+          <Pressable onPress={handleClose} disabled={isSubmitting} style={styles.backBtn} hitSlop={12}>
+            <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
+          </Pressable>
+
+          <View style={styles.headerTitleCenter}>
+            <Text style={styles.headerTitle}>{uiText("Passwords & Security")}</Text>
           </View>
 
+          <View style={styles.headerRight}>
+            <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+          </View>
+        </View>
+
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
           <ScrollView
             showsVerticalScrollIndicator={false}
+            style={styles.scrollBody}
             contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
           >
             {/* Error Banner */}
             {errorMessage ? (
               <View style={styles.errorBanner}>
-                <Ionicons name="alert-circle" size={18} color="#C0392B" style={{ marginRight: 8 }} />
+                <Ionicons name="alert-circle" size={18} color="#FF3E3E" style={{ marginRight: 8 }} />
                 <Text style={styles.errorBannerText}>{errorMessage}</Text>
               </View>
             ) : null}
 
-            {/* Current Password */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{uiText("Current Password")}</Text>
-              <View style={styles.passwordInputContainer}>
-                <TextInput
-                  style={styles.passwordInput}
-                  secureTextEntry={!showCurrent}
-                  placeholder="Enter current password"
-                  placeholderTextColor="#999"
-                  value={currentPassword}
-                  onChangeText={(val) => {
-                    setCurrentPassword(val);
-                    if (errorMessage) setErrorMessage(null);
-                  }}
-                  autoCapitalize="none"
-                />
-                <Pressable
-                  onPress={() => setShowCurrent(!showCurrent)}
-                  style={styles.eyeBtn}
-                  hitSlop={8}
-                >
-                  <Ionicons
-                    name={showCurrent ? 'eye-off-outline' : 'eye-outline'}
-                    size={20}
-                    color="#888"
-                  />
-                </Pressable>
-              </View>
-            </View>
+            {/* Change Password Card */}
+            <View style={styles.card}>
+              <Text style={styles.cardHeaderTitle}>{uiText("CHANGE PASSWORD")}</Text>
 
-            {/* New Password */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{uiText("New Password")}</Text>
-              <View style={styles.passwordInputContainer}>
-                <TextInput
-                  style={styles.passwordInput}
-                  secureTextEntry={!showNew}
-                  placeholder="At least 8 characters"
-                  placeholderTextColor="#999"
-                  value={newPassword}
-                  onChangeText={(val) => {
-                    setNewPassword(val);
-                    if (errorMessage) setErrorMessage(null);
-                  }}
-                  autoCapitalize="none"
-                />
-                <Pressable
-                  onPress={() => setShowNew(!showNew)}
-                  style={styles.eyeBtn}
-                  hitSlop={8}
-                >
-                  <Ionicons
-                    name={showNew ? 'eye-off-outline' : 'eye-outline'}
-                    size={20}
-                    color="#888"
+              {/* Current Password */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{uiText("Current Password")}</Text>
+                <View style={styles.passwordInputContainer}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    secureTextEntry={!showCurrent}
+                    placeholder="Enter current password"
+                    placeholderTextColor="#999"
+                    value={currentPassword}
+                    onChangeText={(val) => {
+                      setCurrentPassword(val);
+                      if (errorMessage) setErrorMessage(null);
+                    }}
+                    autoCapitalize="none"
                   />
-                </Pressable>
+                  <Pressable
+                    onPress={() => setShowCurrent(!showCurrent)}
+                    style={styles.eyeBtn}
+                    hitSlop={8}
+                  >
+                    <Ionicons
+                      name={showCurrent ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color="#727272"
+                    />
+                  </Pressable>
+                </View>
               </View>
-            </View>
 
-            {/* Confirm New Password */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{uiText("Confirm New Password")}</Text>
-              <View style={styles.passwordInputContainer}>
-                <TextInput
-                  style={styles.passwordInput}
-                  secureTextEntry={!showConfirm}
-                  placeholder="Re-enter new password"
-                  placeholderTextColor="#999"
-                  value={confirmPassword}
-                  onChangeText={(val) => {
-                    setConfirmPassword(val);
-                    if (errorMessage) setErrorMessage(null);
-                  }}
-                  autoCapitalize="none"
-                />
-                <Pressable
-                  onPress={() => setShowConfirm(!showConfirm)}
-                  style={styles.eyeBtn}
-                  hitSlop={8}
-                >
-                  <Ionicons
-                    name={showConfirm ? 'eye-off-outline' : 'eye-outline'}
-                    size={20}
-                    color="#888"
+              {/* New Password */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{uiText("New Password")}</Text>
+                <View style={styles.passwordInputContainer}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    secureTextEntry={!showNew}
+                    placeholder="At least 8 characters"
+                    placeholderTextColor="#999"
+                    value={newPassword}
+                    onChangeText={(val) => {
+                      setNewPassword(val);
+                      if (errorMessage) setErrorMessage(null);
+                    }}
+                    autoCapitalize="none"
                   />
-                </Pressable>
+                  <Pressable
+                    onPress={() => setShowNew(!showNew)}
+                    style={styles.eyeBtn}
+                    hitSlop={8}
+                  >
+                    <Ionicons
+                      name={showNew ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color="#727272"
+                    />
+                  </Pressable>
+                </View>
               </View>
-            </View>
 
-            {/* Requirements Indicator */}
-            <View style={styles.requirementsBox}>
-              <View style={styles.requirementRow}>
-                <Ionicons
-                  name={isMinLength ? 'checkmark-circle' : 'ellipse-outline'}
-                  size={15}
-                  color={isMinLength ? '#27AE60' : '#A0AEC0'}
-                />
-                <Text style={[styles.requirementText, isMinLength && styles.requirementTextActive]}>
-                  {uiText("At least 8 characters long")}</Text>
+              {/* Confirm New Password */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{uiText("Confirm New Password")}</Text>
+                <View style={styles.passwordInputContainer}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    secureTextEntry={!showConfirm}
+                    placeholder="Re-enter new password"
+                    placeholderTextColor="#999"
+                    value={confirmPassword}
+                    onChangeText={(val) => {
+                      setConfirmPassword(val);
+                      if (errorMessage) setErrorMessage(null);
+                    }}
+                    autoCapitalize="none"
+                  />
+                  <Pressable
+                    onPress={() => setShowConfirm(!showConfirm)}
+                    style={styles.eyeBtn}
+                    hitSlop={8}
+                  >
+                    <Ionicons
+                      name={showConfirm ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color="#727272"
+                    />
+                  </Pressable>
+                </View>
               </View>
-              <View style={styles.requirementRow}>
-                <Ionicons
-                  name={isMatching ? 'checkmark-circle' : 'ellipse-outline'}
-                  size={15}
-                  color={isMatching ? '#27AE60' : '#A0AEC0'}
-                />
-                <Text style={[styles.requirementText, isMatching && styles.requirementTextActive]}>
-                  {uiText("Passwords match")}</Text>
+
+              {/* Requirements Indicator */}
+              <View style={styles.requirementsBox}>
+                <View style={styles.requirementRow}>
+                  <Ionicons
+                    name={isMinLength ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={16}
+                    color={isMinLength ? '#00B13B' : '#A0AEC0'}
+                  />
+                  <Text style={[styles.requirementText, isMinLength && styles.requirementTextActive]}>
+                    {uiText("At least 8 characters long")}
+                  </Text>
+                </View>
+                <View style={styles.requirementRow}>
+                  <Ionicons
+                    name={isMatching ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={16}
+                    color={isMatching ? '#00B13B' : '#A0AEC0'}
+                  />
+                  <Text style={[styles.requirementText, isMatching && styles.requirementTextActive]}>
+                    {uiText("Passwords match")}
+                  </Text>
+                </View>
               </View>
+
+              {/* Submit Button */}
+              <Pressable
+                style={[
+                  styles.saveModalBtn,
+                  (!canSubmit || isSubmitting) && styles.saveModalBtnDisabled,
+                ]}
+                disabled={!canSubmit || isSubmitting}
+                onPress={handleSubmit}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={styles.saveModalBtnText}>{uiText("Update Password")}</Text>
+                )}
+              </Pressable>
             </View>
 
             {/* Security Tip Card */}
-            <View style={styles.tipCard}>
-              <Ionicons name="shield-checkmark-outline" size={18} color="#D68910" style={{ marginRight: 8, marginTop: 1 }} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.tipTitle}>{uiText("Security Tip")}</Text>
-                <Text style={styles.tipText}>
-                  {uiText("Use a strong, unique password with a mix of letters, numbers, and symbols to protect your Serbisure account.")}</Text>
+            <View style={styles.card}>
+              <View style={styles.tipRow}>
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={20}
+                  color="#FFB380"
+                  style={{ marginRight: 10, marginTop: 1 }}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.tipTitle}>{uiText("Security Tip")}</Text>
+                  <Text style={styles.tipText}>
+                    {uiText("Use a strong, unique password with a mix of letters, numbers, and symbols to protect your SerbiSure account.")}
+                  </Text>
+                </View>
               </View>
             </View>
 
-            {/* Data Privacy & Account Deletion Controls (Tier 3-5) */}
-            <View style={styles.privacySection}>
-              <Text style={styles.privacySectionTitle}>{uiText("DATA & PRIVACY")}</Text>
-
+            {/* Data & Privacy Section */}
+            <Text style={styles.sectionHeader}>{uiText("DATA & PRIVACY")}</Text>
+            <View style={styles.card}>
               {/* Export Data Button */}
               <Pressable
                 style={styles.privacyRowBtn}
@@ -295,9 +353,7 @@ export function PasswordSecurityModal({
                   }
                 }}
               >
-                <View style={styles.privacyIconWrap}>
-                  <Ionicons name="download-outline" size={18} color="#4B5563" />
-                </View>
+                <Ionicons name="download-outline" size={20} color="#0D0D11" style={styles.privacyRowIcon} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.privacyBtnText}>{uiText("Download Personal Data Archive")}</Text>
                   <Text style={styles.privacyBtnSubtext}>{uiText("Export profile, bookings history, and reviews")}</Text>
@@ -305,9 +361,11 @@ export function PasswordSecurityModal({
                 <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
               </Pressable>
 
+              <View style={styles.cardDivider} />
+
               {/* Delete Account Button */}
               <Pressable
-                style={[styles.privacyRowBtn, styles.deleteAccountRow]}
+                style={styles.privacyRowBtn}
                 onPress={() => {
                   if (!token) return;
                   Alert.prompt
@@ -366,285 +424,205 @@ export function PasswordSecurityModal({
                     );
                 }}
               >
-                <View style={[styles.privacyIconWrap, { backgroundColor: '#FEE2E2' }]}>
-                  <Ionicons name="trash-outline" size={18} color="#DC2626" />
-                </View>
+                <Ionicons name="trash-outline" size={20} color="#FF3E3E" style={styles.privacyRowIcon} />
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.privacyBtnText, { color: '#DC2626' }]}>{uiText("Deactivate & Delete Account")}</Text>
+                  <Text style={[styles.privacyBtnText, { color: '#FF3E3E' }]}>{uiText("Deactivate & Delete Account")}</Text>
                   <Text style={styles.privacyBtnSubtext}>{uiText("Anonymize data and deactivate profile")}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={16} color="#DC2626" />
+                <Ionicons name="chevron-forward" size={16} color="#FF3E3E" />
               </Pressable>
             </View>
-
           </ScrollView>
-
-          {/* Action Buttons */}
-          <View style={styles.modalActionButtons}>
-            <Pressable
-              style={styles.cancelModalBtn}
-              disabled={isSubmitting}
-              onPress={handleClose}
-            >
-              <Text style={styles.cancelModalBtnText}>{uiText("Cancel")}</Text>
-            </Pressable>
-
-            <Pressable
-              style={[
-                styles.saveModalBtn,
-                (!canSubmit || isSubmitting) && styles.saveModalBtnDisabled,
-              ]}
-              disabled={!canSubmit || isSubmitting}
-              onPress={handleSubmit}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <Text style={styles.saveModalBtnText}>{uiText("Update Password")}</Text>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
+  container: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    justifyContent: 'flex-end',
+    backgroundColor: '#F6F5F2',
   },
-  modalContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    maxHeight: '90%',
-    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  modalHeader: {
-    flexDirection: 'row',
+  header: {
     alignItems: 'center',
+    flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: 22,
-    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0EAE1',
+    borderBottomColor: '#EBE9E4',
+    backgroundColor: '#F6F5F2',
   },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  iconCircle: {
+  backBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFF4E5',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: '700',
+  headerTitleCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 19,
+    fontWeight: '800',
     color: '#1A1A1A',
+    fontFamily: THEME.typography.fontFamily.display,
   },
-  modalSubtitle: {
-    fontSize: 12,
-    color: '#777',
-    marginTop: 2,
+  headerRight: {
+    width: 40,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
   },
-  closeButton: {
-    padding: 6,
+  logo: {
+    height: 34,
+    width: 34,
+  },
+  scrollBody: {
+    flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 18,
-    paddingBottom: 10,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 36,
   },
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FDECEA',
-    borderRadius: 10,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 10,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#FADBD8',
   },
   errorBannerText: {
-    flex: 1,
+    color: '#FF3E3E',
     fontSize: 13,
-    color: '#C0392B',
-    fontWeight: '500',
+    fontWeight: '600',
+    flex: 1,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+  },
+  cardHeaderTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#727272',
+    letterSpacing: 0.8,
+    marginBottom: 14,
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   inputLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#333',
+    color: '#0D0D11',
     marginBottom: 6,
   },
   passwordInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9F8F5',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E8E2D8',
-    borderRadius: 12,
+    borderColor: '#EFEFEF',
+    borderRadius: 14,
     paddingHorizontal: 14,
+    height: 48,
   },
   passwordInput: {
     flex: 1,
-    height: 46,
     fontSize: 14,
-    color: '#1A1A1A',
+    color: '#0D0D11',
+    fontWeight: '500',
   },
   eyeBtn: {
     padding: 6,
   },
   requirementsBox: {
-    backgroundColor: '#FAFAF8',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#EFECE6',
+    marginTop: 4,
+    marginBottom: 18,
+    gap: 8,
   },
   requirementRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 3,
+    gap: 8,
   },
   requirementText: {
-    fontSize: 12,
-    color: '#888',
-    marginLeft: 8,
+    fontSize: 12.5,
+    color: '#727272',
+    fontWeight: '500',
   },
   requirementTextActive: {
-    color: '#27AE60',
+    color: '#0D0D11',
     fontWeight: '600',
-  },
-  tipCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#FFFDF9',
-    borderWidth: 1,
-    borderColor: '#FDEBD0',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-  },
-  tipTitle: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    color: '#B9770E',
-    marginBottom: 2,
-  },
-  tipText: {
-    fontSize: 11.5,
-    color: '#666',
-    lineHeight: 16,
-  },
-  modalActionButtons: {
-    flexDirection: 'row',
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    gap: 12,
-  },
-  cancelModalBtn: {
-    flex: 1,
-    height: 46,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#DDD',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFF',
-  },
-  cancelModalBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
   },
   saveModalBtn: {
-    flex: 2,
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: '#FFB43B',
+    backgroundColor: '#0D0D11',
+    borderRadius: 14,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#FFB43B',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 3,
   },
   saveModalBtnDisabled: {
-    backgroundColor: '#E0DCD5',
-    shadowOpacity: 0,
-    elevation: 0,
+    opacity: 0.45,
   },
   saveModalBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  tipRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  tipTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFF',
+    color: '#0D0D11',
+    marginBottom: 3,
   },
-  privacySection: {
-    marginTop: 14,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F0EAE1',
+  tipText: {
+    fontSize: 12.5,
+    color: '#727272',
+    lineHeight: 18,
   },
-  privacySectionTitle: {
-    fontSize: 11,
+  sectionHeader: {
+    fontSize: 12,
     fontWeight: '800',
-    color: '#888',
+    color: '#727272',
     letterSpacing: 0.8,
-    marginBottom: 10,
+    marginBottom: 8,
+    paddingHorizontal: 4,
   },
   privacyRowBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    paddingVertical: 10,
   },
-  deleteAccountRow: {
-    backgroundColor: '#FFF5F5',
-    borderColor: '#FECACA',
-  },
-  privacyIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#E5E7EB',
-    alignItems: 'center',
-    justifyContent: 'center',
+  privacyRowIcon: {
     marginRight: 12,
   },
   privacyBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#0D0D11',
+    marginBottom: 2,
   },
   privacyBtnSubtext: {
-    fontSize: 11,
-    color: '#6B7280',
-    marginTop: 1,
+    fontSize: 12,
+    color: '#727272',
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: '#F6F5F2',
+    marginVertical: 4,
   },
 });
-
