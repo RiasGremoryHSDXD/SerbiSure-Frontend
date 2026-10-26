@@ -194,7 +194,7 @@ export function faceLandmarkerResultToLandmarkFrame(
       bounds: boundsFromPoints(points),
       points,
       signals: {
-        mirrored,
+        mirrored: false,
       },
       timestamp,
     },
