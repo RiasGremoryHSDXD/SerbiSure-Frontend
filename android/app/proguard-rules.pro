@@ -11,4 +11,25 @@
 -keep class com.swmansion.reanimated.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 
-# Add any project specific keep options here:
+# React Native & Hermes
+-keep class com.facebook.hermes.unicode.** { *; }
+-keep class com.facebook.jni.** { *; }
+-keep class com.facebook.react.** { *; }
+
+# VisionCamera & Worklets
+-keep class com.mrousavy.camera.** { *; }
+-keep class com.worklets.** { *; }
+
+# MediaPipe & TensorFlow Lite
+-keep class com.google.mediapipe.** { *; }
+-keep class org.tensorflow.lite.** { *; }
+
+# Skia
+-keep class com.shopify.reactnative.skia.** { *; }
+
+# Suppress compile-time / annotation processor warnings in R8
+-dontwarn com.google.mediapipe.proto.CalculatorProfileProto$CalculatorProfile
+-dontwarn com.google.mediapipe.proto.GraphTemplateProto$CalculatorGraphTemplate
+-dontwarn javax.lang.model.**
+-dontwarn autovalue.shaded.**
+-dontwarn com.google.auto.value.**
