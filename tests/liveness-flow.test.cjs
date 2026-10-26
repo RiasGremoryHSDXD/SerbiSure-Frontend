@@ -35,7 +35,7 @@ const tick = async () => { await new Promise(resolve => setImmediate(resolve)); 
 function harness(t, extraMocks = {}) {
   const alerts = [], deletedPhotos = [];
   const native = { StyleSheet: { create: value => value }, Alert: { alert: (...args) => alerts.push(args) } };
-  for (const type of ['View', 'Text', 'Pressable', 'Image', 'ActivityIndicator', 'TextInput', 'KeyboardAvoidingView', 'ScrollView']) native[type] = type;
+  for (const type of ['View', 'Text', 'Pressable', 'Image', 'ActivityIndicator', 'TextInput', 'KeyboardAvoidingView', 'ScrollView', 'Modal']) native[type] = type;
   native.Platform = { OS: 'android', select: values => values.android || values.default };
   native.ScrollView = React.forwardRef((props, ref) => {
     React.useImperativeHandle(ref, () => ({ scrollTo() {} }));
@@ -50,6 +50,7 @@ function harness(t, extraMocks = {}) {
     '../../../shared/theme/theme': { default: { colors: {}, roundness: {}, typography: { fontFamily: {}, tracking: {} } } },
     '../../auth/components/RegistrationStepper': { RegistrationStepper: () => null },
     './IDPhotoModal': { IDPhotoModal: () => null },
+    '../../../shared/components/AppHeader': { APP_HEADER_SIDE_WIDTH: 44, APP_HEADER_LOGO_SIZE: 44, APP_HEADER_BACK_ICON_SIZE: 26, APP_HEADER_BACK_ICON_COLOR: '#2A2925', AppHeader: () => null },
     '../../../shared/api/config': { API_BASE_URL: 'http://test.local' },
     '../../../shared/api/httpClient': { fetchWithTimeout: async () => ({ json: async () => ({ documents: [] }) }) },
     ...extraMocks,
@@ -85,7 +86,7 @@ function harness(t, extraMocks = {}) {
     container.children.forEach(visit); return result;
   };
   const text = node => node.text || node.children.map(text).join('');
-  return { load, render, unmount, alerts, deletedPhotos, nodes, button: label => nodes().find(node => node.type === 'Pressable' && text(node) === label) };
+  return { load, render, unmount, alerts, deletedPhotos, nodes, button: label => nodes().find(node => node.type === 'Pressable' && (text(node) === label || (label === 'Use This Photo' && text(node) === 'Next') || (label === 'Retake Photo' && text(node) === 'Retake'))) };
 }
 
 test('capture pauses for photo review and only confirmation submits the selfie once', async t => {
