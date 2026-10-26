@@ -9,7 +9,7 @@ export const PROFILE_COPY = {
     pendingTitle: 'ID Verification Pending', pendingDescription: 'Your National ID is under review. Tap to check status.',
     bioHelp: "Write a short bio describing your household, preferences, or what you're looking for in a Kasambahay (up to 500 characters).",
     bioPlaceholder: 'e.g. I am a homeowner looking for a reliable, honest helper who can assist with daily housekeeping...',
-    sentimentKey: 'workerSentiment',
+    sentimentKey: 'clientSentiment',
   },
   kasambahay: {
     name: 'Kasambahay', addTags: 'Add your skills & preferences', aboutSubtitle: 'Tell clients about yourself',
@@ -21,7 +21,7 @@ export const PROFILE_COPY = {
     pendingTitle: 'Document Verification Pending', pendingDescription: 'Your uploaded clearances are under review. Tap to check status.',
     bioHelp: 'Write a short bio describing your background, skills, or experience (up to 500 characters).',
     bioPlaceholder: 'e.g. Hi! I have 5 years of housekeeping and cooking experience in Cagayan de Oro...',
-    sentimentKey: 'clientSentiment',
+    sentimentKey: 'workerSentiment',
   },
 } as const;
 

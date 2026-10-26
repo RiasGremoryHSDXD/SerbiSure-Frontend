@@ -1094,7 +1094,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   statusBadgeVerified: {
-    backgroundColor: '#F6F5F2',
+    backgroundColor: '#10B981',
   },
   statusBadgePending: {
     backgroundColor: '#F6F5F2',
@@ -1108,7 +1108,8 @@ const styles = StyleSheet.create({
     color: '#0D0D11',
   },
   statusBadgeTextVerified: {
-    color: '#00B13B',
+    color: '#FFFFFF',
+    fontWeight: '800',
   },
   statusBadgeTextPending: {
     color: '#FFB380',

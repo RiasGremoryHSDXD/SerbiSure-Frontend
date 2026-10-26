@@ -462,7 +462,7 @@ export const profileStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#ECFDF5',
+    backgroundColor: '#10B981',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 9999,
@@ -470,8 +470,8 @@ export const profileStyles = StyleSheet.create({
   statusBadgeSuccessText: {
     fontFamily: THEME.typography.fontFamily.secondaryBold,
     fontSize: 11,
-    fontWeight: '700',
-    color: '#065F46',
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   statusBadgeNeutral: {
     backgroundColor: '#F3F4F6',
@@ -1019,7 +1019,7 @@ export const profileStyles = StyleSheet.create({
     gap: 8,
   },
   verificationPillVerified: {
-    backgroundColor: '#ECFDF5',
+    backgroundColor: '#10B981',
   },
   verificationPillPending: {
     backgroundColor: '#FEF3C7',
@@ -1033,7 +1033,8 @@ export const profileStyles = StyleSheet.create({
     color: '#6B7280',
   },
   verificationPillTextVerified: {
-    color: '#0D0D11',
+    color: '#FFFFFF',
+    fontWeight: '800',
   },
   verificationPillTextPending: {
     color: '#B45309',

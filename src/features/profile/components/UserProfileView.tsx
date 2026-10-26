@@ -286,7 +286,7 @@ export function UserProfileView({
             {/* Sentiment Track */}
             <View style={styles.sentimentRow}>
               <Text style={styles.sentimentLabel}>
-                {displayRole.toLowerCase().includes('kasambahay') ? t.clientSentiment : (t.workerSentiment || 'Client Sentiment')}
+                {displayRole.toLowerCase().includes('kasambahay') ? (t.workerSentiment || 'Worker Sentiment') : (t.clientSentiment || 'Client Sentiment')}
               </Text>
               <View style={styles.sentimentTrack}>
                 <View
