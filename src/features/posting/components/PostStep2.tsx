@@ -1,9 +1,7 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
-import { WorkScheduleFields } from '../../bookings/components/WorkScheduleFields';
 import { WorkLocationFields } from '../../bookings/components/WorkLocationFields';
 import React from 'react';
-import { Text, View, Pressable } from 'react-native';
-
+import { Text, View, Pressable, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { postingStyles as styles } from '../styles';
@@ -13,94 +11,92 @@ export function PostStep2({ form }: { form: PostFormController }) {
   const { tr: uiText } = useUiLanguage();
   const {
     step,
+    config,
+    user,
+    address,
     engagementType,
-    setupPreference,
-    setSetupPreference,
-    selectedTime,
-    setSelectedTime,
-    handleEngagementChange,
+    instructions,
+    setInstructions,
+    wagePolicy,
+    offerAmount,
+    setOfferAmount,
+    applyUserProfileAddress,
+    fieldErrors,
+    isPosting,
   } = form;
-  return (<>
-    {/* STEP 2: ARRANGEMENT & SETUP */}
-    {step === 2 && (
-      <View style={styles.step2Container}>
-        {/* 1. Engagement Type: Short-term vs Long-term */}
-        <Text style={styles.sectionLabel}>{uiText("ENGAGEMENT TYPE")}</Text>
-        <View style={styles.typeToggleRow}>
-          <Pressable
-            style={[styles.typeCard, engagementType === 'short' && styles.typeCardActive]}
-            onPress={() => handleEngagementChange('short')}
-          >
-            <Ionicons
-              name="time"
-              size={24}
-              color={engagementType === 'short' ? '#0D0D11' : '#FFB380'}
-              style={styles.typeIcon}
-            />
-            <Text style={styles.typeTitle}>{uiText("Short-term")}</Text>
-          </Pressable>
 
+  if (step !== 2) return null;
+
+  const num = Number(offerAmount.replace(/[^0-9.]/g, ''));
+  const minRate = wagePolicy ? Number(wagePolicy.minimum_rate) : (engagementType === 'short' ? 350 : 6500);
+  const isBelowMin = offerAmount.trim().length > 0 && num > 0 && num < minRate;
+
+  return (
+    <View style={styles.stepContainer}>
+      {/* 1. Use Profile Address (if available) */}
+      {user && (user.barangay || user.city) ? (
+        <View style={[styles.locationHeaderRow, { justifyContent: 'flex-end', marginBottom: 6 }]}>
           <Pressable
-            style={[styles.typeCard, engagementType === 'long' && styles.typeCardActive]}
-            onPress={() => handleEngagementChange('long')}
+            accessibilityRole="button"
+            style={styles.useProfileAddressBtn}
+            hitSlop={8}
+            onPress={applyUserProfileAddress}
+            disabled={isPosting}
           >
-            <Ionicons
-              name="calendar"
-              size={24}
-              color={engagementType === 'long' ? '#0D0D11' : '#FFB380'}
-              style={styles.typeIcon}
-            />
-            <Text style={styles.typeTitle}>{uiText("Long-term")}</Text>
+            <Ionicons name="location" size={13} color="#EA580C" />
+            <Text style={styles.useProfileAddressText}>{uiText("Use Profile Address")}</Text>
           </Pressable>
         </View>
+      ) : null}
 
-        {/* 2. Setup Preference: Stay-in vs Stay-out */}
-        {engagementType === 'long' && <>
-        <Text style={[styles.sectionLabel, { marginTop: 14 }]}>{uiText("WORK SETUP PREFERENCE")}</Text>
-        <View style={styles.typeToggleRow}>
-          <Pressable
-            style={[styles.typeCard, setupPreference === 'stay-out' && styles.typeCardActive]}
-            onPress={() => setSetupPreference('stay-out')}
-          >
-            <Ionicons
-              name="walk"
-              size={24}
-              color={setupPreference === 'stay-out' ? '#0D0D11' : '#FFB380'}
-              style={styles.typeIcon}
-            />
-            <Text style={styles.typeTitle}>{uiText("Stay-out")}</Text>
-          </Pressable>
+      <WorkLocationFields
+        form={address}
+        disabled={isPosting}
+        hideDetailedAddress={config.role === 'kasambahay'}
+        errors={fieldErrors}
+      />
 
-          <Pressable
-            style={[styles.typeCard, setupPreference === 'stay-in' && styles.typeCardActive]}
-            onPress={() => setSetupPreference('stay-in')}
-          >
-            <Ionicons
-              name="home"
-              size={24}
-              color={setupPreference === 'stay-in' ? '#0D0D11' : '#FFB380'}
-              style={styles.typeIcon}
-            />
-            <Text style={styles.typeTitle}>{uiText("Stay-in")}</Text>
-          </Pressable>
-        </View>
-        </>}
+      {/* 2. Instructions / About You (Optional) */}
+      <Text style={[styles.sectionHeader, { marginTop: 14 }]}>
+        {uiText(config.role === 'kasambahay' ? "ABOUT YOU (OPTIONAL)" : "INSTRUCTIONS (OPTIONAL)")}
+      </Text>
+      <TextInput
+        style={styles.multilineInput}
+        multiline
+        numberOfLines={4}
+        placeholder={uiText(config.instructionsPlaceholder)}
+        placeholderTextColor="#9CA3AF"
+        value={instructions}
+        onChangeText={setInstructions}
+        editable={!isPosting}
+      />
 
-        {engagementType && <WorkScheduleFields
-          bookingType={engagementType === 'long' ? 'long_term' : 'short_term'}
-          startDate={form.startDate} endDate={form.endDate} workHours={form.workHours} days={form.workDays} shift={selectedTime}
-          onStartDate={form.setStartDate} onEndDate={form.setEndDate} onWorkHours={form.setWorkHours}
-          onDays={form.setWorkDays} onShift={setSelectedTime}
-          ongoing={form.ongoing} onOngoing={form.setOngoing}
-          disabled={!form.visible || form.isPosting}
-        />}
-        {engagementType === 'long' && <View style={{ marginTop: 14 }}>
-          <Text style={styles.sectionLabel}>{uiText("WORK REGION")}</Text>
-          <WorkLocationFields form={form} regionOnly disabled={!form.visible || form.isPosting} />
-          <Text style={styles.longTermScheduleText}>{uiText("Complete the Province, City / Municipality, Barangay and street address in Step 3.")}</Text>
-        </View>}
-
+      {/* 3. Offer Amount */}
+      <Text style={[styles.sectionHeader, { marginTop: 14 }]}>
+        {uiText("OFFER AMOUNT")}
+      </Text>
+      <View style={[styles.offerInputWrapper, (fieldErrors.rate || isBelowMin) && styles.offerInputWrapperInvalid]}>
+        <Text style={[styles.currencyPrefix, isBelowMin && { color: '#DC2626' }]}>₱</Text>
+        <TextInput
+          style={[styles.offerInput, isBelowMin && { color: '#DC2626' }]}
+          value={offerAmount}
+          onChangeText={setOfferAmount}
+          keyboardType="decimal-pad"
+          placeholder={wagePolicy?.minimum_rate || (engagementType === 'short' ? '350' : '6500')}
+          placeholderTextColor="#9CA3AF"
+          editable={!isPosting}
+        />
+        <Text style={[styles.rateUnitSuffix, isBelowMin && { color: '#DC2626' }]}>
+          {engagementType === 'short' ? uiText("/ day") : uiText("/ month")}
+        </Text>
       </View>
-    )}
-  </>);
+
+      {/* Only show minimum wage note if user inputs below minimum */}
+      {isBelowMin ? (
+        <Text style={styles.invalidRateHint}>
+          {uiText("Minimum: ₱")}{Number(minRate).toLocaleString('en-PH')} / {wagePolicy?.rate_period === 'day' || engagementType === 'short' ? uiText("day") : uiText("month")}
+        </Text>
+      ) : null}
+    </View>
+  );
 }
