@@ -1,15 +1,12 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ROLE_CONFIG, type Role } from '../../../app/roleConfig';
 import { useLanguage } from '../../../shared/localization/LanguageContext';
-import { AppHeader } from '../../../shared/components/AppHeader';
 import THEME from '../../../shared/theme/theme';
 import { useUser } from '../../auth/session/UserContext';
 import { useJobsActivity, type SavedJobItem } from '../../bookings/store/savedJobsStore';
 import { ChatDetailScreen } from '../../chat/components/ChatDetailScreen';
 import { chatStore } from '../../chat/store/chatStore';
-import { NotificationBell } from '../../notifications/NotificationContext';
 import { UserProfileModal } from '../../profile/components/UserProfileModal';
 import { BrowseActivityCard } from '../components/BrowseActivityCard';
 import { BrowseHeader, BrowseFilters } from '../components/BrowseHeader';
@@ -28,6 +25,7 @@ interface Props {
   avatarUri?: string | null;
   onViewProfile?: () => void;
   token?: string | null;
+  onBookingsPress?: () => void;
 }
 
 interface ActiveChat {
@@ -39,9 +37,8 @@ interface ActiveChat {
   initialReplyTo?: { author: string; text: string };
 }
 
-export function BrowseScreen({ role, avatarUri, onViewProfile, token }: Props) {
+export function BrowseScreen({ role, avatarUri, onViewProfile, token, onBookingsPress }: Props) {
   const { tr: uiText } = useLanguage();
-  const insets = useSafeAreaInsets();
   const { user } = useUser();
   const effectiveToken = token || user.token;
   const findingJobs = role === 'kasambahay';
@@ -50,6 +47,7 @@ export function BrowseScreen({ role, avatarUri, onViewProfile, token }: Props) {
   const { items, setItems, isLoading, error: feedError, fetchItems, fetchedCount } = useExploreFeed(role, effectiveToken, mapPost);
   const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FILTERS);
   const [filterVisible, setFilterVisible] = useState(false);
+  const [quickFiltersVisible, setQuickFiltersVisible] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [subTab, setSubTab] = useState<BrowseTab>('explore');
   const [selectedPost, setSelectedPost] = useState<SavedJobItem | null>(null);
@@ -57,7 +55,72 @@ export function BrowseScreen({ role, avatarUri, onViewProfile, token }: Props) {
   const [activeChat, setActiveChat] = useState<ActiveChat | null>(null);
   const { savedJobs, savedLoadError, loadingSaved, appliedJobs, savedCount, appliedCount,
     isSaved, isApplied, isJobClosed, toggleSave, refreshSavedFromBackend } = useJobsActivity();
-  const visiblePosts = findingJobs ? items.filter(post => !isJobClosed(post)) : items;
+  const visiblePosts = useMemo(() => {
+    let posts = findingJobs ? items.filter(post => !isJobClosed(post)) : [...items];
+
+    // 1. Service Category filter
+    if (filters.categories && filters.categories.length > 0) {
+      posts = posts.filter(post => {
+        const postTags = [post.roleTag, post.title, ...(post.tags || [])]
+          .filter(Boolean)
+          .map(t => (t || '').toLowerCase().replace(/[-_\s]/g, ''));
+        return filters.categories.some(cat => {
+          const normCat = cat.toLowerCase().replace(/[-_\s]/g, '');
+          return postTags.some(tag => tag.includes(normCat) || normCat.includes(tag));
+        });
+      });
+    }
+
+    // 2. Booking Type filter
+    if (filters.bookingType) {
+      posts = posts.filter(post => {
+        const term = (post.termTag || '').toLowerCase();
+        if (filters.bookingType === 'short_term') return term.includes('short');
+        if (filters.bookingType === 'long_term') return term.includes('long');
+        return true;
+      });
+    }
+
+    // 3. Work Setup filter
+    if (filters.workSetup) {
+      posts = posts.filter(post => {
+        const setup = (post.setupTag || '').toLowerCase().replace(/[-_\s]/g, '');
+        const target = filters.workSetup?.toLowerCase().replace(/[-_\s]/g, '');
+        return target ? setup.includes(target) : true;
+      });
+    }
+
+    // 4. Max Rate filter
+    if (filters.maxRate !== null && filters.maxRate !== undefined) {
+      posts = posts.filter(post => {
+        const num = parseFloat(String(post.price || '').replace(/[^0-9.]/g, ''));
+        return isNaN(num) || num <= filters.maxRate!;
+      });
+    }
+
+    // 5. Location filter
+    if (filters.location && filters.location.trim()) {
+      const locTarget = filters.location.trim().toLowerCase();
+      posts = posts.filter(post => (post.location || '').toLowerCase().includes(locTarget));
+    }
+
+    // 6. Sorting
+    if (filters.sortBy === 'rate_asc') {
+      posts.sort((a, b) => {
+        const rateA = parseFloat(String(a.price || '').replace(/[^0-9.]/g, '')) || 0;
+        const rateB = parseFloat(String(b.price || '').replace(/[^0-9.]/g, '')) || 0;
+        return rateA - rateB;
+      });
+    } else if (filters.sortBy === 'rate_desc') {
+      posts.sort((a, b) => {
+        const rateA = parseFloat(String(a.price || '').replace(/[^0-9.]/g, '')) || 0;
+        const rateB = parseFloat(String(b.price || '').replace(/[^0-9.]/g, '')) || 0;
+        return rateB - rateA;
+      });
+    }
+
+    return posts;
+  }, [items, findingJobs, isJobClosed, filters]);
   const currentPost = useRef<SavedJobItem | undefined>(undefined);
   currentPost.current = visiblePosts[0];
 
@@ -100,7 +163,7 @@ export function BrowseScreen({ role, avatarUri, onViewProfile, token }: Props) {
   };
 
   useEffect(() => {
-    setFilters(DEFAULT_FILTERS); setSubTab('explore'); setSelectedPost(null); setProfilePost(null); setActiveChat(null); setFilterVisible(false);
+    setFilters(DEFAULT_FILTERS); setSubTab('explore'); setSelectedPost(null); setProfilePost(null); setActiveChat(null); setFilterVisible(false); setQuickFiltersVisible(true);
     void fetchFeed(false, DEFAULT_FILTERS);
     if (effectiveToken) void refreshSavedFromBackend(effectiveToken);
   }, [role, effectiveToken]);
@@ -116,21 +179,20 @@ export function BrowseScreen({ role, avatarUri, onViewProfile, token }: Props) {
   const openProfile = (post: SavedJobItem) => { if (post.partnerId) setProfilePost(post); };
 
   return <View style={styles.container}>
-    <View style={{ height: insets.top, backgroundColor: THEME.colors.canvas, zIndex: 10 }} />
-    <ScrollView style={{ flex: 1, backgroundColor: THEME.colors.canvas }} contentContainerStyle={{ paddingTop: 8, paddingBottom: 140 }}
+    <ScrollView style={{ flex: 1, backgroundColor: THEME.colors.canvas }} contentContainerStyle={{ flexGrow: 1, paddingTop: 6, paddingBottom: 20 }}
       showsVerticalScrollIndicator={false} alwaysBounceVertical
       refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} colors={[THEME.colors.brandDark]} tintColor={THEME.colors.brandDark} progressViewOffset={0} />}>
-      <AppHeader right={<NotificationBell />} />
       <BrowseHeader {...headerCopy} name={user.firstName || ROLE_CONFIG[role].accountType} avatarUri={user.profileLink || avatarUri}
         tab={subTab} savedCount={savedCount} appliedCount={findingJobs ? appliedCount : undefined}
-        onTabChange={tab => setSubTab(!findingJobs && tab === 'applied' ? 'explore' : tab)} onProfilePress={onViewProfile} onFilterPress={() => setFilterVisible(true)} />
+        onTabChange={tab => setSubTab(!findingJobs && tab === 'applied' ? 'explore' : tab)} onProfilePress={onViewProfile}
+        filtersVisible={quickFiltersVisible} onFiltersToggle={() => setQuickFiltersVisible(visible => !visible)} />
       {subTab === 'explore' ? <>
-        <BrowseFilters activeChip={activeBrowseChip(filters)} filterCount={activeFilterCount}
-          onChipPress={label => applyFilters(quickBrowseFilters(filters, label))} onFilterPress={() => setFilterVisible(true)} />
-        {isLoading ? <View style={deckStyles.container}><BrowseDeckSkeleton /></View>
+        {quickFiltersVisible && <BrowseFilters activeChip={activeBrowseChip(filters)} filterCount={activeFilterCount}
+          onChipPress={label => applyFilters(quickBrowseFilters(filters, label))} onFilterPress={() => setFilterVisible(true)} />}
+        {isLoading ? <View style={deckStyles.centerWrapper}><BrowseDeckSkeleton /></View>
           : feedError || !card0 ? <View style={deckStyles.emptyContainer}><BrowseDeckEmpty role={role} fetchedCount={fetchedCount}
             hasFilters={activeFilterCount > 0} error={feedError} onRefresh={() => { void fetchFeed(true); }} onClearFilters={() => applyFilters({ ...DEFAULT_FILTERS })} /></View>
-          : <View style={deckStyles.container}>
+          : <View style={deckStyles.centerWrapper}><View style={deckStyles.container}>
             {card2 && <View style={deckStyles.back}><BrowseCardBackdrop avatarUri={card2.avatar} name={card2.employerName} /></View>}
             {card1 && <View style={deckStyles.middle}><BrowseCardBackdrop avatarUri={card1.avatar} name={card1.employerName} /></View>}
             <Animated.View style={[deckStyles.front, { transform: [{ translateX: position.x }, { translateY: position.y }, { rotate: rotateCard }] }]} {...panHandlers}>
@@ -140,7 +202,7 @@ export function BrowseScreen({ role, avatarUri, onViewProfile, token }: Props) {
                 onSave={() => { void toggleSave(card0, effectiveToken); }} onDetails={() => setSelectedPost(card0)} />
             </Animated.View>
             <BrowseDeckSwipeControls role={role} dragX={position.x} onSkip={() => swipeCard('left')} onInterested={() => swipeCard('right')} />
-          </View>}
+          </View></View>}
       </> : <View style={styles.activityTabContainer}>
         {loadingSaved && activityPosts.length === 0 ? <BrowseDeckSkeleton />
           : savedLoadError ? <BrowseEmptyState icon="cloud-offline-outline" title={subTab === 'applied' ? 'Unable to load applications' : 'Unable to load saved posts'}
@@ -148,7 +210,7 @@ export function BrowseScreen({ role, avatarUri, onViewProfile, token }: Props) {
           : activityPosts.length === 0 ? <View style={deckStyles.emptyContainer}><BrowseEmptyState icon={subTab === 'applied' ? 'paper-plane-outline' : 'bookmark-outline'}
             title={subTab === 'applied' ? 'No applications yet' : findingJobs ? 'No saved jobs yet' : 'No saved services yet'}
             description={subTab === 'applied' ? 'Jobs you apply to will appear here.' : findingJobs ? 'Save job posts to review and apply when you are ready.' : 'Save service posts to review or message the kasambahay later.'}
-            action={findingJobs ? 'Find Jobs' : 'Find Kasambahay'} onAction={() => setSubTab('explore')} /></View>
+            /></View>
           : <View style={styles.activityList}>{activityPosts.map(post => <BrowseActivityCard key={post.id} post={post}
             applied={findingJobs && (subTab === 'applied' || isApplied(post.id))} closed={findingJobs && isJobClosed(post)}
             onProfile={() => openProfile(post)} onDetails={() => setSelectedPost(post)}
