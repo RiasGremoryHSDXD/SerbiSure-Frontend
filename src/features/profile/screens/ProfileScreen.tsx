@@ -207,7 +207,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
               {/* Sentiment Track */}
               <View style={styles.sentimentCard}>
                 <Text style={styles.sentimentCardLabel}>
-                  {isWorker ? t.clientSentiment : (t.workerSentiment || 'Client Sentiment')}
+                  {isWorker ? (t.workerSentiment || 'Worker Sentiment') : (t.clientSentiment || 'Client Sentiment')}
                 </Text>
                 <View style={styles.sentimentTrack}>
                   <View
