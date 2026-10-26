@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { getRegions, getProvinces, getCities, getBarangays, getZipCodeForCity,
+  FALLBACK_REGIONS, FALLBACK_REGION_X_PROVINCES, FALLBACK_MISAMIS_ORIENTAL_CITIES, FALLBACK_CDO_BARANGAYS,
   type Region, type Province, type CityMunicipality, type Barangay, type LocationItem } from '../../../shared/services/locationService';
 
 /** Cascading PSGC selections. A parent change invalidates its children and outstanding requests. */
@@ -85,38 +86,86 @@ export function useWorkLocation(visible: boolean) {
   };
   const handleSelectBarangay = (item: LocationItem) => { setBarangay(item as Barangay); };
   const applyProfileAddress = (profile: { region?: string | null; province?: string | null; city?: string | null; barangay?: string | null; street?: string | null; zipcode?: string | null }) => {
-    resetWorkLocation();
-    setStreetAddress(profile.street || ''); setZipcode(profile.zipcode || '');
-    // Match genuine profile values against PSGC; never invent a jurisdiction for incomplete addresses.
+    version.current++;
+    setStreetAddress(profile.street || '');
+    setFloorUnit('');
+    setZipcode(profile.zipcode || '');
+
+    // Match genuine profile values against PSGC
+    const clean = (text: string) => text.toLowerCase().replace(/^(brgy\.?|barangay)\s+/, '').trim();
     const match = <T extends LocationItem>(items: T[], value?: string | null): T | undefined => {
       if (!value?.trim()) return undefined;
-      const clean = (text: string) => text.toLowerCase().replace(/^(brgy\.?|barangay)\s+/, '').trim();
       const wanted = clean(value);
       return items.find(item => [item.name, item.displayName, ...(item.aliases || [])].some(name => name && clean(name) === wanted));
     };
+
+    // Fast synchronous pre-population (0ms latency)
+    const initialRegion = match(FALLBACK_REGIONS, profile.region) || (profile.region ? {
+      code: '100000000',
+      name: profile.region,
+      displayName: profile.region,
+      regionName: profile.region,
+    } : null);
+    if (initialRegion) setRegion(initialRegion);
+
+    const initialProvince = match(FALLBACK_REGION_X_PROVINCES, profile.province) || (profile.province ? {
+      code: '104300000',
+      name: profile.province,
+      displayName: profile.province,
+      regionCode: initialRegion?.code || '',
+    } : null);
+    if (initialProvince) setProvince(initialProvince);
+
+    const initialCity = match(FALLBACK_MISAMIS_ORIENTAL_CITIES, profile.city) || (profile.city ? {
+      code: '104305000',
+      name: profile.city,
+      displayName: profile.city,
+      provinceCode: initialProvince?.code,
+      regionCode: initialRegion?.code,
+    } : null);
+    if (initialCity) {
+      setCity(initialCity);
+      if (!profile.zipcode) {
+        setZipcode(getZipCodeForCity(initialCity.code, initialCity.name) || '');
+      }
+    }
+
+    const initialBarangay = match(FALLBACK_CDO_BARANGAYS, profile.barangay) || (profile.barangay ? {
+      code: 'profile_brgy',
+      name: profile.barangay,
+      displayName: profile.barangay.startsWith('Barangay') || profile.barangay.startsWith('Brgy.') ? profile.barangay : `Brgy. ${profile.barangay}`,
+    } : null);
+    if (initialBarangay) setBarangay(initialBarangay);
+
+    // Resolve PSGC lists in background without blocking UI
     void load(async request => {
       const regions = await getRegions();
       if (request !== version.current) return;
       setRegions(regions);
-      const region = match(regions, profile.region);
+      const region = match(regions, profile.region) || initialRegion;
       if (!region) return;
       setRegion(region);
+
       const provinces = await getProvinces(region.code);
       if (request !== version.current) return;
       setProvinces(provinces);
-      const province = match(provinces, profile.province) || (provinces.length === 1 && provinces[0]?.name === 'Metro Manila' ? provinces[0] : undefined);
+      const province = match(provinces, profile.province) || (provinces.length === 1 && provinces[0]?.name === 'Metro Manila' ? provinces[0] : undefined) || initialProvince;
       if (!province) return;
       setProvince(province);
+
       const cities = await getCities(province.code, region.code);
       if (request !== version.current) return;
       setCities(cities);
-      const city = match(cities, profile.city);
+      const city = match(cities, profile.city) || initialCity;
       if (!city) return;
       setCity(city);
       if (!profile.zipcode) setZipcode(getZipCodeForCity(city.code, city.name) || '');
+
       const barangays = await getBarangays(city.code);
       if (request !== version.current) return;
-      setBarangays(barangays); setBarangay(match(barangays, profile.barangay) || null);
+      setBarangays(barangays);
+      const matchedBarangay = match(barangays, profile.barangay) || initialBarangay;
+      if (matchedBarangay) setBarangay(matchedBarangay);
     });
   };
   return { selectedRegion, selectedProvince, selectedCity, selectedBarangay, streetAddress, setStreetAddress,

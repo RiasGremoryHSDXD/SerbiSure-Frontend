@@ -1,7 +1,8 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
-import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { SearchIcon } from '../../../shared/components/icons/LucideIcons';
 import THEME from '../../../shared/theme/theme';
 import { useLanguage } from '../../../shared/localization/LanguageContext';
 import { HOME_FEED_CATEGORIES, HomeFeedCategory } from '../feedFilters';
@@ -21,7 +22,7 @@ export function HomeFeedFilters({ placeholder, searchQuery, selectedCategory, on
   return (
     <View>
       <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={20} color={THEME.colors.textMuted} />
+        <SearchIcon size={20} color={THEME.colors.textMuted} />
         <TextInput
           accessibilityLabel={placeholder}
           placeholder={placeholder}
@@ -94,19 +95,59 @@ export function HomeFeedHeader({ onViewAll }: { onViewAll?: () => void }) {
 }
 
 export function HomeFeedLoadingState() {
-  const { tr: uiText } = useUiLanguage();
+  const opacity = useRef(new Animated.Value(0.45)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.9, duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.45, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [opacity]);
+
   return (
-    <View style={styles.loading}>
-      <ActivityIndicator size="large" color={THEME.colors.brandDark} />
-      <Text style={styles.loadingText}>{uiText("Loading recent posts...")}</Text>
-    </View>
+    <Animated.View accessibilityLabel="Loading recent posts" style={[styles.skeletonFeed, { opacity }]}>
+      <View style={styles.skeletonSectionHeader}>
+        <View style={[styles.skeletonBlock, styles.skeletonSectionTitle]} />
+        <View style={[styles.skeletonBlock, styles.skeletonViewAll]} />
+      </View>
+      {[0, 1].map((item) => (
+        <View key={item} style={styles.skeletonCard}>
+          <View style={styles.skeletonCardHeader}>
+            <View style={[styles.skeletonBlock, styles.skeletonAvatar]} />
+            <View style={styles.skeletonIdentity}>
+              <View style={[styles.skeletonBlock, styles.skeletonName]} />
+              <View style={styles.skeletonInline}>
+                <View style={[styles.skeletonBlock, styles.skeletonRole]} />
+                <View style={[styles.skeletonBlock, styles.skeletonTime]} />
+              </View>
+            </View>
+            <View style={[styles.skeletonBlock, styles.skeletonBookmark]} />
+          </View>
+          <View style={[styles.skeletonBlock, styles.skeletonLocation]} />
+          <View style={styles.skeletonMetaRow}>
+            <View style={[styles.skeletonBlock, styles.skeletonTerm]} />
+            <View style={[styles.skeletonBlock, styles.skeletonRate]} />
+          </View>
+          <View style={[styles.skeletonBlock, styles.skeletonDescription]} />
+          <View style={[styles.skeletonBlock, styles.skeletonDescriptionShort]} />
+          <View style={styles.skeletonActions}>
+            <View style={[styles.skeletonBlock, styles.skeletonAction]} />
+            <View style={[styles.skeletonBlock, styles.skeletonAction]} />
+          </View>
+        </View>
+      ))}
+    </Animated.View>
   );
 }
 
-export function HomeFeedEmptyState({ role, hasActiveFilters, onResetFilters }: {
+export function HomeFeedEmptyState({ role, hasActiveFilters = false, onResetFilters }: {
   role: 'homeowner' | 'kasambahay';
-  hasActiveFilters: boolean;
-  onResetFilters: () => void;
+  hasActiveFilters?: boolean;
+  onResetFilters?: () => void;
 }) {
   const { tr: uiText } = useUiLanguage();
   const description = hasActiveFilters
@@ -119,14 +160,9 @@ export function HomeFeedEmptyState({ role, hasActiveFilters, onResetFilters }: {
 
   return (
     <View style={styles.emptyState}>
-      <Ionicons name={hasActiveFilters ? 'search-outline' : 'newspaper-outline'} size={36} color="#CBD5E1" style={{ marginBottom: 8 }} />
+      <Ionicons name={hasActiveFilters ? 'search-outline' : 'newspaper-outline'} size={40} color="#CBD5E1" style={{ marginBottom: 12 }} />
       <Text style={styles.emptyTitle}>{hasActiveFilters ? uiText("No posts found") : uiText("No Recent Posts")}</Text>
       <Text style={styles.emptySubtitle}>{uiText(description)}</Text>
-      {hasActiveFilters && (
-        <Pressable accessibilityRole="button" onPress={onResetFilters} style={styles.resetButton}>
-          <Text style={styles.resetText}>{uiText("Reset Filters")}</Text>
-        </Pressable>
-      )}
     </View>
   );
 }
@@ -156,11 +192,29 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginTop: 18, marginBottom: 14 },
   sectionTitle: { flex: 1, marginRight: 12, fontSize: 22, fontFamily: THEME.typography.fontFamily.display, color: THEME.colors.ink },
   viewAll: { fontSize: 13, color: THEME.colors.brandDark, fontFamily: THEME.typography.fontFamily.secondarySemiBold },
-  loading: { paddingVertical: 40, alignItems: 'center', justifyContent: 'center' },
-  loadingText: { marginTop: 12, fontSize: 13, color: THEME.colors.textMuted, fontFamily: THEME.typography.fontFamily.secondaryMedium },
-  emptyState: { backgroundColor: THEME.colors.white, borderRadius: 24, padding: 32, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
-  emptyTitle: { fontSize: 16, fontFamily: THEME.typography.fontFamily.display, color: THEME.colors.ink, marginBottom: 4 },
-  emptySubtitle: { fontSize: 12.5, color: '#64748B', textAlign: 'center', lineHeight: 18, fontFamily: THEME.typography.fontFamily.secondaryRegular },
-  resetButton: { marginTop: 16, minHeight: 44, paddingHorizontal: 20, paddingVertical: 12, borderRadius: THEME.roundness.pill, backgroundColor: THEME.colors.brand },
-  resetText: { color: THEME.colors.ink, fontSize: 12.5, fontFamily: THEME.typography.fontFamily.display },
+  skeletonFeed: { paddingTop: 18, paddingBottom: 24 },
+  skeletonBlock: { backgroundColor: '#E6E4E0' },
+  skeletonSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  skeletonSectionTitle: { width: 142, height: 24, borderRadius: 8 },
+  skeletonViewAll: { width: 54, height: 14, borderRadius: 7 },
+  skeletonCard: { backgroundColor: THEME.colors.white, borderRadius: THEME.roundness.card, padding: 18, marginBottom: 14 },
+  skeletonCardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 14 },
+  skeletonAvatar: { width: 48, height: 48, borderRadius: 24 },
+  skeletonIdentity: { flex: 1, marginLeft: 12, paddingTop: 2 },
+  skeletonName: { width: '72%', height: 17, borderRadius: 7, marginBottom: 8 },
+  skeletonInline: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  skeletonRole: { width: 70, height: 18, borderRadius: 7 },
+  skeletonTime: { width: 58, height: 11, borderRadius: 6 },
+  skeletonBookmark: { width: 24, height: 28, borderRadius: 7, marginLeft: 10 },
+  skeletonLocation: { width: '78%', height: 25, borderRadius: 8, marginBottom: 8 },
+  skeletonMetaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
+  skeletonTerm: { width: 104, height: 25, borderRadius: 8 },
+  skeletonRate: { width: 112, height: 25, borderRadius: 8 },
+  skeletonDescription: { width: '100%', height: 13, borderRadius: 7, marginBottom: 7 },
+  skeletonDescriptionShort: { width: '64%', height: 13, borderRadius: 7, marginBottom: 16 },
+  skeletonActions: { flexDirection: 'row', gap: 10 },
+  skeletonAction: { flex: 1, height: 42, borderRadius: THEME.roundness.pill },
+  emptyState: { paddingVertical: 56, paddingHorizontal: 24, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', maxWidth: 320, marginTop: 24 },
+  emptyTitle: { fontSize: 17, fontFamily: THEME.typography.fontFamily.display, color: THEME.colors.ink, marginBottom: 6, textAlign: 'center' },
+  emptySubtitle: { fontSize: 13, color: '#64748B', textAlign: 'center', lineHeight: 19, fontFamily: THEME.typography.fontFamily.secondaryRegular },
 });

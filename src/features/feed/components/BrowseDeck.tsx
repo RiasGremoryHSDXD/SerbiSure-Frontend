@@ -9,17 +9,42 @@ import { browseEmptyCopy } from '../browsePresentation';
 export function BrowseDeckEmpty({ role, fetchedCount, hasFilters, error, onRefresh, onClearFilters }: Readonly<{ role: Role; fetchedCount: number; hasFilters: boolean; error?: string | null; onRefresh: () => void; onClearFilters: () => void }>) {
   const copy = browseEmptyCopy(role, fetchedCount, hasFilters, error);
   const clearFilters = !error && fetchedCount === 0 && hasFilters;
-  return <BrowseEmptyState icon={copy.icon} title={copy.title} description={copy.description} action={copy.action} onAction={clearFilters ? onClearFilters : onRefresh} />;
+  const showAction = !clearFilters && !!copy.action;
+  return (
+    <BrowseEmptyState
+      icon={copy.icon}
+      title={copy.title}
+      description={copy.description}
+      action={showAction ? copy.action : undefined}
+      onAction={showAction ? (clearFilters ? onClearFilters : onRefresh) : undefined}
+    />
+  );
 }
 
-export function BrowseEmptyState({ icon, title, description, action, onAction }: Readonly<{ icon: keyof typeof Ionicons.glyphMap; title: string; description: string; action: string; onAction: () => void }>) {
+export function BrowseEmptyState({
+  icon,
+  title,
+  description,
+  action,
+  onAction,
+}: Readonly<{
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  description: string;
+  action?: string;
+  onAction?: () => void;
+}>) {
   const { tr: uiText } = useUiLanguage();
   return (
     <View style={styles.empty}>
-      <View style={styles.iconCircle}><Ionicons name={icon} size={36} color={THEME.colors.brandDark} /></View>
+      <Ionicons name={icon} size={40} color="#CBD5E1" style={styles.icon} />
       <Text style={styles.title}>{uiText(title)}</Text>
       <Text style={styles.description}>{uiText(description)}</Text>
-      <Pressable accessibilityRole="button" onPress={onAction} style={styles.button}><Text style={styles.buttonText}>{uiText(action)}</Text></Pressable>
+      {action && onAction ? (
+        <Pressable accessibilityRole="button" onPress={onAction} style={styles.button}>
+          <Text style={styles.buttonText}>{uiText(action)}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -53,13 +78,13 @@ export function BrowseDeckSwipeControls({ role, dragX, onSkip, onInterested }: R
   const interestedHighlight = dragX.interpolate({ inputRange: [0, 15, 120], outputRange: [0, 0.4, 1], extrapolate: 'clamp' });
   return (
     <View style={styles.edgeControls} pointerEvents="box-none">
-      <Pressable accessibilityRole="button" accessibilityLabel={uiText("Skip this post")} onPress={onSkip} hitSlop={8}>
+      <Pressable accessibilityRole="button" accessibilityLabel={uiText("Skip this post")} onPress={onSkip} hitSlop={10}>
         <Animated.View style={[styles.edgeButton, { backgroundColor: passBackground }]}>
           <Ionicons name="close" size={18} color="#E53935" />
           <Animated.View pointerEvents="none" style={[styles.edgeHighlight, { opacity: passHighlight }]}><Ionicons name="close" size={18} color={THEME.colors.white} /></Animated.View>
         </Animated.View>
       </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel={role === 'kasambahay' ? uiText("Apply to this job") : uiText("Message this kasambahay")} onPress={onInterested} hitSlop={8}>
+      <Pressable accessibilityRole="button" accessibilityLabel={role === 'kasambahay' ? uiText("Apply to this job") : uiText("Message this kasambahay")} onPress={onInterested} hitSlop={10}>
         <Animated.View style={[styles.edgeButton, { backgroundColor: interestedBackground }]}>
           <Ionicons name="heart-outline" size={18} color="#22C55E" />
           <Animated.View pointerEvents="none" style={[styles.edgeHighlight, { opacity: interestedHighlight }]}><Ionicons name="heart" size={18} color={THEME.colors.white} /></Animated.View>
@@ -70,25 +95,54 @@ export function BrowseDeckSwipeControls({ role, dragX, onSkip, onInterested }: R
 }
 
 export const browseDeckStyles = StyleSheet.create({
-  emptyContainer: { marginHorizontal: 20, marginTop: 16, marginBottom: 16 },
-  container: { height: 370, marginHorizontal: 24, marginTop: 24, marginBottom: 4, position: 'relative' },
-  front: { position: 'absolute', left: 0, right: 0, top: 0, height: 350, zIndex: 10 },
-  middle: { position: 'absolute', left: 8, right: 8, top: -12, height: 350, borderRadius: 24, opacity: 0.85, transform: [{ scale: 0.96 }], zIndex: 5 },
-  back: { position: 'absolute', left: 16, right: 16, top: -24, height: 350, borderRadius: 24, opacity: 0.65, transform: [{ scale: 0.92 }], zIndex: 2 },
+  emptyContainer: { marginHorizontal: 20, alignItems: 'center', justifyContent: 'center' },
+  centerWrapper: { width: '100%', alignItems: 'center', paddingHorizontal: 20, marginTop: 36, marginBottom: 20 },
+  container: { width: '100%', aspectRatio: 0.95, position: 'relative' },
+  front: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 10 },
+  middle: { position: 'absolute', left: 10, right: 10, top: -10, bottom: 10, borderRadius: 28, opacity: 0.85, zIndex: 5 },
+  back: { position: 'absolute', left: 20, right: 20, top: -20, bottom: 20, borderRadius: 28, opacity: 0.65, zIndex: 2 },
 });
 
 const styles = StyleSheet.create({
-  empty: { minHeight: 312, backgroundColor: THEME.colors.white, borderRadius: THEME.roundness.card, padding: 28, alignItems: 'center', justifyContent: 'center' },
-  iconCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: THEME.colors.brandLight, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
-  title: { fontSize: 20, lineHeight: 26, textAlign: 'center', color: THEME.colors.ink, fontFamily: THEME.typography.fontFamily.display },
-  description: { fontSize: 13, lineHeight: 20, textAlign: 'center', color: THEME.colors.textSecondary, fontFamily: THEME.typography.fontFamily.secondaryRegular, marginTop: 8, marginBottom: 22 },
-  button: { minHeight: 44, paddingHorizontal: 22, backgroundColor: THEME.colors.brand, borderRadius: THEME.roundness.pill, alignItems: 'center', justifyContent: 'center' },
+  empty: {
+    paddingVertical: 56,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    maxWidth: 320,
+    marginTop: 24,
+  },
+  icon: { marginBottom: 12 },
+  title: {
+    fontSize: 17,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: THEME.colors.ink,
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  description: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 19,
+    fontFamily: THEME.typography.fontFamily.secondaryRegular,
+  },
+  button: {
+    marginTop: 18,
+    minHeight: 40,
+    paddingHorizontal: 20,
+    backgroundColor: THEME.colors.brand,
+    borderRadius: THEME.roundness.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   buttonText: { color: THEME.colors.ink, fontSize: 13, fontFamily: THEME.typography.fontFamily.display },
-  skeleton: { height: 350, borderRadius: 24, backgroundColor: THEME.colors.white, padding: 20, gap: 18 },
+  skeleton: { width: '100%', aspectRatio: 0.95, borderRadius: 28, backgroundColor: THEME.colors.white, padding: 20, gap: 16 },
   skeletonIdentity: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  skeletonAvatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: THEME.colors.canvasSubtle },
+  skeletonAvatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: THEME.colors.canvasSubtle },
   bar: { height: 16, borderRadius: 8, backgroundColor: THEME.colors.canvasSubtle },
-  edgeControls: { position: 'absolute', top: 0, bottom: 20, left: -16, right: -16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', zIndex: 50 },
-  edgeButton: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.14, shadowRadius: 5, elevation: 4 },
+  edgeControls: { position: 'absolute', top: 0, bottom: 0, left: -18, right: -18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', zIndex: 50 },
+  edgeButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.14, shadowRadius: 4, elevation: 3 },
   edgeHighlight: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
 });

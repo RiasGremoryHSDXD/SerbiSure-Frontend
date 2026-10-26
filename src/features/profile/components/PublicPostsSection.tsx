@@ -8,10 +8,36 @@ import { submitBookingProposal, type PublicPendingPost } from '../../bookings/ap
 import { PendingPostCard } from './PendingPostCard';
 import { profileStyles as styles } from '../styles';
 
-export function PublicPostsSection({ posts, loading, error, token, ownerId, ownerRole, onRefresh, onSubmitted }: Readonly<{
-  posts: PublicPendingPost[]; loading: boolean; error: string | null; token?: string | null;
-  ownerId?: string; ownerRole: string; onRefresh: () => void;
+export function PublicPostsSection({
+  posts,
+  loading,
+  error,
+  token,
+  ownerId,
+  ownerRole,
+  authorName,
+  authorAvatar,
+  authorLocation,
+  onRefresh,
+  onSubmitted,
+  onDetails,
+  onMessage,
+  onApplyJob,
+}: Readonly<{
+  posts: PublicPendingPost[];
+  loading: boolean;
+  error: string | null;
+  token?: string | null;
+  ownerId?: string;
+  ownerRole: string;
+  authorName?: string;
+  authorAvatar?: string;
+  authorLocation?: string;
+  onRefresh: () => void;
   onSubmitted: (postId: string, proposal: NonNullable<PublicPendingPost['viewer_proposal']>) => void;
+  onDetails?: (post: any) => void;
+  onMessage?: (post?: PublicPendingPost) => void;
+  onApplyJob?: (post: PublicPendingPost) => void;
 }>) {
   const { tr: uiText } = useUiLanguage();
   const { user, refreshVerificationStatus } = useUser();
@@ -26,11 +52,17 @@ export function PublicPostsSection({ posts, loading, error, token, ownerId, owne
   const sessionKey = JSON.stringify([user.id, user.token]);
   const activeSession = useRef(sessionKey);
   activeSession.current = sessionKey;
+
   useEffect(() => {
     activeSession.current = sessionKey;
-    checkingRef.current = null; setCheckingPostId(null); setSelected(null);
-    return () => { if (activeSession.current === sessionKey) activeSession.current = ''; };
+    checkingRef.current = null;
+    setCheckingPostId(null);
+    setSelected(null);
+    return () => {
+      if (activeSession.current === sessionKey) activeSession.current = '';
+    };
   }, [sessionKey]);
+
   const isJob = ownerRole === 'Homeowner';
   const allowedRole = isJob ? 'Kasambahay' : ownerRole === 'Kasambahay' ? 'Homeowner' : null;
   const canRespond = user.id !== ownerId && user.accountType === allowedRole;
@@ -39,7 +71,10 @@ export function PublicPostsSection({ posts, loading, error, token, ownerId, owne
   const openProposal = async (post: PublicPendingPost) => {
     if (checkingRef.current) return;
     if (post.rate_needs_review) {
-      Alert.alert('Rate Awaiting Confirmation', 'The poster must confirm the monthly amount before this post can receive new proposals.');
+      Alert.alert(
+        'Rate Awaiting Confirmation',
+        'The poster must confirm the monthly amount before this post can receive new proposals.'
+      );
       return;
     }
     const check = {};
@@ -49,11 +84,17 @@ export function PublicPostsSection({ posts, loading, error, token, ownerId, owne
       const status = await refreshVerificationStatus();
       if (activeSession.current !== sessionKey || checkingRef.current !== check) return;
       if (!status) {
-        Alert.alert(uiText('Verification check unavailable'), uiText('Could not check your verification status. Check your connection and try again.'));
+        Alert.alert(
+          uiText('Verification check unavailable'),
+          uiText('Could not check your verification status. Check your connection and try again.')
+        );
         return;
       }
       if (status !== 'Verified') {
-        Alert.alert(uiText('Verification Required'), uiText('Verify your account before sending an application or hiring offer.'));
+        Alert.alert(
+          uiText('Verification Required'),
+          uiText('Verify your account before sending an application or hiring offer.')
+        );
         return;
       }
       setRate(post.rate_amount);
@@ -77,8 +118,16 @@ export function PublicPostsSection({ posts, loading, error, token, ownerId, owne
     submittingRef.current = true;
     setSubmitting(true);
     try {
-      const result = await submitBookingProposal(token, selected.booking_id, amount,
-        `${isJob ? 'Job application' : 'Hiring offer'}: ${message.trim() || (isJob ? 'I would like to apply for this job.' : 'I would like to hire you for this service.')}`, selected.rate_period);
+      const result = await submitBookingProposal(
+        token,
+        selected.booking_id,
+        amount,
+        `${isJob ? 'Job application' : 'Hiring offer'}: ${
+          message.trim() ||
+          (isJob ? 'I would like to apply for this job.' : 'I would like to hire you for this service.')
+        }`,
+        selected.rate_period
+      );
       if (!result.success || !result.proposal) {
         Alert.alert('Unable to Send', result.error || 'Please try again.');
         onRefresh();
@@ -86,45 +135,184 @@ export function PublicPostsSection({ posts, loading, error, token, ownerId, owne
       }
       onSubmitted(selected.booking_id, result.proposal);
       setSelected(null);
-      Alert.alert(result.language_warning ? 'Notice' : isJob ? 'Application Sent' : 'Hiring Offer Sent', result.language_warning || 'The post owner has been notified. Your proposal is pending until they respond.');
+      Alert.alert(
+        result.language_warning ? 'Notice' : isJob ? 'Application Sent' : 'Hiring Offer Sent',
+        result.language_warning || 'The post owner has been notified. Your proposal is pending until they respond.'
+      );
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
     }
   };
 
-  return <View style={styles.pendingPostsSection}>
-    <View style={styles.tabSectionHeader}>
-      <View style={{ flex: 1, marginRight: 8 }}><Text style={styles.tabSectionTitle}>{uiText("Pending Posts")}</Text><Text style={styles.tabSectionSubtitle}>{isJob ? 'Open jobs accepting applications' : 'Service posts available for hiring'}</Text></View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Refresh pending posts" style={styles.refreshIconBtn} onPress={onRefresh} disabled={loading}><Ionicons name="refresh-outline" size={15} color="#EA580C" /></Pressable>
+  return (
+    <View style={styles.pendingPostsSection}>
+      {loading ? (
+        <View style={styles.postsLoadingTile}>
+          <ActivityIndicator color="#FFB380" />
+          <Text style={styles.postsLoadingText}>{uiText("Loading recent posts...")}</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.postsErrorTile}>
+          <Text style={styles.postsErrorTitle}>{uiText("Unable to load posts")}</Text>
+          <Text style={styles.postsErrorSubtitle}>{error}</Text>
+          <Pressable style={styles.postsRetryButton} onPress={onRefresh}>
+            <Text style={styles.postsRetryButtonText}>{uiText("Try Again")}</Text>
+          </Pressable>
+        </View>
+      ) : posts.length === 0 ? (
+        <View style={styles.emptyPendingPostsCard}>
+          <Ionicons name="time-outline" size={26} color="#9CA3AF" />
+          <Text style={styles.emptyPendingPostsTitle}>{uiText("No Recent Posts")}</Text>
+          <Text style={styles.emptyPendingPostsSubtitle}>
+            {isJob
+              ? 'This homeowner has no open job posts right now.'
+              : 'This kasambahay has no service posts available right now.'}
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.pendingPostsList}>
+          {posts.map((post) => {
+            const status = post.viewer_proposal?.status;
+            const pending = status === 'Pending' || status === 'Accepted';
+            const note =
+              status === 'Pending'
+                ? isJob
+                  ? 'Your application is awaiting a response'
+                  : 'Your hiring offer is awaiting a response'
+                : status === 'Accepted'
+                ? 'Your proposal was accepted'
+                : isJob
+                ? 'Waiting for worker applications'
+                : 'Available for hiring offers';
+
+            return (
+              <PendingPostCard
+                key={post.booking_id}
+                post={post}
+                note={note}
+                token={token}
+                authorName={authorName}
+                authorAvatar={authorAvatar}
+                authorRole={ownerRole}
+                authorLocation={authorLocation}
+                onDetails={onDetails}
+              >
+                {canRespond && token ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    style={{
+                      flex: 1,
+                      backgroundColor: isJob && pending ? '#F3F4F6' : '#ECECEC',
+                      borderRadius: 9999,
+                      minHeight: 44,
+                      paddingVertical: 12,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    disabled={!isJob && onMessage ? false : isJob && onApplyJob ? false : pending || checkingPostId !== null}
+                    onPress={() => {
+                      if (!isJob && onMessage) {
+                        onMessage(post);
+                      } else if (isJob && onApplyJob) {
+                        onApplyJob(post);
+                      } else {
+                        void openProposal(post);
+                      }
+                    }}
+                  >
+                    {checkingPostId === post.booking_id ? (
+                      <ActivityIndicator color="#0D0D11" />
+                    ) : (
+                      <Text
+                        style={{
+                          color: '#0D0D11',
+                          fontWeight: '700',
+                          fontSize: 13,
+                        }}
+                      >
+                        {!isJob && onMessage
+                          ? uiText('Message Now')
+                          : pending
+                          ? status === 'Accepted'
+                            ? uiText('Accepted')
+                            : isJob
+                            ? uiText('Application Sent')
+                            : uiText('Offer Sent')
+                          : action}
+                      </Text>
+                    )}
+                  </Pressable>
+                ) : null}
+              </PendingPostCard>
+            );
+          })}
+        </View>
+      )}
+
+      <Modal visible={!!selected} transparent animationType="slide" onRequestClose={() => !submitting && setSelected(null)}>
+        <KeyboardAvoidingView
+          style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            style={{
+              flexGrow: 0,
+              maxHeight: '85%',
+              backgroundColor: '#FFFFFF',
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+            }}
+            contentContainerStyle={{ padding: 24, paddingBottom: Math.max(insets.bottom, 16) + 16 }}
+          >
+            <Text style={styles.tabSectionTitle}>{isJob ? 'Apply for this Job' : 'Send a Hiring Offer'}</Text>
+            <Text style={[styles.tabSectionSubtitle, { marginBottom: 16 }]}>
+              {uiText("The owner will review your proposal before confirming a booking.")}
+            </Text>
+            <Text style={styles.pendingPostManageBtnText}>Proposed amount (₱/{selected?.rate_period})</Text>
+            <TextInput
+              accessibilityLabel="Proposed compensation amount"
+              value={rate}
+              onChangeText={setRate}
+              keyboardType="decimal-pad"
+              editable={!submitting}
+              style={[styles.bioTextInput, { minHeight: 48, marginTop: 8, marginBottom: 16 }]}
+            />
+            <Text style={styles.pendingPostManageBtnText}>{uiText("Message (optional)")}</Text>
+            <TextInput
+              accessibilityLabel="Proposal message"
+              value={message}
+              onChangeText={setMessage}
+              multiline
+              maxLength={450}
+              editable={!submitting}
+              placeholder={
+                isJob
+                  ? 'Tell the homeowner why you are a good fit...'
+                  : 'Describe the work you would like help with...'
+              }
+              style={[styles.bioTextInput, { marginTop: 8, marginBottom: 16 }]}
+            />
+            <View style={styles.modalActionButtons}>
+              <Pressable
+                style={styles.cancelModalBtn}
+                disabled={submitting}
+                onPress={() => setSelected(null)}
+              >
+                <Text style={styles.cancelModalBtnText}>{uiText("Cancel")}</Text>
+              </Pressable>
+              <Pressable style={styles.saveModalBtn} disabled={submitting} onPress={submit}>
+                {submitting ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.saveModalBtnText}>{uiText(isJob ? 'Send Application' : 'Send Offer')}</Text>
+                )}
+              </Pressable>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
-    {loading ? <View style={styles.postsLoadingTile}><ActivityIndicator color="#FFB380" /><Text style={styles.postsLoadingText}>{uiText("Loading pending posts...")}</Text></View>
-      : error ? <View style={styles.postsErrorTile}><Text style={styles.postsErrorTitle}>{uiText("Unable to load posts")}</Text><Text style={styles.postsErrorSubtitle}>{error}</Text><Pressable style={styles.postsRetryButton} onPress={onRefresh}><Text style={styles.postsRetryButtonText}>{uiText("Try Again")}</Text></Pressable></View>
-      : posts.length === 0 ? <View style={styles.emptyPendingPostsCard}><Ionicons name="time-outline" size={26} color="#9CA3AF" /><Text style={styles.emptyPendingPostsTitle}>{uiText("No Pending Posts")}</Text><Text style={styles.emptyPendingPostsSubtitle}>{isJob ? 'This homeowner has no open job posts right now.' : 'This kasambahay has no service posts available right now.'}</Text></View>
-      : <View style={styles.pendingPostsList}>{posts.map(post => {
-        const status = post.viewer_proposal?.status;
-        const pending = status === 'Pending' || status === 'Accepted';
-        const note = status === 'Pending' ? (isJob ? 'Your application is awaiting a response' : 'Your hiring offer is awaiting a response')
-          : status === 'Accepted' ? 'Your proposal was accepted' : isJob ? 'Waiting for worker applications' : 'Available for hiring offers';
-        return <PendingPostCard key={post.booking_id} post={post} note={note}>
-          {canRespond && token ? <Pressable accessibilityRole="button" style={[styles.pendingPostManageBtn, { backgroundColor: pending ? '#F3F4F6' : '#FFB380', minHeight: 44 }]} disabled={pending || checkingPostId !== null} onPress={() => { void openProposal(post); }}>{checkingPostId === post.booking_id ? <ActivityIndicator color="#0D0D11" /> : <Text style={styles.pendingPostManageBtnText}>{pending ? (status === 'Accepted' ? 'Accepted' : isJob ? 'Application Sent' : 'Offer Sent') : action}</Text>}</Pressable> : null}
-        </PendingPostCard>;
-      })}</View>}
-    <Modal visible={!!selected} transparent animationType="slide" onRequestClose={() => !submitting && setSelected(null)}>
-      <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0, maxHeight: '85%', backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24 }} contentContainerStyle={{ padding: 24, paddingBottom: Math.max(insets.bottom, 16) + 16 }}>
-          <Text style={styles.tabSectionTitle}>{isJob ? 'Apply for this Job' : 'Send a Hiring Offer'}</Text>
-          <Text style={[styles.tabSectionSubtitle, { marginBottom: 16 }]}>{uiText("The owner will review your proposal before confirming a booking.")}</Text>
-          <Text style={styles.pendingPostManageBtnText}>Proposed amount (₱/{selected?.rate_period})</Text>
-          <TextInput accessibilityLabel="Proposed compensation amount" value={rate} onChangeText={setRate} keyboardType="decimal-pad" editable={!submitting} style={[styles.bioTextInput, { minHeight: 48, marginTop: 8, marginBottom: 16 }]} />
-          <Text style={styles.pendingPostManageBtnText}>{uiText("Message (optional)")}</Text>
-          <TextInput accessibilityLabel="Proposal message" value={message} onChangeText={setMessage} multiline maxLength={450} editable={!submitting} placeholder={isJob ? 'Tell the homeowner why you are a good fit...' : 'Describe the work you would like help with...'} style={[styles.bioTextInput, { marginTop: 8, marginBottom: 16 }]} />
-          <View style={styles.modalActionButtons}>
-            <Pressable style={styles.cancelModalBtn} disabled={submitting} onPress={() => setSelected(null)}><Text style={styles.cancelModalBtnText}>{uiText("Cancel")}</Text></Pressable>
-            <Pressable style={styles.saveModalBtn} disabled={submitting} onPress={submit}>{submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.saveModalBtnText}>{uiText(isJob ? 'Send Application' : 'Send Offer')}</Text>}</Pressable>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </Modal>
-  </View>;
+  );
 }

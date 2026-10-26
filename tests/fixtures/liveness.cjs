@@ -8,7 +8,7 @@ function faceFrame(yawAngle, timestamp, eyes = 'open') {
 function successfulFrames() {
   const frames = [];
   for (let time = 0; time <= 3100; time += 100) {
-    const yaw = time >= 100 && time <= 1000 ? -15 : time >= 1100 && time <= 2000 ? 15 : 0;
+    const yaw = time >= 100 && time <= 1000 ? 15 : time >= 1100 && time <= 2000 ? -15 : 0;
     frames.push(faceFrame(yaw, time));
   }
   return frames;

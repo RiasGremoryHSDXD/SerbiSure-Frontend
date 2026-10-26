@@ -82,7 +82,7 @@ function bookingDetails(t, role, bookingType, ongoing = false, options = {}) {
     '../../../shared/localization/LanguageContext': languageApi, '../../../shared/theme/theme': theme,
     '../engagementForm': engagement, '../workSetup': load('src/features/bookings/workSetup.ts') });
   const scheduleFields = load('src/features/bookings/components/WorkScheduleFields.tsx', { 'react-native': native, '@expo/vector-icons': { Ionicons: 'Icon' },
-    '../../../shared/localization/LanguageContext': languageApi, '../engagementForm': engagement });
+    '../../../shared/localization/LanguageContext': languageApi, '../engagementForm': engagement, '../../../shared/ui/WorkHoursPickerModal': { WorkHoursPickerModal: () => null } });
   const realLocation = options.locationService && load('src/features/bookings/hooks/useWorkLocation.ts', {
     'react-native': native, '../../../shared/services/locationService': options.locationService,
   });
@@ -91,7 +91,7 @@ function bookingDetails(t, role, bookingType, ongoing = false, options = {}) {
     '../../../shared/ui/SearchablePickerModal': { SearchablePickerModal: () => null },
   }) : { WorkLocationFields: () => null };
   const { BookingModal } = load('src/features/bookings/components/BookingModal.tsx', {
-    'react-native': native, 'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) }, '@expo/vector-icons': { Ionicons: 'Icon' },
+    'react-native': native, 'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) }, '@expo/vector-icons': { Ionicons: 'Icon', MaterialCommunityIcons: 'Icon' },
     '../../../shared/localization/LanguageContext': languageApi,
     '../../auth/session/UserContext': { useUser: () => ({ user: options.user || {} }) },
     '../workSetup': load('src/features/bookings/workSetup.ts'), '../engagementForm': engagement,
@@ -100,6 +100,7 @@ function bookingDetails(t, role, bookingType, ongoing = false, options = {}) {
     './WorkLocationFields': locationFields, '../workLocation': load('src/features/bookings/workLocation.ts'),
     '../hooks/useWorkLocation': realLocation || { useWorkLocation: () => address }, '../../posting/validation': load('src/features/posting/validation.ts', { './postingConfig': load('src/features/posting/postingConfig.ts') }),
     '../../../shared/ui/ProfileAvatar': { ProfileAvatar: 'ProfileAvatar' }, '../api/bookingApi': { fetchMinimumWage: async (_token, type) => ({ booking_type: type, rate_period: type === 'long_term' ? 'month' : 'day', minimum_rate: type === 'long_term' ? '6500' : '600' }) },
+    '../../profile/components/PrivacyPolicyModal': { PrivacyPolicyModal: () => null },
     '../../../shared/theme/theme': theme, '../../../../assets/serbisure-logo.png': 1,
   });
   const render = (status = {}) => screen.render(React.createElement(BookingModal, {
@@ -107,7 +108,7 @@ function bookingDetails(t, role, bookingType, ongoing = false, options = {}) {
     onClose: () => closed.push(true), onKasambahayConfirm: () => { const request = deferred(); actions.push(request); return request.promise; },
     onConfirm: details => { const request = { ...deferred(), details }; actions.push(request); return request.promise; }, ...status,
   }));
-  const pressAccept = () => screen.act(() => screen.all('Pressable').find(node => content(node) === localization.translateMessage(language, 'Agree & Accept')).props.onPress());
+  const pressAccept = () => screen.act(() => screen.all('Pressable').find(node => [localization.translateMessage(language, 'Agree & Accept'), localization.translateMessage(language, 'Accept'), 'Accept', 'Agree & Accept'].includes(content(node))).props.onPress());
   render();
   const press = label => {
     screen.act(() => {
@@ -343,6 +344,12 @@ for (const role of ['homeowner', 'kasambahay']) {
     const card = screen.find('BrowsePostCard');
     assert.equal(card.props.name, 'Poster Name'); assert.equal(card.props.description, 'Original post description.');
     assert.equal(card.props.authorRole, role === 'homeowner' ? 'Kasambahay' : 'Homeowner');
+    assert.equal(screen.find('BrowseHeader').props.filtersVisible, true);
+    screen.act(() => screen.find('BrowseHeader').props.onFiltersToggle());
+    assert.equal(screen.find('BrowseFilters'), undefined);
+    assert.equal(screen.find('BrowseHeader').props.filtersVisible, false);
+    screen.act(() => screen.find('BrowseHeader').props.onFiltersToggle());
+    assert.ok(screen.find('BrowseFilters'));
     screen.act(() => card.props.onSave());
     assert.equal(screen.saves[0][0].partnerId, 'author');
     screen.act(() => card.props.onProfilePress());
@@ -434,8 +441,15 @@ for (const accountType of ['Homeowner', 'Kasambahay']) {
     const otherRole = accountType === 'Homeowner' ? 'Kasambahay' : 'Homeowner';
     const booking = { booking_id: 'own', poster: participant('viewer', accountType), assigned_partner: null, recipient: null,
       service_category: ['Cleaning'], booking_type: 'short_term', booking_status: 'Pending', rate_amount: '600', rate_period: 'day', start_time: '2026-10-20', end_time: '2026-10-20' };
+    const reactNativeMock = surfaces();
+    reactNativeMock.Dimensions = { get: () => ({ width: 390, height: 844 }) };
+    reactNativeMock.Animated.Value = class { setValue() {} interpolate() { return 0; } addListener() { return '1'; } removeListener() {} removeAllListeners() {} };
+    reactNativeMock.Animated.spring = reactNativeMock.Animated.timing = () => ({ start: callback => callback?.() });
+    reactNativeMock.PanResponder = { create: () => ({ panHandlers: {} }) };
     const { MyBookingsModal } = load('src/features/bookings/components/MyBookingsModal.tsx', {
-      'react-native': surfaces(), 'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0 }) }, '@expo/vector-icons': { Ionicons: 'Icon' },
+      'react-native': reactNativeMock, 'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0 }) }, '@expo/vector-icons': { Ionicons: 'Icon' },
+      '../../../shared/components/BottomSheetHandle': { BottomSheetHandle: 'BottomSheetHandle' },
+      '../../../shared/theme/theme': load('src/shared/theme/theme.ts'),
       '../../../shared/localization/LanguageContext': { useLanguage: () => ({ tr: text => localization.translateMessage(language, text), formatDate: value => localization.formatLocalizedDate(language, value, 'compact') }) },
       '../../../shared/realtime': { realtime: { subscribe: () => () => {} } }, '../workSetup': { workSetupLabel: () => 'Stay-out' }, '../bookingParticipants': participants,
       '../../auth/session/UserContext': { useUser: () => ({ user, updateUser() {} }) }, './ContractDownloadCard': { ContractDownloadCard: () => null },
@@ -444,18 +458,19 @@ for (const accountType of ['Homeowner', 'Kasambahay']) {
         fetchBookingPenaltyStatus: async () => ({ penalty_points: 0, is_restricted: false }) },
       './CancelBookingModal': { CancelBookingModal: 'CancelBookingModal' }, '../../reviews/components/ReviewModal': { ReviewModal: 'ReviewModal' },
       './ProposalsModal': { ProposalsModal: 'ProposalsModal' }, '../../profile/components/UserProfileModal': { UserProfileModal: 'UserProfileModal' },
+      './BookingModal': { BookingModal: 'BookingModal' },
     });
     const render = () => screen.render(React.createElement(MyBookingsModal, { visible: true, token: 'token', accountType, initialTab: 'pending', onClose() {} }));
     render(); await tick();
-    const offers = () => screen.all('Pressable').filter(node => content(node) === 'Offers');
-    assert.equal(offers().length, 2);
-    screen.act(() => offers()[0].props.onPress());
-    assert.equal(screen.find('ProposalsModal').props.isPoster, true);
-    assert.equal(screen.find('ProposalsModal').props.bookingId, 'own');
-    screen.act(() => screen.find('ProposalsModal').props.onClose());
-    screen.act(() => offers()[1].props.onPress());
-    assert.equal(screen.find('ProposalsModal').props.isPoster, false);
-    assert.equal(screen.find('ProposalsModal').props.bookingId, 'other');
+    const details = () => screen.all('Pressable').filter(node => content(node) === 'Details');
+    assert.equal(details().length, 2);
+    screen.act(() => details()[0].props.onPress());
+    assert.equal(screen.find('BookingModal').props.visible, true);
+    assert.equal(screen.find('BookingModal').props.bookingId, 'own');
+    screen.act(() => screen.find('BookingModal').props.onClose());
+    screen.act(() => details()[1].props.onPress());
+    assert.equal(screen.find('BookingModal').props.visible, true);
+    assert.equal(screen.find('BookingModal').props.bookingId, 'other');
     for (const value of ['English', 'Tagalog', 'Bisaya']) {
       language = value; render();
       const heading = accountType === 'Homeowner' ? 'My Bookings & Hires' : 'My Jobs & Contracts';

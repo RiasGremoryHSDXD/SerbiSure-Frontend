@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useLanguage } from '../../../shared/localization/LanguageContext';
 import { useUser } from '../../auth/session/UserContext';
 import { fetchReceivedReviews, fetchReviewSummary, ReviewItem, ReviewSummaryData } from '../../reviews/api/reviewApi';
-import { fetchUserAbout, fetchUserTags, updateUserTags, fetchContactPrivacy, updateContactPrivacy } from '../api/accountApi';
+import { fetchUserAbout, fetchUserTags, updateUserTags, fetchContactPrivacy, updateContactPrivacy, fetchUserSocialLinks, type SocialLinkItem } from '../api/accountApi';
 import { fetchVerificationStatus, type VerificationStatusResponse } from '../../verification/api/verificationApi';
 import { fetchNotifications } from '../../notifications/api/notificationsApi';
 
@@ -16,7 +16,7 @@ import { localizeProfileCopy } from '../profileConfig';
 import type { ProfileScreenProps } from '../types';
 import { useWorkerProfile } from '../worker/useWorkerProfile';
 
-export function useProfile({ role: requestedRole, avatarUri, initialView = 'main', onUpdateAvatar, onBack, onLogout }: ProfileScreenProps) {
+export function useProfile({ role: requestedRole, avatarUri, initialView = 'main', onViewChange, onUpdateAvatar, onBack, onLogout, onBookingsPress }: ProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const { language, setLanguage, t, tr } = useLanguage();
   const { getFullName, getFirstNameOnly, user, updateUser } = useUser();
@@ -27,6 +27,17 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
   const worker = useWorkerProfile(isWorker);
   const { isOnJob, jobStatusError, isUpdatingJobStatus, analyticsData, isLoadingAnalytics, refreshWorkerProfile, handleToggleJobStatus } = worker;
   const [currentView, setCurrentView] = useState<'main' | 'personal_info'>(initialView);
+
+  useEffect(() => {
+    if (initialView) {
+      setCurrentView(initialView);
+    }
+  }, [initialView]);
+
+  useEffect(() => {
+    onViewChange?.(currentView);
+  }, [currentView, onViewChange]);
+
   const [isLanguageExpanded, setIsLanguageExpanded] = useState(false);
   const [localAvatar, setLocalAvatar] = useState<string | null>(avatarUri || null);
 
@@ -51,9 +62,26 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
   const [isLoadingVerification, setIsLoadingVerification] = useState(false);
 
   const [tags, setTags] = useState<string[]>(user.userTags || []);
+  const [socialLinks, setSocialLinks] = useState<SocialLinkItem[]>([]);
   const [isManageTagsModalVisible, setIsManageTagsModalVisible] = useState(false);
   const [isManageSocialLinksModalVisible, setIsManageSocialLinksModalVisible] = useState(false);
   const [isAllReviewsModalVisible, setIsAllReviewsModalVisible] = useState(false);
+
+  const reloadSocialLinks = async () => {
+    if (!user.token) return;
+    try {
+      const data = await fetchUserSocialLinks(user.token);
+      if (data?.social_links) {
+        setSocialLinks(data.social_links);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (user.token) {
+      void reloadSocialLinks();
+    }
+  }, [user.token]);
   const [isReviewsExpanded, setIsReviewsExpanded] = useState(false);
   const [showContactNumber, setShowContactNumber] = useState<boolean>(user.showContactNumber ?? false);
   const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
@@ -133,6 +161,13 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
           fetchContactPrivacy(user.token).then((show) => {
             setShowContactNumber(show);
             updateUser({ showContactNumber: show });
+          }).catch(() => { })
+        );
+        promises.push(
+          fetchUserSocialLinks(user.token).then((data) => {
+            if (data?.social_links) {
+              setSocialLinks(data.social_links);
+            }
           }).catch(() => { })
         );
         promises.push(loadPendingPosts(true));
@@ -298,6 +333,7 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
     setLanguage,
     t,
     getFullName,
+    getFirstNameOnly,
     user,
     updateUser,
     role,
@@ -367,6 +403,9 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
     totalReviews,
     positivePercentage,
     handlePickImage,
+    socialLinks,
+    setSocialLinks,
+    reloadSocialLinks,
   };
 }
 

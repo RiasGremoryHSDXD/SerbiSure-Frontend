@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LocationItem } from '../services/locationService';
+import THEME from '../theme/theme';
 
 interface SearchablePickerModalProps {
   visible: boolean;
@@ -81,9 +82,6 @@ export function SearchablePickerModal({
         <Text style={[styles.itemText, isSelected && styles.itemTextSelected]} numberOfLines={1}>
           {label}
         </Text>
-        {isSelected && (
-          <Ionicons name="checkmark-circle" size={22} color="#FFB43B" style={styles.checkIcon} />
-        )}
       </Pressable>
     );
   };
@@ -202,24 +200,24 @@ const styles = StyleSheet.create({
   itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingVertical: 14,
   },
   itemRowSelected: {
-    backgroundColor: '#FFF8EC',
+    backgroundColor: '#ECECEC',
   },
   itemRowPressed: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#E0E0E0',
   },
   itemText: {
-    fontSize: 16,
-    color: '#1F2937',
+    fontSize: 15.5,
+    color: THEME.colors.ink,
+    fontFamily: THEME.typography.fontFamily.mainRegular,
     flex: 1,
   },
   itemTextSelected: {
-    fontWeight: '700',
-    color: '#D97706',
+    color: THEME.colors.ink,
+    fontFamily: THEME.typography.fontFamily.mainBold,
   },
   checkIcon: {
     marginLeft: 12,

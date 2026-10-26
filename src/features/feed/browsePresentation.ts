@@ -53,8 +53,15 @@ function rawBrowseHeaderCopy(role: Role, tab: BrowseTab, count: number, loading:
 export function browseEmptyCopy(role: Role, fetchedCount: number, hasFilters: boolean, error?: string | null) {
   const jobs = role === 'kasambahay';
   if (error) return { icon: 'cloud-offline-outline', title: 'Could not load posts', description: error, action: 'Try Again' } as const;
-  if (fetchedCount > 0) return { icon: 'checkmark-circle-outline', title: "You're all caught up!", description: 'You have reviewed the current posts. Refresh to browse them again.', action: 'Refresh Posts' } as const;
-  if (hasFilters) return { icon: 'search-outline', title: 'No matching posts', description: 'Try a different category, location, or rate to find more results.', action: 'Clear Filters' } as const;
+  if (fetchedCount > 0) return { icon: 'checkmark-circle-outline', title: "You're all caught up!", description: 'You have reviewed the current posts.', action: null } as const;
+  if (hasFilters) return {
+    icon: 'search-outline',
+    title: 'No posts found',
+    description: jobs
+      ? 'No job requests match your search or category. Try another search or clear your filters.'
+      : 'No workers match your search or category. Try another search or clear your filters.',
+    action: 'Clear Filters',
+  } as const;
   return {
     icon: 'newspaper-outline', title: jobs ? 'No jobs available yet' : 'No services available yet',
     description: jobs ? 'New job posts from homeowners will appear here. Check back soon.' : 'New service posts from kasambahay will appear here. Check back soon.',

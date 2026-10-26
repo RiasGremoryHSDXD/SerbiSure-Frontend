@@ -86,7 +86,8 @@ export function buildEngagementSchedule(form: EngagementSchedule, now = Date.now
   const start = bookingSchedule(form.startDate, startClock);
   const end = bookingSchedule(short || form.ongoing ? form.startDate : form.endDate, endClock);
   if (start.clock >= end.clock) throw new Error('Daily work hours must end after they start.');
-  if (Date.parse(start.iso) <= now) throw new Error('Choose a start date and shift that have not passed.');
+  const latestAllowed = short ? Date.parse(end.iso) : Date.parse(bookingSchedule(form.startDate, '11:59 PM').iso);
+  if (latestAllowed <= now) throw new Error('Choose a start date and shift that have not passed.');
   if (!short && !form.ongoing && bookingSchedule(form.endDate, '12:00 PM').iso < bookingSchedule(earliestLongTermEnd(form.startDate), '12:00 PM').iso) throw new Error(LONG_TERM_MINIMUM_MESSAGE);
   const days = WORK_DAYS.filter(item => form.days.includes(item.value)).map(item => item.value);
   if (!short && !days.length) throw new Error('Select at least one working day.');

@@ -7,7 +7,7 @@ import { mapBookingCard, bookingSchedule, type BookingCardInfo } from '../bookin
 import { sendBookingOffer, respondToBookingOffer } from '../api/bookingOffersApi';
 import type { BookingConfirmData } from '../../bookings/components/BookingModal';
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
-import { StyleSheet, Text, View, Image, TextInput, FlatList, Pressable, Modal, KeyboardAvoidingView, Platform, Alert, Animated, ActivityIndicator, Dimensions, PanResponder, ToastAndroid, NativeModules, LayoutChangeEvent } from 'react-native';
+import { StyleSheet, Text, View, Image, TextInput, FlatList, Pressable, Modal, Keyboard, KeyboardAvoidingView, Platform, Alert, Animated, ActivityIndicator, Dimensions, PanResponder, ToastAndroid, NativeModules, LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -476,8 +476,14 @@ function ChatDetailSession({
   const [languageWarning, setLanguageWarning] = useState<{ send: () => void } | null>(null);
   const [sensitiveTarget, setSensitiveTarget] = useState<string | null>(null);
   const [revealedMessages, setRevealedMessages] = useState<Set<string>>(new Set());
+  const initialAutoSentKey = useRef<string | null>(null);
   useEffect(() => {
-    if (!visible) { setLanguageWarning(null); setSensitiveTarget(null); setRevealedMessages(new Set()); }
+    if (!visible) {
+      setLanguageWarning(null);
+      setSensitiveTarget(null);
+      setRevealedMessages(new Set());
+      initialAutoSentKey.current = null;
+    }
   }, [visible]);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
@@ -551,6 +557,12 @@ function ChatDetailSession({
   const [bookingReadOnly, setBookingReadOnly] = useState(false);
   const [activeBookingMsgId, setActiveBookingMsgId] = useState<string | null>(null);
   const [activeBookingDetails, setActiveBookingDetails] = useState<BookingCardInfo | null>(null);
+
+  useEffect(() => {
+    if (bookingModalVisible) {
+      Keyboard.dismiss();
+    }
+  }, [bookingModalVisible]);
 
   // Right-to-left slide transition state
   const [modalVisible, setModalVisible] = useState(visible);
@@ -716,6 +728,7 @@ function ChatDetailSession({
 
   const handleSendOffer = async (details: BookingConfirmData) => {
     if (!effectiveToken || !partnerId) throw new Error('Sign in and select a conversation before sending an offer.');
+    if (isKasambahay) throw new Error('Only homeowners can send booking offers.');
     if (responseBusyRef.current) throw new Error('Please wait for the current booking action to finish.');
     const times = details.workHours.split(' - ');
     const start = bookingSchedule(details.startDate, times[0] || '');
@@ -770,6 +783,9 @@ function ChatDetailSession({
           if (realtime.status !== 'connected') setIsOtherTyping(partnerIsTyping);
           // HTTP is a fallback. A slow response must never replace newer live presence.
           if (realtime.status !== 'connected') realtime.recordPresence(presenceAccount, partnerId, partnerIsOnline, presenceRevision);
+
+          const sendAutoKey = `${partnerId}-${initialMessage}-${initialReplyTo?.text || ''}`;
+          const shouldSendAuto = Boolean(isInitial && initialMessage && initialAutoSentKey.current !== sendAutoKey);
 
           if (items && items.length > 0) {
             const visibleItems = items.filter((m) => !chatStore.isMessageDeleted(m.chat_message_id));
@@ -872,35 +888,91 @@ function ChatDetailSession({
               };
             });
 
-            hasLoadedThread.current = true;
-            if (threadKey) cacheThread(threadKey, mapped, cacheGeneration.current);
-            setMessages((prev) => {
-              const deduplicatedMapped = [...mapped, ...prev.filter(message => message.id.startsWith('temp-'))];
-              const hasChanged =
-                prev.length !== deduplicatedMapped.length ||
-                prev.some((msg, idx) => {
-                  const m = deduplicatedMapped[idx];
-                  if (!m) return true;
-                  if (msg.id !== m.id) return true;
-                  if (msg.sender !== m.sender) return true;
-                  if (!!msg.bookingInfo !== !!m.bookingInfo) return true;
-                  if (JSON.stringify(msg.bookingInfo) !== JSON.stringify(m.bookingInfo)) return true;
-                  if (msg.bookingInfo?.isAcquired !== m.bookingInfo?.isAcquired) return true;
-                  if (msg.reaction !== m.reaction) return true;
-                  if (msg.imageUri !== m.imageUri) return true;
-                  if (msg.text !== m.text) return true;
-                  if (msg.replyTo?.text !== m.replyTo?.text) return true;
-                  if (JSON.stringify(msg.reactionSummary) !== JSON.stringify(m.reactionSummary)) return true;
-                  return false;
-                });
-              if (hasChanged) {
-                return deduplicatedMapped;
+            if (shouldSendAuto && initialMessage) {
+              initialAutoSentKey.current = sendAutoKey;
+              const replyHeader = initialReplyTo
+                ? `> [${initialReplyTo.author}|${initialReplyTo.imageUri || ''}|${initialReplyTo.messageId || ''}]: ${initialReplyTo.text}\n\n`
+                : '';
+              const payload = `${replyHeader}${initialMessage}`;
+              if (containsOffensiveLanguage(payload)) {
+                setMessages(mapped);
+                setInputMessage(initialMessage);
+                setReplyingTo(initialReplyTo ? { ...initialReplyTo, id: initialReplyTo.messageId || '' } : null);
+                return;
               }
-              return prev;
-            });
+              const tempId = `temp-${Date.now()}`;
+              const autoMsg: ChatMessage = {
+                id: tempId,
+                sender: 'me',
+                text: initialMessage,
+                replyTo: initialReplyTo
+                  ? {
+                      author: initialReplyTo.author,
+                      text: initialReplyTo.text,
+                      imageUri: initialReplyTo.imageUri,
+                      messageId: initialReplyTo.messageId,
+                    }
+                  : undefined,
+                time: formatTimeOnly(),
+              };
+              const combined = [...mapped, autoMsg];
+              hasLoadedThread.current = true;
+              if (threadKey) cacheThread(threadKey, combined, cacheGeneration.current);
+              setMessages(combined);
+
+              sendChatMessage(effectiveToken, partnerId, payload)
+                .then((res) => {
+                  if (!isMounted || !sessionActive.current) return;
+                  if (res?.data?.chat_message_id && isMounted) {
+                    setMessages((prev) =>
+                      prev.map((msg) => (msg.id === tempId ? { ...msg, id: res.data.chat_message_id, text: (res.data.message_payload || '').replace(/^> \[[^\n]*\]: [^\n]*\n\n/, '') } : msg))
+                    );
+                  }
+                  if (res.language_warning) Alert.alert('Notice', res.language_warning);
+                  chatStore.addOrUpdateChat({
+                    partnerId,
+                    name: contactName,
+                    badge: contactRole,
+                    avatar: resolvedAvatar,
+                    message: (res.data.message_payload || '').replace(/^> \[[^\n]*\]: [^\n]*\n\n/, ''),
+                    time: 'Just now',
+                  });
+                })
+                .catch((err) => {
+                  if (isMounted) { setMessages(current => current.filter(message => message.id !== tempId)); setInputMessage(initialMessage || ''); setThreadError(err instanceof Error ? err.message : 'Could not send the initial message. Please retry.'); }
+                });
+            } else {
+              hasLoadedThread.current = true;
+              if (threadKey) cacheThread(threadKey, mapped, cacheGeneration.current);
+              setMessages((prev) => {
+                const deduplicatedMapped = [...mapped, ...prev.filter(message => message.id.startsWith('temp-'))];
+                const hasChanged =
+                  prev.length !== deduplicatedMapped.length ||
+                  prev.some((msg, idx) => {
+                    const m = deduplicatedMapped[idx];
+                    if (!m) return true;
+                    if (msg.id !== m.id) return true;
+                    if (msg.sender !== m.sender) return true;
+                    if (!!msg.bookingInfo !== !!m.bookingInfo) return true;
+                    if (JSON.stringify(msg.bookingInfo) !== JSON.stringify(m.bookingInfo)) return true;
+                    if (msg.bookingInfo?.isAcquired !== m.bookingInfo?.isAcquired) return true;
+                    if (msg.reaction !== m.reaction) return true;
+                    if (msg.imageUri !== m.imageUri) return true;
+                    if (msg.text !== m.text) return true;
+                    if (msg.replyTo?.text !== m.replyTo?.text) return true;
+                    if (JSON.stringify(msg.reactionSummary) !== JSON.stringify(m.reactionSummary)) return true;
+                    return false;
+                  });
+                if (hasChanged) {
+                  return deduplicatedMapped;
+                }
+                return prev;
+              });
+            }
 
             void chatStore.loadInbox(effectiveToken, true);
-          } else if (isInitial && initialMessage) {
+          } else if (shouldSendAuto && initialMessage) {
+            initialAutoSentKey.current = sendAutoKey;
             hasLoadedThread.current = true;
             if (threadKey) cacheThread(threadKey, [], cacheGeneration.current);
             // New thread with initial auto-message!
@@ -1360,15 +1432,15 @@ function ChatDetailSession({
 
   if (threadKey !== sessionThreadKey) return null;
   return (
-    <Modal visible={modalVisible} animationType="none" transparent onShow={handleModalShow} onRequestClose={handleClose}>
-      <Animated.View style={[styles.modalScreenContainer, { transform: [{ translateX: slideAnim }] }]}>
+    <Modal visible={modalVisible} animationType="none" transparent={false} statusBarTranslucent onShow={handleModalShow} onRequestClose={handleClose}>
+      <Animated.View style={[styles.modalScreenContainer, { transform: [{ translateX: slideAnim }], paddingTop: Math.max(insets.top, 14) }]}>
         <KeyboardAvoidingView
           style={styles.container}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
         >
           {/* Header */}
-          <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
-            <Pressable onPress={handleClose} style={styles.backBtn} hitSlop={10}>
+          <View style={styles.header}>
+            <Pressable onPress={handleClose} style={styles.backBtn} hitSlop={12}>
               <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
             </Pressable>
 
@@ -1387,29 +1459,32 @@ function ChatDetailSession({
               </View>
               <View style={styles.headerTextCol}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Text style={styles.contactName}>{contactName}</Text>
-                  <Ionicons name="chevron-forward" size={13} color="#8E8E93" />
+                  <Text style={styles.contactName} numberOfLines={1} ellipsizeMode="tail">{contactName}</Text>
+                  <Ionicons name="chevron-forward" size={13} color="#8E8E93" style={{ flexShrink: 0 }} />
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                  <Text testID="chat-presence-status" numberOfLines={1} style={[styles.contactSub, { width: 92 }]}>{uiText(partnerOnline === undefined ? 'Checking…' : partnerOnline ? 'Active now' : 'Inactive')}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 }}>
+                  <Text testID="chat-presence-status" numberOfLines={1} style={styles.contactSub}>{uiText(partnerOnline === undefined ? 'Checking…' : partnerOnline ? 'Active now' : 'Inactive')}</Text>
                 </View>
               </View>
             </Pressable>
 
-            {!isSupportConversation && (user.accountType === 'Homeowner' || user.accountType === 'Kasambahay') ? (
+            {!isSupportConversation && isHomeowner ? (
               <Pressable
                 style={styles.bookingHeaderBtn}
                 onPress={() => {
+                  Keyboard.dismiss();
                   setBookingReadOnly(false);
                   setActiveBookingMsgId(null);
                   setActiveBookingDetails(null);
                   setBookingModalVisible(true);
                 }}
-                hitSlop={10}
+                hitSlop={12}
               >
-                <Ionicons name="calendar-outline" size={19} color="#1A1A1A" />
+                <Ionicons name="calendar-outline" size={21} color="#1A1A1A" />
               </Pressable>
-            ) : null}
+            ) : (
+              <View style={styles.headerPlaceholder} />
+            )}
           </View>
 
           {/* Chat Body Container */}
@@ -1561,7 +1636,10 @@ function ChatDetailSession({
                       ? 'Confirmed'
                       : isDeclined
                         ? 'Declined'
-                        : item.bookingInfo.canRespond ? 'Booking offer' : 'Waiting for reply';
+                        : item.bookingInfo.canRespond ? 'Offer' : 'Pending';
+
+                  const isSolidCard = isConfirmed || isDeclined;
+                  const cardFgColor = isSolidCard ? '#FFFFFF' : '#0D0D11';
 
                   return (
                     <View key={`system-wrap-${item.id}`}>
@@ -1579,38 +1657,27 @@ function ChatDetailSession({
                             pressed && styles.compactBookingCardPressed,
                           ]}
                           onPress={() => {
+                            Keyboard.dismiss();
                             setActiveBookingMsgId(item.id);
                             setActiveBookingDetails(item.bookingInfo || null);
                             setBookingReadOnly(true);
                             setBookingModalVisible(true);
                           }}
                         >
-                          {/* Round Document / Status Icon Badge */}
-                          <View
-                            style={[
-                              styles.compactBookingIconBadge,
-                              isConfirmed && styles.compactBookingIconBadgeConfirmed,
-                              isDeclined && styles.compactBookingIconBadgeDeclined,
-                              isAcquired && styles.compactBookingIconBadgeAcquired,
-                            ]}
-                          >
-                            <Ionicons
-                              name={isAcquired ? 'lock-closed' : isConfirmed ? 'checkmark-sharp' : isDeclined ? 'close-outline' : 'document-text'}
-                              size={20}
-                              color="#FFFFFF"
-                            />
-                          </View>
+                          {/* Direct Icon (no circular container) */}
+                          <Ionicons
+                            name={isAcquired ? 'lock-closed' : isConfirmed ? 'checkmark-sharp' : isDeclined ? 'close-outline' : 'document-text'}
+                            size={22}
+                            color={cardFgColor}
+                            style={{ marginRight: 10 }}
+                          />
 
                           <View style={styles.compactBookingInfoCol}>
-                            <Text style={styles.compactBookingTitle} numberOfLines={1} ellipsizeMode="tail">
+                            <Text style={[styles.compactBookingTitle, { color: cardFgColor }]} numberOfLines={1} ellipsizeMode="tail">
                               {bookedPersonName}
                             </Text>
-                            <Text style={styles.compactBookingSubText}>
-                              <Text style={[
-                                styles.compactBookingStatus,
-                                isConfirmed && styles.compactBookingStatusConfirmed,
-                                isDeclined && styles.compactBookingStatusDeclined,
-                              ]}>
+                            <Text style={[styles.compactBookingSubText, { color: cardFgColor }]}>
+                              <Text style={[styles.compactBookingStatus, { color: cardFgColor }]}>
                                 {bookingStatus}
                               </Text>
                               {` · ${uiText('Start:')} ${formattedStartDate}`}
@@ -1620,7 +1687,7 @@ function ChatDetailSession({
 
                           {/* Right Chevron Arrow */}
                           <View style={styles.compactBookingArrowWrap}>
-                            <Ionicons name="chevron-forward" size={19} color="#8E8E93" />
+                            <Ionicons name="chevron-forward" size={19} color={cardFgColor} />
                           </View>
                         </Pressable>
 
@@ -1636,7 +1703,7 @@ function ChatDetailSession({
                                 confirmFromCard(item.id, 'reject');
                               }}
                             >
-                              <Ionicons name="close-circle-outline" size={16} color="#DC2626" style={{ marginRight: 4 }} />
+                              <Ionicons name="close-circle-outline" size={16} color="#000000" style={{ marginRight: 4 }} />
                               <Text style={styles.compactQuickDeclineText}>{uiText("Decline")}</Text>
                             </Pressable>
 
@@ -1651,7 +1718,7 @@ function ChatDetailSession({
                               }}
                             >
                               <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                              <Text style={styles.compactQuickAgreeText}>{uiText("Agree & Accept")}</Text>
+                              <Text style={styles.compactQuickAgreeText}>{uiText("Accept")}</Text>
                             </Pressable>
                           </View>
                         ) : null}
@@ -1909,7 +1976,9 @@ function ChatDetailSession({
           </View>
 
           {/* Reply Context Banner - Ultra-clean with thumbnail preview */}
-          {replyingTo ? (
+          {!bookingModalVisible && (
+            <>
+              {replyingTo ? (
             <View style={styles.replyBanner}>
               {replyingTo.imageUri ? (
                 <Image
@@ -1986,6 +2055,8 @@ function ChatDetailSession({
               {isSendingText ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name="send" size={16} color="#FFFFFF" style={{ marginLeft: 2 }} />}
             </Pressable>
           </View>
+            </>
+          )}
         </KeyboardAvoidingView>
 
         {/* Messenger-Style Full-Screen Image Zoom Viewer Modal */}
@@ -2018,6 +2089,7 @@ function ChatDetailSession({
         {/* Booking Screen Modal */}
         {bookingModalVisible && <BookingModal
           visible={bookingModalVisible}
+          useNativeModal={false}
           onClose={() => setBookingModalVisible(false)}
           contactName={contactName}
           contactRole={contactRole}
@@ -2317,55 +2389,71 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 14,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EBE9E4',
   },
   backBtn: {
-    paddingRight: 8,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerInfo: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     marginLeft: 4,
+    marginRight: 8,
+    minWidth: 0,
   },
   avatarWrapper: {
     position: 'relative',
     marginRight: 10,
+    flexShrink: 0,
   },
   headerAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
   onlineDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#4CAF50',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#00B13B',
     borderWidth: 2,
     borderColor: '#F6F5F2',
     position: 'absolute',
-    bottom: 0,
-    right: 0,
+    bottom: -1,
+    right: -1,
   },
   headerTextCol: {
+    flex: 1,
+    minWidth: 0,
     justifyContent: 'center',
   },
   contactName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#1A1A1A',
+    flexShrink: 1,
   },
   contactSub: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 11.5,
+    color: '#727272',
     marginTop: 1,
   },
   bookingHeaderBtn: {
-    paddingLeft: 8,
-    alignSelf: 'flex-start',
-    marginTop: 2,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerPlaceholder: {
+    width: 40,
+    height: 40,
   },
   chatBody: {
     flex: 1,
@@ -2588,54 +2676,37 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
   },
   compactBookingCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F6F5F2',
     borderRadius: 16,
     paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ECECEC',
+    borderWidth: 1.5,
+    borderColor: '#0D0D11',
   },
   compactBookingCardConfirmed: {
-    backgroundColor: '#F7FEFA',
-    borderColor: '#D1FAE5',
+    backgroundColor: '#00B13B',
+    borderWidth: 1.5,
+    borderColor: '#0D0D11',
   },
   compactBookingCardDeclined: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#E2E8F0',
+    backgroundColor: '#FF3E3E',
+    borderWidth: 1.5,
+    borderColor: '#0D0D11',
   },
   compactBookingCardAcquired: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#E2E8F0',
-    opacity: 0.9,
+    backgroundColor: '#F6F5F2',
+    borderWidth: 1.5,
+    borderColor: '#0D0D11',
   },
   compactBookingCardPressed: {
     opacity: 0.9,
     transform: [{ scale: 0.985 }],
   },
-  compactBookingIconBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    flexShrink: 0,
-    backgroundColor: '#E67E22',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  compactBookingIconBadgeConfirmed: {
-    backgroundColor: '#10B981',
-  },
-  compactBookingIconBadgeDeclined: {
-    backgroundColor: '#94A3B8',
-  },
-  compactBookingIconBadgeAcquired: {
-    backgroundColor: '#64748B',
-  },
   compactBookingInfoCol: {
     flex: 1,
     minWidth: 0,
-    marginLeft: 10,
     marginRight: 6,
     justifyContent: 'center',
   },
@@ -2643,22 +2714,17 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontSize: 14,
     fontWeight: '700',
-    color: '#0F172A',
+    color: '#0D0D11',
     letterSpacing: -0.2,
   },
   compactBookingStatus: {
-    fontWeight: '600',
-  },
-  compactBookingStatusConfirmed: {
-    color: '#15803D',
-  },
-  compactBookingStatusDeclined: {
-    color: '#B91C1C',
+    fontWeight: '700',
+    color: '#0D0D11',
   },
   compactBookingSubText: {
     fontSize: 12.5,
     lineHeight: 18,
-    color: '#64748B',
+    color: '#0D0D11',
     marginTop: 2,
     fontWeight: '500',
   },
@@ -2677,15 +2743,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
+    backgroundColor: '#F6F5F2',
+    borderWidth: 1.5,
+    borderColor: '#0D0D11',
     borderRadius: 22,
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
   compactQuickDeclineText: {
-    color: '#DC2626',
+    color: '#0D0D11',
     fontWeight: '700',
     fontSize: 13,
   },
@@ -2694,11 +2760,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00875A',
+    backgroundColor: '#00B13B',
+    borderWidth: 1.5,
+    borderColor: '#0D0D11',
     borderRadius: 22,
     paddingVertical: 10,
     paddingHorizontal: 14,
-    shadowColor: '#00875A',
+    shadowColor: '#00B13B',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,

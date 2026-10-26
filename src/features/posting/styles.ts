@@ -1,5 +1,6 @@
 import { StyleSheet } from 'react-native';
 import THEME from '../../shared/theme/theme';
+
 export const postingStyles = StyleSheet.create({
   container: {
     flex: 1,
@@ -15,12 +16,10 @@ export const postingStyles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
   },
-  backCircleButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
+  backButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'flex-start',
     justifyContent: 'center',
   },
   headerTitle: {
@@ -33,23 +32,55 @@ export const postingStyles = StyleSheet.create({
     width: 36,
     height: 36,
   },
-  stepBadge: {
-    alignSelf: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 9999,
-    marginBottom: 8,
+
+  // Stepper Styles
+  stepperWrapper: {
+    alignItems: 'center',
+    marginBottom: 20,
   },
   stepBadgeText: {
     fontFamily: THEME.typography.fontFamily.mainBold,
-    fontSize: 11.5,
-    fontWeight: '800',
-    color: '#9CA3AF',
-    letterSpacing: 0.5,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B7280',
+    marginBottom: 8,
   },
-  titleBlock: {
+  stepperRow: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 12,
+  },
+  stepperCol: {
+    flex: 1,
     alignItems: 'center',
+  },
+  stepperBar: {
+    height: 4,
+    width: '100%',
+    borderRadius: 2,
+    marginBottom: 4,
+  },
+  stepperBarActive: {
+    backgroundColor: '#FFB380',
+  },
+  stepperBarInactive: {
+    backgroundColor: '#E5E7EB',
+  },
+  stepperLabel: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  stepperLabelActive: {
+    color: '#0D0D11',
+  },
+  stepperLabelInactive: {
+    color: '#9CA3AF',
+  },
+
+  // Title Block
+  titleBlock: {
+    alignItems: 'flex-start',
     marginBottom: 16,
   },
   mainTitle: {
@@ -57,7 +88,7 @@ export const postingStyles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '900',
     color: '#0D0D11',
-    textAlign: 'center',
+    textAlign: 'left',
     letterSpacing: -0.3,
   },
   titleHighlight: {
@@ -66,128 +97,100 @@ export const postingStyles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 16,
     flexGrow: 1,
-    justifyContent: 'flex-start',
   },
-
-  // STEP 1 STYLES
-  serviceGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  serviceCard: {
-    width: '48%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    paddingVertical: 20,
-    alignItems: 'center',
-    position: 'relative',
-  },
-  serviceCardActive: {
-    backgroundColor: '#FFB380',
-  },
-  serviceIcon: {
-    marginBottom: 12,
-  },
-  serviceLabel: {
-    fontFamily: THEME.typography.fontFamily.mainBold,
-    fontSize: 13.5,
-    fontWeight: '700',
-    color: '#0D0D11',
-  },
-  serviceLabelActive: {
-    fontFamily: THEME.typography.fontFamily.mainExtraBold,
-    color: '#0D0D11',
-    fontWeight: '800',
-  },
-
-  // STEP 2 STYLES
-  step2Container: {
+  stepContainer: {
     width: '100%',
   },
-  sectionLabel: {
+  sectionHeader: {
     fontFamily: THEME.typography.fontFamily.mainBold,
     fontSize: 11,
     fontWeight: '800',
-    color: '#9CA3AF',
+    color: '#6B7280',
     letterSpacing: 0.8,
+    textTransform: 'uppercase',
     marginBottom: 8,
   },
-  typeToggleRow: {
+
+  // Service Grid (3x2)
+  serviceGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
+    justifyContent: 'space-between',
+    marginBottom: 16,
   },
-  typeCard: {
-    flex: 1,
+  serviceGridError: {},
+  serviceCard: {
+    width: '31%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    paddingVertical: 18,
-    paddingHorizontal: 16,
-    alignItems: 'flex-start',
-  },
-  typeCardActive: {
-    backgroundColor: '#FFB380',
-  },
-  typeIcon: {
-    marginBottom: 10,
-  },
-  typeTitle: {
-    fontFamily: THEME.typography.fontFamily.mainExtraBold,
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#0D0D11',
-  },
-  timeSlotRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  timeSlotCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    paddingVertical: 12,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
   },
-  timeSlotActive: {
+  serviceCardActive: {
     backgroundColor: '#FFB380',
+    borderColor: 'transparent',
   },
-  timeSlotTitle: {
+  serviceCardError: {
+    borderColor: '#EF4444',
+  },
+  serviceIcon: {
+    marginBottom: 4,
+  },
+  serviceLabel: {
     fontFamily: THEME.typography.fontFamily.mainBold,
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '700',
     color: '#0D0D11',
     marginTop: 4,
+    textAlign: 'center',
   },
-  timeSlotSub: {
-    fontFamily: THEME.typography.fontFamily.secondaryMedium,
-    fontSize: 9.5,
-    color: '#6B7280',
-    marginTop: 1,
-  },
-  longTermScheduleCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF4ED',
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#0D0D11',
-    padding: 14,
-    marginTop: 14,
-  },
-  longTermScheduleText: {
-    flex: 1,
-    fontFamily: THEME.typography.fontFamily.secondaryMedium,
-    fontSize: 12,
+  serviceLabelActive: {
+    fontWeight: '800',
     color: '#0D0D11',
-    fontWeight: '600',
-    lineHeight: 17,
   },
 
-  // STEP 3 STYLES
-  step3Container: {
-    width: '100%',
+  // Option Rows (Engagement & Work Setup)
+  optionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
   },
+  optionBtn: {
+    flex: 1,
+    height: 46,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  optionBtnActive: {
+    backgroundColor: '#FFB380',
+    borderColor: 'transparent',
+  },
+  optionBtnError: {
+    borderColor: '#EF4444',
+  },
+  optionBtnText: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0D0D11',
+  },
+  optionBtnTextActive: {
+    color: '#0D0D11',
+    fontWeight: '800',
+  },
+
+  // Step 2 Styles
   locationHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -197,119 +200,38 @@ export const postingStyles = StyleSheet.create({
   useProfileAddressBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF4ED',
-    borderRadius: 14,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: '#FDBA74',
     gap: 4,
   },
   useProfileAddressText: {
-    fontSize: 11,
+    fontSize: 11.5,
+    fontFamily: THEME.typography.fontFamily.mainBold,
     fontWeight: '700',
     color: '#EA580C',
   },
-  locationSelectButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    height: 48,
-    paddingHorizontal: 16,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  locationSelectButtonDisabled: {
-    opacity: 0.55,
-    backgroundColor: '#F3F4F6',
-  },
-  locationSelectText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#0D0D11',
-  },
-  locationPlaceholderText: {
-    color: '#9CA3AF',
-    fontWeight: '500',
-  },
-  locationIcon: {
-    marginRight: 10,
-  },
-  locationInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    height: 48,
-    paddingHorizontal: 16,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  locationInput: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#0D0D11',
-    height: '100%',
-  },
-  addressSubRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
-  inputGroupLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#9CA3AF',
-    letterSpacing: 0.8,
-    marginBottom: 6,
-  },
-  textInput: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    height: 48,
-    paddingHorizontal: 16,
-    fontSize: 13,
-    color: '#0D0D11',
-    fontWeight: '600',
-    marginBottom: 12,
-  },
   multilineInput: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    height: 90,
-    padding: 14,
-    fontSize: 12.5,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 13.5,
     color: '#0D0D11',
+    minHeight: 90,
     textAlignVertical: 'top',
-    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    marginBottom: 16,
   },
   offerInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
+    borderRadius: 12,
     height: 48,
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
   },
   offerInputWrapperInvalid: {
     borderColor: '#EF4444',
-    backgroundColor: '#FEF2F2',
-  },
-  invalidRateHint: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#DC2626',
-    marginTop: -8,
-    marginBottom: 12,
-    paddingHorizontal: 4,
   },
   currencyPrefix: {
     fontSize: 16,
@@ -320,121 +242,82 @@ export const postingStyles = StyleSheet.create({
   offerInput: {
     flex: 1,
     fontSize: 15,
-    fontWeight: '800',
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontWeight: '700',
     color: '#0D0D11',
+    padding: 0,
   },
   rateUnitSuffix: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#9CA3AF',
-  },
-  recommendBox: {
-    backgroundColor: '#FFF4ED',
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#0D0D11',
-    padding: 14,
-  },
-  recommendTitle: {
+    color: '#6B7280',
     fontFamily: THEME.typography.fontFamily.mainBold,
-    fontSize: 12,
-    color: '#0D0D11',
-    fontWeight: '700',
   },
-  recommendSub: {
-    fontFamily: THEME.typography.fontFamily.secondaryMedium,
-    fontSize: 11,
-    color: '#0D0D11',
-    marginTop: 3,
-    lineHeight: 16,
+  invalidRateHint: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#DC2626',
+    marginTop: 5,
+    paddingHorizontal: 2,
   },
 
-  // STEP 4 STYLES
-  step4Container: {
-    width: '100%',
-  },
-  autoMessageCard: {
+  // Step 3 Styles
+  previewCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 22,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 10,
-    borderLeftWidth: 4,
-    borderLeftColor: '#F97316',
+    minHeight: 70,
+    marginBottom: 16,
   },
-  autoMessageHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
-  },
-  autoMessageTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#F97316',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-  },
-  autoMessageQuote: {
-    fontSize: 13.5,
-    color: '#1E293B',
-    lineHeight: 20,
-    fontWeight: '600',
-    fontStyle: 'italic',
+  previewText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#374151',
+    fontFamily: THEME.typography.fontFamily.mainMedium,
   },
   summaryCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    padding: 16,
-    marginBottom: 14,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 6,
+    paddingVertical: 10,
   },
   summaryDivider: {
     height: 1,
-    backgroundColor: '#F6F5F2',
+    backgroundColor: '#F3F4F6',
   },
   summaryLabel: {
     fontSize: 13,
-    color: '#9CA3AF',
-    fontWeight: '600',
+    color: '#6B7280',
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontWeight: '700',
   },
   summaryValue: {
     fontSize: 13.5,
-    fontWeight: '700',
     color: '#0D0D11',
-  },
-  visibleNoticeBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ECFDF5',
-    borderRadius: 18,
-    padding: 14,
-    marginBottom: 14,
-  },
-  visibleNoticeText: {
-    flex: 1,
-    fontSize: 11.5,
-    color: '#065F46',
-    fontWeight: '600',
-    lineHeight: 16,
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontWeight: '700',
   },
   checkboxRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingHorizontal: 4,
+    marginTop: 4,
+    marginBottom: 20,
   },
   checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 8,
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#9CA3AF',
     backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#CBD5E1',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -442,108 +325,113 @@ export const postingStyles = StyleSheet.create({
     backgroundColor: '#FFB380',
     borderColor: '#FFB380',
   },
+  checkboxError: {
+    borderColor: '#EF4444',
+  },
   checkboxText: {
     flex: 1,
-    fontSize: 11.5,
+    fontSize: 12,
     color: '#6B7280',
-    lineHeight: 16,
+    lineHeight: 17,
+  },
+  checkboxBoldText: {
+    color: '#0D0D11',
+    fontWeight: '700',
   },
 
-  // BOTTOM BUTTONS (ONE ROW COMPLETE PILL BUTTONS)
+  // Bottom Buttons
   bottomButtonsContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 12,
     paddingTop: 12,
     paddingBottom: 4,
-    width: '100%',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
   },
-  backButton: {
+  backButtonPill: {
     flex: 1,
-    backgroundColor: '#E5E7EB',
     height: 48,
-    borderRadius: 9999,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backButtonText: {
+  backButtonPillText: {
     fontFamily: THEME.typography.fontFamily.mainBold,
-    color: '#4B5563',
-    fontSize: 14.5,
+    fontSize: 15,
     fontWeight: '700',
+    color: '#0D0D11',
   },
-  nextButton: {
+  nextButtonPill: {
     flex: 1,
-    backgroundColor: '#0D0D11',
     height: 48,
-    borderRadius: 9999,
+    borderRadius: 24,
+    backgroundColor: '#0D0D11',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  nextButtonText: {
-    fontFamily: THEME.typography.fontFamily.mainExtraBold,
-    color: '#FFFFFF',
+  nextButtonPillText: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
     fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.3,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   btnPressed: {
-    opacity: 0.8,
+    opacity: 0.85,
   },
 
-  // SUCCESS OVERLAY
+  // Success Overlay Styles
   successOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(246, 245, 242, 0.96)',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 9999,
+    zIndex: 999,
   },
   successContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 28,
-    paddingVertical: 32,
-    paddingHorizontal: 36,
     alignItems: 'center',
-    justifyContent: 'center',
   },
   logoRingWrapper: {
-    width: 90,
-    height: 90,
+    width: 100,
+    height: 100,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 20,
     position: 'relative',
-    marginBottom: 16,
   },
   rotatingRing: {
     position: 'absolute',
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     borderWidth: 3,
     borderColor: '#FFB380',
     borderTopColor: 'transparent',
   },
   innerLogoCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: '#FFF4ED',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
   },
   successLogoImage: {
     width: 44,
     height: 44,
   },
   successTitleText: {
-    fontSize: 17,
-    fontWeight: '800',
+    fontFamily: THEME.typography.fontFamily.mainBlack,
+    fontSize: 22,
+    fontWeight: '900',
     color: '#0D0D11',
-    marginTop: 4,
+    marginTop: 8,
   },
 });

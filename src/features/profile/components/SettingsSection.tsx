@@ -16,7 +16,6 @@ export function SettingsSection({ profile }: { profile: ProfileController }) {
     language,
     setLanguage,
     t,
-    copy,
     setCurrentView,
     isLanguageExpanded,
     setIsLanguageExpanded,
@@ -28,7 +27,6 @@ export function SettingsSection({ profile }: { profile: ProfileController }) {
     setIsManageSocialLinksModalVisible,
     showContactNumber,
     isUpdatingPrivacy,
-    openMyBookings,
     effectiveVerificationStatus,
     handleToggleContactPrivacy,
   } = profile;
@@ -46,30 +44,35 @@ export function SettingsSection({ profile }: { profile: ProfileController }) {
         icon="shield-checkmark"
         title={t.getVerified}
         rightComponent={
-          <View
-            style={[
-              styles.verificationStatusPill,
-              effectiveVerificationStatus === 'Verified' && styles.verificationPillVerified,
-              effectiveVerificationStatus === 'Pending' && styles.verificationPillPending,
-              effectiveVerificationStatus === 'Rejected' && styles.verificationPillRejected,
-            ]}
-          >
-            <Text
+          <View style={styles.verificationRowRight}>
+            <View
               style={[
-                styles.verificationStatusPillText,
-                effectiveVerificationStatus === 'Verified' && styles.verificationPillTextVerified,
-                effectiveVerificationStatus === 'Pending' && styles.verificationPillTextPending,
-                effectiveVerificationStatus === 'Rejected' && styles.verificationPillTextRejected,
+                styles.verificationStatusPill,
+                effectiveVerificationStatus === 'Verified' && styles.verificationPillVerified,
+                effectiveVerificationStatus === 'Pending' && styles.verificationPillPending,
+                effectiveVerificationStatus === 'Rejected' && styles.verificationPillRejected,
               ]}
             >
-              {effectiveVerificationStatus === 'Pending'
-                ? uiText("Under Review")
-                : effectiveVerificationStatus === 'Verified'
-                  ? uiText("Verified")
-                  : effectiveVerificationStatus === 'Rejected'
-                    ? uiText("Action Needed")
-                    : uiText("Get Verified")}
-            </Text>
+              <Text
+                style={[
+                  styles.verificationStatusPillText,
+                  effectiveVerificationStatus === 'Verified' && styles.verificationPillTextVerified,
+                  effectiveVerificationStatus === 'Pending' && styles.verificationPillTextPending,
+                  effectiveVerificationStatus === 'Rejected' && styles.verificationPillTextRejected,
+                ]}
+              >
+                {uiText(
+                  effectiveVerificationStatus === 'Verified'
+                    ? 'Verified'
+                    : effectiveVerificationStatus === 'Pending'
+                      ? 'Pending'
+                      : effectiveVerificationStatus === 'Rejected'
+                        ? 'Action Needed'
+                        : 'Unverified'
+                )}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
           </View>
         }
         onPress={() => setIsVerificationModalVisible(true)}
@@ -82,14 +85,8 @@ export function SettingsSection({ profile }: { profile: ProfileController }) {
       />
       <View style={styles.rowDivider} />
       <SettingsRow
-        icon={copy.bookingIcon}
-        title={uiText(copy.bookingTitle)}
-        onPress={() => openMyBookings('active')}
-      />
-      <View style={styles.rowDivider} />
-      <SettingsRow
         icon="share-social"
-        title={uiText("Social Links & Contacts")}
+        title={uiText("Tags & Socials")}
         onPress={() => setIsManageSocialLinksModalVisible(true)}
       />
     </View>

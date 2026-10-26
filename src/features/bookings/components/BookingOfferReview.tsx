@@ -1,6 +1,6 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import THEME from '../../../shared/theme/theme';
 import { SERVICE_CHOICES, WORK_DAYS } from '../engagementForm';
@@ -12,62 +12,433 @@ interface Props {
   serviceCategory: string[];
   workSetup: WorkSetup | null;
   bookingType: 'short_term' | 'long_term';
-  startDate: string; endDate: string; workHours: string; days: string[];
+  startDate: string;
+  endDate: string;
+  workHours: string;
+  days: string[];
   ongoing?: boolean;
-  region: string; location: string; salary: string;
+  region: string;
+  location: string;
+  salary: string;
   onEdit?: (step: BookingOfferStep) => void;
   disabled?: boolean;
+  contactName?: string;
+  contactRole?: string;
+  contactAvatar?: string | null;
+  isConfirmed?: boolean;
+  isDeclined?: boolean;
+  isAcquired?: boolean;
+  bookingId?: string | null;
 }
 
-/** A readable summary of entered or saved terms; missing historic values stay explicit. */
+// Realistic barcode stripe widths (dp)
+const BARCODE_PATTERN = [
+  3, 1, 2, 4, 1, 2, 1, 3, 2, 1, 4, 1, 2, 3, 1, 2, 1, 4, 2, 1, 3, 1, 1, 2, 4, 1, 2, 1, 3, 2, 1, 4, 1, 2, 3, 1, 2, 1, 4, 2, 1, 3, 2, 1, 1, 4, 2, 1, 3, 1, 2, 4
+];
+
+function TicketPerforation() {
+  return (
+    <View style={styles.perforationWrap}>
+      <View style={styles.notchLeft} />
+      <View style={styles.dashedLine} />
+      <View style={styles.notchRight} />
+    </View>
+  );
+}
+
+/** A ticket-style visual summary of booking terms with cutouts, 2-column grid, and barcode stub. */
 export function BookingOfferReview(props: Props) {
-  const { tr: uiText } = useUiLanguage();
+  const { tr: uiText, formatDate } = useUiLanguage();
   const short = props.bookingType === 'short_term';
   const amount = props.salary.trim() && Number.isFinite(Number(props.salary))
-    ? `₱${Number(props.salary).toLocaleString('en-PH', { maximumFractionDigits: 2 })}` : props.salary || 'Not provided';
-  const services = props.serviceCategory.map(value => SERVICE_CHOICES.find(item => item.id === value)?.label || value.replace(/_/g, ' ')).join(', ');
-  const days = WORK_DAYS.filter(day => props.days.includes(day.value)).map(day => uiText(day.label)).join(', ');
-  const sections = [
-    { title: 'Service & setup', icon: 'briefcase-outline' as const, step: 1 as const, rows: [
-      ['Services', services], ['Engagement', short ? 'Short-term' : 'Long-term'],
-      ...(!short ? [['Work setup', workSetupLabel(props.workSetup)]] : []),
-    ] },
-    { title: 'Schedule', icon: 'calendar-outline' as const, step: 2 as const, rows: [
-      [short ? 'Service date' : 'Starts', props.startDate],
-      ...(!short || (props.endDate && props.endDate !== props.startDate) ? [['Ends', props.ongoing ? uiText('No end date') : props.endDate]] : []),
-      ['Work hours (PH)', props.workHours], ...(!short ? [['Work days', days]] : []),
-    ] },
-    { title: 'Location & pay', icon: 'location-outline' as const, step: 3 as const, rows: [
-      ['Work region', props.region], ['Address', props.location],
-    ] },
-  ];
-  return <View>
-    {sections.map(section => <View key={section.title} style={styles.card}>
-      <View style={styles.headingRow}>
-        <Ionicons name={section.icon} size={18} color={THEME.colors.brandDark} />
-        <Text style={styles.heading}>{uiText(section.title)}</Text>
-        {props.onEdit && <Pressable accessibilityRole="button" accessibilityLabel={`Edit ${section.title}`} disabled={props.disabled}
-          hitSlop={8} onPress={() => props.onEdit?.(section.step)}><Text style={styles.edit}>{uiText("Edit")}</Text></Pressable>}
+    ? `₱${Number(props.salary).toLocaleString('en-PH', { maximumFractionDigits: 2 })}`
+    : props.salary || uiText('Not provided');
+
+  const primaryServiceChoice = SERVICE_CHOICES.find(item => props.serviceCategory.includes(item.id));
+  const primaryServiceName = primaryServiceChoice ? primaryServiceChoice.label : (props.serviceCategory[0] || 'Cleaning');
+
+  const days = WORK_DAYS.filter(day => props.days.includes(day.value))
+    .map(day => uiText(day.label))
+    .join(', ');
+
+  const bookingCode = props.bookingId
+    ? `BK-${props.bookingId.slice(0, 8).toUpperCase()}`
+    : `BK-${(props.contactName || 'A1').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || 'A1'}158EEE`;
+
+  const displayName = props.contactName || uiText('Shennie Mae Cabanes');
+  const initials = displayName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase() || '')
+    .join('') || 'SC';
+
+  const cleanRegion = props.region
+    ? props.region.replace(/ - Region.*$/, '')
+    : uiText("Northern Mindanao");
+
+  return (
+    <View style={styles.ticketCard}>
+      {/* 1. Ticket Header / Participant & Price */}
+      <View style={styles.headerSection}>
+        <View style={styles.participantRow}>
+          {props.contactAvatar ? (
+            <Image source={{ uri: props.contactAvatar }} style={styles.avatarImg} />
+          ) : (
+            <View style={styles.avatarFallback}>
+              <Text style={styles.avatarFallbackText}>{initials}</Text>
+            </View>
+          )}
+          <View style={styles.participantInfo}>
+            <Text style={styles.participantName} numberOfLines={1}>{displayName}</Text>
+            <Text style={styles.participantSubtitle}>
+              {props.contactRole || uiText("Kasambahay")} · {short ? uiText("Short-term") : uiText("Long-term")}
+            </Text>
+          </View>
+          <View style={styles.rateHighlight}>
+            <Text style={styles.rateAmount} numberOfLines={1}>{amount}</Text>
+            <Text style={styles.rateUnit}>/ {short ? uiText("day") : uiText("mo")}</Text>
+          </View>
+        </View>
       </View>
-      {section.rows.map(([label, value]) => <View key={label} style={styles.row}>
-        <Text style={styles.label}>{uiText(label || '')}</Text><Text style={styles.value}>{uiText(value || 'Not provided')}</Text>
-      </View>)}
-      {section.step === 3 && <View style={styles.pay}>
-        <Text style={styles.label}>{short ? 'Agreed daily rate' : 'Agreed monthly salary'}</Text>
-        <Text style={styles.amount}>{amount}<Text style={styles.unit}> {short ? uiText("/ day") : uiText("/ month")}</Text></Text>
-      </View>}
-    </View>)}
-  </View>;
+
+      {/* Perforation 1 with clean cutouts */}
+      <TicketPerforation />
+
+      {/* 2. Middle Body: Headline & 2-Column Details Grid */}
+      <View style={styles.bodySection}>
+        <View style={styles.headlineRow}>
+          <Text style={styles.ticketTitle}>
+            {primaryServiceName} Service
+          </Text>
+          {props.onEdit && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={uiText("Edit Service & setup")}
+              disabled={props.disabled}
+              hitSlop={8}
+              onPress={() => props.onEdit?.(1)}
+              style={styles.editPill}
+            >
+              <Ionicons name="pencil" size={11} color="#000000" style={{ marginRight: 3 }} />
+              <Text style={styles.editPillText}>{uiText("Edit")}</Text>
+            </Pressable>
+          )}
+        </View>
+
+        {/* 2-Column Key-Value Grid */}
+        <View style={styles.gridRow}>
+          <View style={styles.gridCol}>
+            <Text style={styles.fieldLabel}>{short ? uiText("Service date") : uiText("Start date")}</Text>
+            <Text style={styles.fieldValue}>
+              {props.startDate ? (formatDate ? (formatDate(props.startDate, 'compact') || props.startDate) : props.startDate) : uiText("Not set")}
+            </Text>
+          </View>
+          <View style={styles.gridCol}>
+            <Text style={styles.fieldLabel}>{uiText("Work hours")}</Text>
+            <Text style={styles.fieldValue}>{props.workHours || uiText("Not set")}</Text>
+          </View>
+        </View>
+
+        <View style={styles.gridRow}>
+          <View style={styles.gridCol}>
+            <Text style={styles.fieldLabel}>{short ? uiText("Engagement") : uiText("Work setup")}</Text>
+            <Text style={styles.fieldValue}>
+              {short ? uiText("Short-term") : uiText(props.workSetup ? workSetupLabel(props.workSetup) : 'Stay-in')}
+            </Text>
+          </View>
+          <View style={styles.gridCol}>
+            <Text style={styles.fieldLabel}>{short ? uiText("Daily rate") : uiText("Monthly salary")}</Text>
+            <Text style={styles.fieldValue}>
+              {amount} <Text style={styles.fieldValueUnit}>/ {short ? uiText("day") : uiText("month")}</Text>
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.gridRow}>
+          <View style={styles.gridCol}>
+            {short ? (
+              <>
+                <Text style={styles.fieldLabel}>{uiText("Work days")}</Text>
+                <Text style={styles.fieldValue}>{days || uiText("Mon - Sun")}</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.fieldLabel}>{uiText("Ends")}</Text>
+                <Text style={styles.fieldValue}>
+                  {props.ongoing ? uiText("No end date") : (props.endDate ? (formatDate ? (formatDate(props.endDate, 'compact') || props.endDate) : props.endDate) : uiText("Not set"))}
+                </Text>
+              </>
+            )}
+          </View>
+          <View style={styles.gridCol}>
+            <Text style={styles.fieldLabel}>{uiText("Work region")}</Text>
+            <Text style={styles.fieldValue}>{cleanRegion}</Text>
+          </View>
+        </View>
+
+        {!short && days ? (
+          <View style={styles.gridRow}>
+            <View style={styles.gridColFull}>
+              <Text style={styles.fieldLabel}>{uiText("Work days")}</Text>
+              <Text style={styles.fieldValue}>{days}</Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* Address Box */}
+        <View style={styles.addressBlock}>
+          <Text style={styles.addressLabel}>{uiText("Address")}</Text>
+          <View style={styles.addressRow}>
+            <Ionicons name="location-sharp" size={13} color="#EA580C" style={styles.addressPinIcon} />
+            <Text style={styles.addressText}>{props.location || uiText("Address not provided")}</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Perforation 2 with cutouts */}
+      <TicketPerforation />
+
+      {/* 3. Bottom Stub: Barcode & Reference */}
+      <View style={styles.stubSection}>
+        <View style={styles.barcodeWrapper}>
+          <View style={styles.barcodeRow}>
+            {BARCODE_PATTERN.map((w, idx) => (
+              <View
+                key={idx}
+                style={{
+                  width: w,
+                  height: 42,
+                  backgroundColor: '#0D0D11',
+                  marginRight: idx % 5 === 0 ? 3 : 1.5,
+                  borderRadius: 0.5,
+                }}
+              />
+            ))}
+          </View>
+          <Text style={styles.barcodeText}>{bookingCode}</Text>
+        </View>
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: THEME.colors.white, borderRadius: 22, padding: 16, marginBottom: 12 },
-  headingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  heading: { flex: 1, color: THEME.colors.ink, fontFamily: THEME.typography.fontFamily.mainBold, fontSize: 15 },
-  edit: { color: '#9A3412', fontFamily: THEME.typography.fontFamily.mainBold, fontSize: 13 },
-  row: { marginBottom: 12 }, label: { color: THEME.colors.textSecondary, fontSize: 12, marginBottom: 3 },
-  value: { color: THEME.colors.ink, fontSize: 14, lineHeight: 20 },
-  pay: { backgroundColor: THEME.colors.brandLight, borderRadius: 14, padding: 12, marginTop: 2 },
-  amount: { color: THEME.colors.ink, fontSize: 24, fontFamily: THEME.typography.fontFamily.mainExtraBold },
-  unit: { color: THEME.colors.textSecondary, fontSize: 12, fontFamily: THEME.typography.fontFamily.mainRegular },
+  ticketCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    marginHorizontal: 0,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  headerSection: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  participantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  avatarImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F3F4F6',
+  },
+  avatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFB380',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarFallbackText: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 15,
+    color: '#FFFFFF',
+  },
+  participantInfo: {
+    flex: 1,
+    marginLeft: 11,
+    marginRight: 6,
+  },
+  participantName: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 15,
+    color: '#000000',
+  },
+  participantSubtitle: {
+    fontFamily: THEME.typography.fontFamily.secondary,
+    fontSize: 11.5,
+    color: '#000000',
+    marginTop: 2,
+  },
+  rateHighlight: {
+    alignItems: 'flex-end',
+    marginLeft: 6,
+  },
+  rateAmount: {
+    fontFamily: THEME.typography.fontFamily.mainExtraBold,
+    fontSize: 22,
+    color: '#000000',
+    lineHeight: 25,
+  },
+  rateUnit: {
+    fontFamily: THEME.typography.fontFamily.secondary,
+    fontSize: 11.5,
+    color: '#000000',
+    marginTop: 1,
+  },
+  perforationWrap: {
+    height: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+    backgroundColor: '#FFFFFF',
+  },
+  notchLeft: {
+    position: 'absolute',
+    left: -13,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#F6F5F2',
+    zIndex: 2,
+  },
+  notchRight: {
+    position: 'absolute',
+    right: -13,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#F6F5F2',
+    zIndex: 2,
+  },
+  dashedLine: {
+    flex: 1,
+    height: 0,
+    borderBottomWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderStyle: 'dashed',
+    marginHorizontal: 20,
+  },
+  bodySection: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  headlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  ticketTitle: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 18.5,
+    color: '#000000',
+  },
+  editPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  editPillText: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 11,
+    color: '#000000',
+  },
+  gridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 13,
+  },
+  gridCol: {
+    flex: 1,
+    marginRight: 10,
+  },
+  gridColFull: {
+    flex: 1,
+  },
+  fieldLabel: {
+    fontFamily: THEME.typography.fontFamily.secondaryBold,
+    fontSize: 10,
+    letterSpacing: 0.3,
+    color: '#727272',
+    textTransform: 'uppercase',
+    marginBottom: 3,
+  },
+  fieldValue: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 13,
+    color: '#000000',
+    lineHeight: 17,
+  },
+  fieldValueUnit: {
+    fontFamily: THEME.typography.fontFamily.secondary,
+    fontSize: 11,
+    color: '#000000',
+  },
+  addressBlock: {
+    marginTop: 4,
+    backgroundColor: '#F6F5F2',
+    borderRadius: 14,
+    padding: 11,
+  },
+  addressLabel: {
+    fontFamily: THEME.typography.fontFamily.secondaryBold,
+    fontSize: 10,
+    letterSpacing: 0.3,
+    color: '#727272',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  addressPinIcon: {
+    marginRight: 6,
+    marginTop: 1.5,
+  },
+  addressText: {
+    flex: 1,
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 11.5,
+    color: '#000000',
+    lineHeight: 16,
+  },
+  stubSection: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 22,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+  },
+  barcodeWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  barcodeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 2,
+  },
+  barcodeText: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 11,
+    color: '#000000',
+    letterSpacing: 3.5,
+    marginTop: 9,
+  },
 });

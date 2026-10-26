@@ -7,7 +7,7 @@ import { useLanguage } from '../../../shared/localization/LanguageContext';
 import { useUser } from '../../auth/session/UserContext';
 import { resolveRole, type Role } from '../../../app/roleConfig';
 import THEME from '../../../shared/theme/theme';
-import { NotificationBell } from '../../notifications/NotificationContext';
+import { AppHeader } from '../../../shared/components/AppHeader';
 
 import { ChatDetailScreen } from '../components/ChatDetailScreen';
 import { SupportContactsCard } from '../components/SupportContactsCard';
@@ -15,9 +15,7 @@ import { chatStore, ChatConversation, cleanMessagePreview } from '../store/chatS
 import { useRealtimeStatus } from '../../../shared/realtime/useRealtimeStatus';
 import { useChatPresence } from '../../../shared/realtime/useChatPresence';
 
-const logoSource = require('../../../../assets/serbisure_new_clean.png');
-
-export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
+export function ChatsScreen({ role: requestedRole, onBookingsPress }: { role?: Role; onBookingsPress?: () => void } = {}) {
   const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const { t } = useLanguage();
@@ -119,9 +117,6 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
 
   return (
     <View style={styles.container}>
-      {/* Top Status Bar Spacer */}
-      <View style={{ height: insets.top, backgroundColor: '#F6F5F2', zIndex: 10 }} />
-
       <ScrollView
         style={{ flex: 1, backgroundColor: '#F6F5F2' }}
         contentContainerStyle={[styles.scrollContent, { paddingTop: 8 }]}
@@ -136,15 +131,6 @@ export function ChatsScreen({ role: requestedRole }: { role?: Role } = {}) {
           />
         }
       >
-        {/* Header Logo & Bell */}
-        <View style={styles.headerTop}>
-          <View style={styles.headerSide} />
-          <Image source={logoSource} style={styles.logo} resizeMode="contain" />
-          <View style={[styles.headerSide, styles.headerSideRight]}>
-            <NotificationBell />
-          </View>
-        </View>
-
         {/* Clean Header Area: Title & Pill Search */}
         <View style={styles.headerArea}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>

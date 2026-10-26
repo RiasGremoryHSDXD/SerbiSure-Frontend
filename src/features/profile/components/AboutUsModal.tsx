@@ -1,9 +1,16 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
-import React from 'react';
-import { StyleSheet, Text, View, Modal, Pressable, ScrollView, Image, Linking, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-
-const logoSource = require('../../../../assets/serbisure-logo.png');
+import React, { useRef } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  Modal,
+  Pressable,
+  ScrollView,
+  Linking,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import THEME from '../../../shared/theme/theme';
 
 interface AboutUsModalProps {
   visible: boolean;
@@ -11,164 +18,162 @@ interface AboutUsModalProps {
 }
 
 export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
+  const insets = useSafeAreaInsets();
   const { tr: uiText } = useUiLanguage();
+  const scrollViewRef = useRef<ScrollView>(null);
+
   const handleOpenEmail = () => {
-    Linking.openURL('mailto:support@serbisure.ph?subject=Serbisure Support Inquiry').catch(() => { });
+    Linking.openURL('mailto:support@serbisure.ph?subject=SerbiSure Support Inquiry').catch(() => {});
   };
 
   const handleOpenWebsite = () => {
-    Linking.openURL('https://serbisure.ph').catch(() => { });
+    Linking.openURL('https://serbisure.ph').catch(() => {});
   };
 
   return (
     <Modal
       visible={visible}
-      transparent
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
+      <View style={[styles.fullScreenContainer, { paddingTop: Math.max(insets.top, 20) }]}>
+        <ScrollView
+          ref={scrollViewRef}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
           {/* Header */}
-          <View style={styles.modalHeader}>
-            <View style={styles.headerLeft}>
-              <View style={styles.headerIconCircle}>
-                <Ionicons name="information-circle" size={22} color="#FFB43B" />
-              </View>
-              <View style={{ marginLeft: 12 }}>
-                <Text style={styles.modalTitle}>{uiText("About Us")}</Text>
-                <Text style={styles.modalSubtitle}>{uiText("USTP CDO Capstone Research Project")}</Text>
-              </View>
-            </View>
-            <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn}>
-              <Ionicons name="close" size={22} color="#777" />
-            </Pressable>
-          </View>
+          <Text style={styles.agreementTag}>{uiText("RESEARCH PROJECT")}</Text>
+          <Text style={styles.modalTitle}>{uiText("About SerbiSure")}</Text>
 
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
-          >
-            {/* Hero Brand Section */}
-            <View style={styles.brandCard}>
-              <Image source={logoSource} style={styles.logo} resizeMode="contain" />
-              <Text style={styles.appName}>SerbiSure</Text>
-              <Text style={styles.appTagline}>
-                {uiText("A capstone research project for safer, fairer household work")}</Text>
-              <View style={styles.versionBadge}>
-                <Text style={styles.versionText}>{uiText("USTP CDO • 2026")}</Text>
-              </View>
+          <View style={styles.contentWrap}>
+            {/* Overview */}
+            <View style={styles.sectionBlock}>
+              <Text style={styles.paragraph}>
+                {uiText(
+                  "SerbiSure is a capstone research project of the Department of Information Technology, College of Information and Computing, University of Science and Technology of Southern Philippines (USTP), Cagayan de Oro City. It responds to the informal domestic-work economy by helping Homeowners and Kasambahays connect, document engagements, and access safer, more accountable household work under Republic Act No. 10361, the Batas Kasambahay."
+                )}
+              </Text>
             </View>
 
-            {/* Mission Statement */}
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeaderRow}>
-                <Ionicons name="heart-outline" size={18} color="#FFB43B" style={{ marginRight: 8 }} />
-                <Text style={styles.sectionTitle}>{uiText("Our Mission")}</Text>
-              </View>
-              <Text style={styles.sectionParagraph}>
-                {uiText("SerbiSure is a capstone research project of the Department of Information Technology, College of Information and Computing, University of Science and Technology of Southern Philippines (USTP), Cagayan de Oro City. It responds to the informal domestic-work economy by helping Homeowners and Kasambahays connect, document engagements, and access safer, more accountable household work under Republic Act No. 10361, the Batas Kasambahay.")}</Text>
+            {/* Mission */}
+            <View style={styles.sectionBlock}>
+              <Text style={styles.sectionTitle}>{uiText("1. Our Mission")}</Text>
+              <Text style={styles.paragraph}>
+                {uiText(
+                  "To provide a safer, fairer, and transparent domestic work platform that safeguards the welfare of household workers while ensuring reliable and accountable home care services for homeowners."
+                )}
+              </Text>
             </View>
 
-            {/* Core Pillars */}
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeaderRow}>
-                <Ionicons name="sparkles-outline" size={18} color="#FFB43B" style={{ marginRight: 8 }} />
-                <Text style={styles.sectionTitle}>{uiText("Research Pillars")}</Text>
+            {/* Research Pillars */}
+            <View style={styles.sectionBlock}>
+              <Text style={styles.sectionTitle}>{uiText("2. Research Pillars")}</Text>
+
+              <View style={styles.bulletItem}>
+                <Text style={styles.bulletDot}>•</Text>
+                <Text style={styles.bulletText}>
+                  <Text style={styles.boldText}>{uiText("Batas Kasambahay Compliance:")}</Text>{" "}
+                  {uiText(
+                    "The platform is designed around Republic Act No. 10361 and supports clearer engagements, documented work arrangements, and labor-protection safeguards for domestic workers."
+                  )}
+                </Text>
               </View>
 
-              <View style={styles.pillarItem}>
-                <View style={styles.pillarIconBox}>
-                  <Ionicons name="shield-checkmark" size={18} color="#27AE60" />
-                </View>
-                <View style={styles.pillarTextCol}>
-                  <Text style={styles.pillarTitle}>{uiText("Batas Kasambahay Compliance")}</Text>
-                  <Text style={styles.pillarDesc}>
-                    {uiText("The platform is designed around RA 10361 and supports clearer engagements, documented work arrangements, and labor-protection safeguards for domestic workers.")}</Text>
-                </View>
+              <View style={styles.bulletItem}>
+                <Text style={styles.bulletDot}>•</Text>
+                <Text style={styles.bulletText}>
+                  <Text style={styles.boldText}>{uiText("Dual-Tier Engagement Protection:")}</Text>{" "}
+                  {uiText(
+                    "Long-term contracts and short-term household tasks are supported with a three-booking monthly cap and a regional wage-floor safeguard to discourage misclassification."
+                  )}
+                </Text>
               </View>
 
-              <View style={styles.pillarItem}>
-                <View style={styles.pillarIconBox}>
-                  <Ionicons name="git-branch-outline" size={18} color="#F39C12" />
-                </View>
-                <View style={styles.pillarTextCol}>
-                  <Text style={styles.pillarTitle}>{uiText("Dual-Tier Engagement Protection")}</Text>
-                  <Text style={styles.pillarDesc}>
-                    {uiText("Long-term contracts and short-term household tasks are supported with a three-booking monthly cap and a regional wage-floor safeguard to discourage misclassification.")}</Text>
-                </View>
+              <View style={styles.bulletItem}>
+                <Text style={styles.bulletDot}>•</Text>
+                <Text style={styles.bulletText}>
+                  <Text style={styles.boldText}>{uiText("Barangay LGU Workforce Analytics:")}</Text>{" "}
+                  {uiText(
+                    "Authorized Barangay officials and System Administrators can use aggregated, anonymized workforce metrics while worker identities remain protected from public exposure."
+                  )}
+                </Text>
               </View>
 
-              <View style={styles.pillarItem}>
-                <View style={styles.pillarIconBox}>
-                  <Ionicons name="people" size={18} color="#8E44AD" />
-                </View>
-                <View style={styles.pillarTextCol}>
-                  <Text style={styles.pillarTitle}>{uiText("Barangay LGU Workforce Analytics")}</Text>
-                  <Text style={styles.pillarDesc}>
-                    {uiText("Authorized Barangay officials and System Administrators can use aggregated, anonymized workforce metrics while worker identities remain protected from public exposure.")}</Text>
-                </View>
-              </View>
-
-              <View style={[styles.pillarItem, { marginBottom: 0 }]}>
-                <View style={styles.pillarIconBox}>
-                  <Ionicons name="language-outline" size={18} color="#3498DB" />
-                </View>
-                <View style={styles.pillarTextCol}>
-                  <Text style={styles.pillarTitle}>{uiText("Multilingual Local NLP")}</Text>
-                  <Text style={styles.pillarDesc}>
-                    {uiText("Feedback can be written in English, Filipino, Bisaya or Taglish and evaluated for transparent sentiment labels using a model suited to the local context.")}</Text>
-                </View>
+              <View style={styles.bulletItem}>
+                <Text style={styles.bulletDot}>•</Text>
+                <Text style={styles.bulletText}>
+                  <Text style={styles.boldText}>{uiText("Multilingual Local NLP:")}</Text>{" "}
+                  {uiText(
+                    "Feedback can be written in English, Filipino, Bisaya or Taglish and evaluated for transparent sentiment labels using a model suited to the local context."
+                  )}
+                </Text>
               </View>
             </View>
 
             {/* Contact & Support */}
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeaderRow}>
-                <Ionicons name="chatbubble-ellipses-outline" size={18} color="#FFB43B" style={{ marginRight: 8 }} />
-                <Text style={styles.sectionTitle}>{uiText("Get in Touch")}</Text>
+            <View style={styles.sectionBlock}>
+              <Text style={styles.sectionTitle}>{uiText("3. Contact and Support")}</Text>
+              <Text style={styles.paragraph}>
+                {uiText("Have questions, feedback, or need assistance? Reach out to us through the following channels:")}
+              </Text>
+
+              <View style={styles.bulletItem}>
+                <Text style={styles.bulletDot}>•</Text>
+                <Text style={styles.bulletText}>
+                  <Text style={styles.boldText}>{uiText("Email:")}</Text> support@serbisure.ph
+                </Text>
               </View>
-
-              <Pressable style={styles.contactRow} onPress={handleOpenEmail}>
-                <View style={styles.contactIconCircle}>
-                  <Ionicons name="mail-outline" size={18} color="#FFB43B" />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.contactLabel}>{uiText("Email Support")}</Text>
-                  <Text style={styles.contactValue}>support@serbisure.ph</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#BDBDBD" />
+              <Pressable style={styles.emailPill} onPress={handleOpenEmail}>
+                <Text style={styles.emailPillText}>support@serbisure.ph</Text>
               </Pressable>
 
-              <Pressable style={styles.contactRow} onPress={handleOpenWebsite}>
-                <View style={styles.contactIconCircle}>
-                  <Ionicons name="globe-outline" size={18} color="#FFB43B" />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.contactLabel}>{uiText("Official Website")}</Text>
-                  <Text style={styles.contactValue}>https://serbisure.ph</Text>
-                </View>
-                <Ionicons name="open-outline" size={16} color="#BDBDBD" />
+              <View style={[styles.bulletItem, { marginTop: 10 }]}>
+                <Text style={styles.bulletDot}>•</Text>
+                <Text style={styles.bulletText}>
+                  <Text style={styles.boldText}>{uiText("Website:")}</Text> https://serbisure.ph
+                </Text>
+              </View>
+              <Pressable style={styles.emailPill} onPress={handleOpenWebsite}>
+                <Text style={styles.emailPillText}>https://serbisure.ph</Text>
               </Pressable>
 
-              <View style={[styles.contactRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
-                <View style={styles.contactIconCircle}>
-                  <Ionicons name="location-outline" size={18} color="#FFB43B" />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.contactLabel}>{uiText("Headquarters")}</Text>
-                  <Text style={styles.contactValue}>Cagayan de Oro, Misamis Oriental, PH</Text>
-                </View>
+              <View style={[styles.bulletItem, { marginTop: 10 }]}>
+                <Text style={styles.bulletDot}>•</Text>
+                <Text style={styles.bulletText}>
+                  <Text style={styles.boldText}>{uiText("Headquarters:")}</Text> Cagayan de Oro, Misamis Oriental, PH
+                </Text>
               </View>
             </View>
 
-            {/* Footer */}
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>
-                {uiText("A capstone research project by USTP Cagayan de Oro City")}</Text>
-              <Text style={styles.footerText}>{uiText("Developed by the Department of Information Technology, College of Information and Computing.")}</Text>
+            {/* Project Background */}
+            <View style={styles.sectionBlock}>
+              <Text style={styles.sectionTitle}>{uiText("4. Project Background")}</Text>
+              <Text style={styles.paragraph}>
+                {uiText(
+                  "A capstone research project by the Department of Information Technology, College of Information and Computing, University of Science and Technology of Southern Philippines (USTP), Cagayan de Oro City."
+                )}
+              </Text>
             </View>
-          </ScrollView>
+
+            <View style={{ height: 24 }} />
+          </View>
+        </ScrollView>
+
+        {/* Bottom Actions: Back & Understood */}
+        <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <Pressable
+            style={({ pressed }) => [styles.declineBtn, pressed && styles.btnPressed]}
+            onPress={onClose}
+          >
+            <Text style={styles.declineBtnText}>{uiText("Back")}</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.acceptBtn, pressed && styles.btnPressed]}
+            onPress={onClose}
+          >
+            <Text style={styles.acceptBtnText}>{uiText("Understood")}</Text>
+          </Pressable>
         </View>
       </View>
     </Modal>
@@ -176,188 +181,125 @@ export function AboutUsModal({ visible, onClose }: AboutUsModalProps) {
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
+  fullScreenContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    justifyContent: 'flex-end',
-  },
-  modalContainer: {
-    backgroundColor: '#F9F8F6',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    height: '88%',
-    paddingBottom: Platform.OS === 'ios' ? 32 : 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0EAE1',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFF4E5',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#1A1A1A',
-  },
-  modalSubtitle: {
-    fontSize: 12,
-    color: '#777',
-    marginTop: 2,
-  },
-  closeBtn: {
-    padding: 6,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 18,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
   },
-  brandCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingVertical: 24,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#EFECE6',
+  agreementTag: {
+    fontSize: 12,
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    letterSpacing: 1.5,
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    marginBottom: 6,
   },
-  logo: {
-    width: 68,
-    height: 68,
-    marginBottom: 10,
+  modalTitle: {
+    fontSize: 26,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: '#FFB380',
+    marginBottom: 20,
+    letterSpacing: -0.5,
   },
-  appName: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1A1A1A',
-    letterSpacing: 0.5,
-  },
-  appTagline: {
-    fontSize: 13,
-    color: '#666',
+  contentWrap: {
     marginTop: 4,
-    textAlign: 'center',
   },
-  versionBadge: {
-    backgroundColor: '#FFF3E0',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    marginTop: 12,
-  },
-  versionText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#D68910',
-  },
-  sectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 18,
+  sectionBlock: {
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#EFECE6',
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
   },
   sectionTitle: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    color: '#111827',
+    marginBottom: 6,
   },
-  sectionParagraph: {
-    fontSize: 13,
-    color: '#555',
+  paragraph: {
+    fontSize: 13.5,
+    fontFamily: THEME.typography.fontFamily.body,
+    color: '#4B5563',
     lineHeight: 20,
+    marginBottom: 8,
   },
-  pillarItem: {
+  bulletItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 14,
+    marginVertical: 3,
+    paddingLeft: 6,
   },
-  pillarIconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#F7F6F3',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-    marginTop: 2,
+  bulletDot: {
+    fontSize: 14,
+    color: '#FFB380',
+    marginRight: 8,
+    lineHeight: 20,
   },
-  pillarTextCol: {
+  bulletText: {
     flex: 1,
-  },
-  pillarTitle: {
     fontSize: 13.5,
-    fontWeight: '600',
-    color: '#2A2A2A',
-    marginBottom: 2,
+    fontFamily: THEME.typography.fontFamily.body,
+    color: '#4B5563',
+    lineHeight: 20,
   },
-  pillarDesc: {
-    fontSize: 12,
-    color: '#777',
-    lineHeight: 17,
+  boldText: {
+    fontFamily: THEME.typography.fontFamily.bodyBold,
+    color: '#1F2937',
   },
-  contactRow: {
+  emailPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFF4ED',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 6,
+  },
+  emailPillText: {
+    fontSize: 13.5,
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    color: '#FFB380',
+  },
+  bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5F3EF',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
   },
-  contactIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFF8EE',
+  declineBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#111827',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  contactLabel: {
-    fontSize: 11.5,
-    color: '#888',
-    marginBottom: 2,
+  declineBtnText: {
+    fontSize: 15,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: '#111827',
   },
-  contactValue: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#333',
-  },
-  footer: {
+  acceptBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#FFB380',
     alignItems: 'center',
-    paddingVertical: 16,
+    justifyContent: 'center',
   },
-  footerText: {
-    fontSize: 11,
-    color: '#999',
-    textAlign: 'center',
+  acceptBtnText: {
+    fontSize: 15,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: '#111827',
+  },
+  btnPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
   },
 });

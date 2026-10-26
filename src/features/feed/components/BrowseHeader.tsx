@@ -16,19 +16,38 @@ interface HeaderProps {
   readonly appliedCount?: number;
   readonly onTabChange: (tab: BrowseTab) => void;
   readonly onProfilePress?: () => void;
-  readonly onFilterPress: () => void;
+  readonly filtersVisible: boolean;
+  readonly onFiltersToggle: () => void;
 }
 
-export function BrowseHeader({ title, subtitle, name, avatarUri, tab, savedCount, appliedCount, onTabChange, onProfilePress, onFilterPress }: HeaderProps) {
+export function BrowseHeader({ title, name, avatarUri, tab, savedCount, appliedCount, onTabChange, onProfilePress, filtersVisible, onFiltersToggle }: HeaderProps) {
   const { tr: uiText } = useUiLanguage();
   const tabs: { key: BrowseTab; label: string; count?: number }[] = [{ key: 'explore', label: 'Explore' }, { key: 'saved', label: 'Saved', count: savedCount }];
   if (appliedCount !== undefined) tabs.push({ key: 'applied', label: 'Applied', count: appliedCount });
+  const isKasambahay = appliedCount !== undefined;
   return (
     <View style={styles.card}>
-      <View style={styles.tabs} accessibilityRole="tablist">
+      <View style={[styles.tabs, isKasambahay && styles.tabsKasambahay]} accessibilityRole="tablist">
         {tabs.map((item) => (
-          <Pressable key={item.key} accessibilityRole="tab" accessibilityState={{ selected: tab === item.key }} onPress={() => onTabChange(item.key)} style={[styles.tab, tab === item.key && styles.selectedTab]}>
-            <Text style={[styles.tabLabel, tab === item.key && styles.selectedTabLabel]}>{uiText(item.label)}{item.count === undefined ? '' : ` (${item.count})`}</Text>
+          <Pressable
+            key={item.key}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: tab === item.key }}
+            onPress={() => onTabChange(item.key)}
+            style={[styles.tab, isKasambahay && styles.tabKasambahay, tab === item.key && styles.selectedTab]}
+          >
+            <Text
+              style={[
+                styles.tabLabel,
+                isKasambahay && styles.tabLabelKasambahay,
+                tab === item.key && styles.selectedTabLabel,
+              ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+            >
+              {uiText(item.label)}{item.count && item.count > 0 ? ` (${item.count})` : ''}
+            </Text>
           </Pressable>
         ))}
       </View>
@@ -37,10 +56,22 @@ export function BrowseHeader({ title, subtitle, name, avatarUri, tab, savedCount
           <ProfileAvatar uri={avatarUri} name={name} size={48} />
         </Pressable>
         <View style={styles.heading}>
-          <Text style={styles.title} numberOfLines={2}>{uiText(title)}</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
+          <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{uiText(title)}</Text>
         </View>
-        {tab === 'explore' && <Pressable accessibilityRole="button" accessibilityLabel={uiText("Open filters and sorting")} onPress={onFilterPress} style={styles.filterButton}><Ionicons name="options-outline" size={22} color={THEME.colors.ink} /></Pressable>}
+        {tab === 'explore' ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={uiText(filtersVisible ? "Hide quick filters" : "Show quick filters")}
+            accessibilityState={{ expanded: filtersVisible }}
+            onPress={onFiltersToggle}
+            style={styles.filterButton}
+            hitSlop={8}
+          >
+            <Ionicons name="options-outline" size={24} color={THEME.colors.ink} />
+          </Pressable>
+        ) : (
+          <View style={styles.filterButtonPlaceholder} />
+        )}
       </View>
     </View>
   );
@@ -51,12 +82,12 @@ export function BrowseFilters({ activeChip, filterCount, onChipPress, onFilterPr
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipScroll}>
       <Pressable accessibilityRole="button" accessibilityLabel={`Open filters, ${filterCount} active`} onPress={onFilterPress} style={[styles.chip, styles.advancedChip]}>
-        <Ionicons name="funnel-outline" size={16} color={THEME.colors.brandDark} />
+        <Ionicons name="funnel-outline" size={16} color={THEME.colors.ink} />
         <Text style={styles.advancedLabel}>{uiText("Filters")}{filterCount > 0 ? ` (${filterCount})` : ''}</Text>
       </Pressable>
       {BROWSE_QUICK_FILTERS.map((label) => (
-        <Pressable key={label} accessibilityRole="button" accessibilityLabel={`Filter: ${label}`} accessibilityState={{ selected: activeChip === label }} onPress={() => onChipPress(label)} style={[styles.chip, activeChip === label && styles.selectedChip]}>
-          <Text style={styles.chipLabel}>{uiText(label)}</Text>
+        <Pressable key={label} accessibilityRole="button" accessibilityLabel={`Filter: ${label}`} accessibilityState={{ selected: activeChip === label }} onPress={() => onChipPress(label)} style={[styles.chip, activeChip === label ? styles.selectedChip : styles.unselectedChip]}>
+          <Text style={[styles.chipLabel, activeChip === label && styles.selectedChipLabel]}>{uiText(label)}</Text>
         </Pressable>
       ))}
     </ScrollView>
@@ -64,22 +95,27 @@ export function BrowseFilters({ activeChip, filterCount, onChipPress, onFilterPr
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: THEME.colors.white, marginHorizontal: 20, marginBottom: 16, borderRadius: THEME.roundness.card, padding: 16 },
-  tabs: { flexDirection: 'row', backgroundColor: THEME.colors.canvas, borderRadius: THEME.roundness.pill, padding: 4, marginBottom: 16 },
-  tab: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: THEME.roundness.pill, paddingHorizontal: 4 },
-  selectedTab: { backgroundColor: THEME.colors.ink },
-  tabLabel: { fontSize: 12, fontFamily: THEME.typography.fontFamily.display, color: THEME.colors.textSecondary },
+  card: { backgroundColor: THEME.colors.white, marginHorizontal: 20, marginBottom: 8, borderRadius: 28, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 14 },
+  tabs: { flexDirection: 'row', backgroundColor: '#ECECEE', borderRadius: 24, padding: 4, marginHorizontal: 8, marginBottom: 10 },
+  tabsKasambahay: { marginHorizontal: 2 },
+  tab: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 20, paddingHorizontal: 6 },
+  tabKasambahay: { paddingHorizontal: 2 },
+  selectedTab: { backgroundColor: '#0D0D11' },
+  tabLabel: { fontSize: 14, fontFamily: THEME.typography.fontFamily.display, color: '#71717A' },
+  tabLabelKasambahay: { fontSize: 12 },
   selectedTabLabel: { color: THEME.colors.white },
   headingRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  heading: { flex: 1 },
-  title: { fontSize: 20, fontFamily: THEME.typography.fontFamily.display, color: THEME.colors.ink },
-  subtitle: { fontSize: 12, lineHeight: 18, fontFamily: THEME.typography.fontFamily.secondaryRegular, color: THEME.colors.textSecondary, marginTop: 3 },
-  filterButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: THEME.colors.canvas, alignItems: 'center', justifyContent: 'center' },
-  chipScroll: { marginBottom: 8, flexGrow: 0 },
+  heading: { flex: 1, justifyContent: 'center' },
+  title: { fontSize: 18, lineHeight: 22, fontFamily: THEME.typography.fontFamily.display, color: '#0D0D11' },
+  filterButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  filterButtonPlaceholder: { width: 40, height: 40 },
+  chipScroll: { marginBottom: 4, flexGrow: 0 },
   chips: { paddingHorizontal: 20, gap: 8, alignItems: 'center' },
-  chip: { minHeight: 44, paddingHorizontal: 16, borderRadius: THEME.roundness.pill, backgroundColor: THEME.colors.white, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  selectedChip: { backgroundColor: THEME.colors.brand },
-  advancedChip: { backgroundColor: THEME.colors.brandLight },
-  advancedLabel: { fontSize: 13, fontFamily: THEME.typography.fontFamily.secondarySemiBold, color: THEME.colors.brandDark },
-  chipLabel: { fontSize: 13, fontFamily: THEME.typography.fontFamily.secondaryMedium, color: THEME.colors.ink },
+  chip: { minHeight: 38, paddingHorizontal: 16, borderRadius: 19, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  unselectedChip: { backgroundColor: THEME.colors.white },
+  selectedChip: { backgroundColor: '#FFAA77' },
+  advancedChip: { backgroundColor: '#FFAA77' },
+  advancedLabel: { fontSize: 13, fontFamily: THEME.typography.fontFamily.secondarySemiBold, color: '#0D0D11' },
+  chipLabel: { fontSize: 13, fontFamily: THEME.typography.fontFamily.secondaryMedium, color: '#0D0D11' },
+  selectedChipLabel: { fontFamily: THEME.typography.fontFamily.secondarySemiBold, color: '#0D0D11' },
 });

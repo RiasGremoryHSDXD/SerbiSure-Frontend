@@ -1,11 +1,16 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
-import React, { useState, useEffect } from 'react';
-import { Modal, StyleSheet, Text, View, Pressable, ScrollView, ActivityIndicator, Alert, Image } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { Modal, StyleSheet, Text, View, Pressable, ScrollView, ActivityIndicator, Alert, Image, Animated, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import THEME from '../../../shared/theme/theme';
 import { DocumentStatusItem, VerificationStatusResponse, deleteRejectedDocument } from '../api/verificationApi';
 import { IDPhotoModal } from './IDPhotoModal';
 import { API_BASE_URL } from '../../../shared/api/config';
 import { fetchWithTimeout } from '../../../shared/api/httpClient';
+
+const logoSource = require('../../../../assets/serbisure-logo.png');
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 interface VerificationStatusModalProps {
   visible: boolean;
@@ -96,7 +101,7 @@ function UploadBox({
         </View>
       ) : (
         <>
-          <Ionicons name="cloud-upload" size={26} color="#FFB43B" style={styles.uploadIcon} />
+          <Ionicons name="cloud-upload" size={26} color="#FFB380" style={styles.uploadIcon} />
           <Text style={styles.uploadTitle}>{title}</Text>
           <Text style={styles.uploadSubtitle}>{subtitle}</Text>
           <Text style={styles.uploadMeta}>{meta}</Text>
@@ -117,6 +122,7 @@ export function VerificationStatusModal({
   role,
 }: VerificationStatusModalProps) {
   const { tr: uiText } = useUiLanguage();
+  const insets = useSafeAreaInsets();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [idPhotoVisible, setIdPhotoVisible] = useState(false);
   const [activeBox, setActiveBox] = useState<'nbi' | 'police' | 'national_front' | 'national_back' | null>(null);
@@ -352,158 +358,149 @@ export function VerificationStatusModal({
     const isUnderReview = status === 'Pending';
     const isApproved = status === 'Verified';
     const isRejected = status === 'Rejected';
-    const isSubmittedDone = status !== 'Unverified';
 
     return (
-      <View
-        style={[
-          styles.bannerCard,
-          isApproved && styles.bannerCardVerified,
-          isUnderReview && styles.bannerCardPending,
-          isRejected && styles.bannerCardRejected,
-          status === 'Unverified' && styles.bannerCardUnverified,
-        ]}
-      >
+      <View style={styles.bannerCard}>
         <View style={styles.bannerTopRow}>
-          <View
-            style={[
-              styles.bannerIconBox,
-              isApproved && styles.bannerIconBoxVerified,
-              isUnderReview && styles.bannerIconBoxPending,
-              isRejected && styles.bannerIconBoxRejected,
-              status === 'Unverified' && styles.bannerIconBoxUnverified,
-            ]}
-          >
-            <Ionicons
-              name={
-                isApproved
-                  ? 'shield-checkmark'
-                  : isRejected
-                    ? 'alert-circle'
-                    : isUnderReview
-                      ? 'time'
-                      : 'document-text-outline'
-              }
-              size={22}
-              color={
-                isApproved
-                  ? '#16A34A'
-                  : isRejected
-                    ? '#DC2626'
-                    : isUnderReview
-                      ? '#D97706'
-                      : '#64748B'
-              }
-            />
-          </View>
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text
-              style={[
-                styles.bannerTitle,
-                isApproved && { color: '#15803D' },
-                isRejected && { color: '#B91C1C' },
-                isUnderReview && { color: '#B45309' },
-                status === 'Unverified' && { color: '#334155' },
-              ]}
-            >
-              {isApproved
-                ? "You're verified! 🎉"
+          <Ionicons
+            name={
+              isApproved
+                ? 'shield-checkmark'
                 : isRejected
-                  ? 'One of your documents needs attention'
+                  ? 'alert-circle'
                   : isUnderReview
-                    ? 'Your documents are being reviewed'
-                    : 'Verify your identity'}
+                    ? 'time'
+                    : 'document-text-outline'
+            }
+            size={26}
+            color={
+              isApproved
+                ? '#00B13B'
+                : isRejected
+                  ? '#FF3E3E'
+                  : isUnderReview
+                    ? '#FFB380'
+                    : '#0D0D11'
+            }
+            style={{ marginRight: 12, marginTop: 1 }}
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.bannerTitle}>
+              {isApproved
+                ? uiText("Verified Account")
+                : isRejected
+                  ? uiText("Action Required")
+                  : isUnderReview
+                    ? uiText("Under Review")
+                    : uiText("Verify Your Identity")}
             </Text>
             <Text style={styles.bannerSubtitle}>
               {isApproved
-                ? 'Your documents have been approved by officials. Your profile now has the verified badge.'
+                ? uiText("Your documents have been approved by officials. Your profile now has the verified badge.")
                 : isRejected
-                  ? 'Please check the note below and submit a clearer copy so officials can finish reviewing.'
+                  ? uiText("One of your documents was not accepted. Please check the notes below.")
                   : isUnderReview
-                    ? "We'll let you know once officials approve your ID. This usually takes 1–3 days."
-                    : 'Upload your valid identity documents to unlock verified credentials and boost trust on SerbiSure.'}
+                    ? uiText("Your documents are currently being reviewed by Barangay Officials.")
+                    : uiText("Upload your valid identity documents to unlock verified credentials.")}
             </Text>
           </View>
         </View>
 
         {/* 3-Step Progress Indicator */}
-        {isSubmittedDone && (
-          <View style={styles.progressBarWrapper}>
-            <View style={styles.progressCirclesRow}>
-              {/* Step 1: Submitted */}
-              <View style={[styles.progressStepCircle, styles.progressStepCircleDone]}>
-                <Ionicons name="checkmark" size={12} color="#FFF" />
-              </View>
-
-              {/* Connector 1 */}
-              <View
-                style={[
-                  styles.progressLine,
-                  (isUnderReview || isRejected || isApproved) && styles.progressLineActive,
-                ]}
-              />
-
-              {/* Step 2: Being Reviewed */}
-              <View
-                style={[
-                  styles.progressStepCircle,
-                  isApproved && styles.progressStepCircleDone,
-                  isUnderReview && styles.progressStepCircleActive,
-                  isRejected && styles.progressStepCircleWarning,
-                ]}
-              >
-                {isApproved ? (
-                  <Ionicons name="checkmark" size={12} color="#FFF" />
-                ) : isRejected ? (
-                  <Ionicons name="alert" size={12} color="#FFF" />
-                ) : (
-                  <Ionicons name="time" size={12} color="#FFF" />
-                )}
-              </View>
-
-              {/* Connector 2 */}
-              <View style={[styles.progressLine, isApproved && styles.progressLineActive]} />
-
-              {/* Step 3: Approved */}
-              <View
-                style={[
-                  styles.progressStepCircle,
-                  isApproved ? styles.progressStepCircleDone : styles.progressStepCircleInactive,
-                ]}
-              >
-                {isApproved ? (
-                  <Ionicons name="checkmark" size={12} color="#FFF" />
-                ) : (
-                  <Text style={styles.progressStepNum}>3</Text>
-                )}
-              </View>
+        <View style={styles.progressBarWrapper}>
+          <View style={styles.progressCirclesRow}>
+            {/* Step 1: Submitted / Pending */}
+            <View
+              style={[
+                styles.progressStepCircle,
+                status !== 'Unverified' ? styles.progressStepCircleDone : styles.progressStepCircleActive,
+              ]}
+            >
+              {status !== 'Unverified' ? (
+                <Ionicons name="checkmark" size={13} color="#FFF" />
+              ) : (
+                <Text style={[styles.progressStepNum, { color: '#FFF' }]}>1</Text>
+              )}
             </View>
 
-            {/* Labels Row */}
-            <View style={styles.progressLabelsRow}>
-              <Text style={[styles.progressStepLabel, styles.progressStepLabelDone]}>
-                {uiText("Submitted")}</Text>
-              <Text
-                style={[
-                  styles.progressStepLabel,
-                  (isUnderReview || isApproved) && styles.progressStepLabelActive,
-                  isRejected && { color: '#B91C1C', fontWeight: '700' },
-                ]}
-              >
-                {isRejected ? 'Needs Action' : 'Being Reviewed'}
-              </Text>
-              <Text style={[styles.progressStepLabel, isApproved && styles.progressStepLabelDone]}>
-                {uiText("Approved")}</Text>
+            {/* Connector 1 */}
+            <View
+              style={[
+                styles.progressLine,
+                (isUnderReview || isRejected || isApproved) && styles.progressLineActive,
+              ]}
+            />
+
+            {/* Step 2: Reviewing */}
+            <View
+              style={[
+                styles.progressStepCircle,
+                isApproved && styles.progressStepCircleDone,
+                isUnderReview && styles.progressStepCircleActive,
+                isRejected && styles.progressStepCircleWarning,
+                status === 'Unverified' && styles.progressStepCircleInactive,
+              ]}
+            >
+              {isApproved ? (
+                <Ionicons name="checkmark" size={13} color="#FFF" />
+              ) : isRejected ? (
+                <Ionicons name="alert" size={13} color="#FFF" />
+              ) : isUnderReview ? (
+                <Ionicons name="time" size={13} color="#FFF" />
+              ) : (
+                <Text style={styles.progressStepNum}>2</Text>
+              )}
+            </View>
+
+            {/* Connector 2 */}
+            <View style={[styles.progressLine, isApproved && styles.progressLineActive]} />
+
+            {/* Step 3: Verified */}
+            <View
+              style={[
+                styles.progressStepCircle,
+                isApproved ? styles.progressStepCircleDone : styles.progressStepCircleInactive,
+              ]}
+            >
+              {isApproved ? (
+                <Ionicons name="checkmark" size={13} color="#FFF" />
+              ) : (
+                <Text style={styles.progressStepNum}>3</Text>
+              )}
             </View>
           </View>
-        )}
+
+          <View style={styles.progressLabelsRow}>
+            <Text
+              style={[
+                styles.progressStepLabel,
+                status !== 'Unverified' && styles.progressStepLabelDone,
+              ]}
+            >
+              {uiText("Submitted")}
+            </Text>
+            <Text
+              style={[
+                styles.progressStepLabel,
+                (isUnderReview || isApproved) && (isApproved ? styles.progressStepLabelDone : styles.progressStepLabelActive),
+                isRejected && { color: '#FF3E3E', fontWeight: '700' },
+              ]}
+            >
+              {isRejected ? uiText("Action Needed") : uiText("Reviewing")}
+            </Text>
+            <Text style={[styles.progressStepLabel, isApproved && styles.progressStepLabelDone]}>
+              {uiText("Verified")}
+            </Text>
+          </View>
+        </View>
 
         {/* Friendly notification note for Pending */}
         {isUnderReview && (
           <View style={styles.whatNextBox}>
-            <Ionicons name="notifications-outline" size={15} color="#B45309" style={styles.whatNextIcon} />
+            <Ionicons name="notifications-outline" size={15} color="#92400E" style={{ marginRight: 6, marginTop: 2 }} />
             <Text style={styles.whatNextText}>
-              {uiText("You'll get a notification once your documents are approved or if we need anything from you.")}</Text>
+              {uiText("You'll get a notification once your documents are approved or if we need anything from you.")}
+            </Text>
           </View>
         )}
       </View>
@@ -534,20 +531,12 @@ export function VerificationStatusModal({
       <View key={doc.document_id} style={styles.docItemCard}>
         {/* Document Header Row */}
         <View style={styles.docItemHeader}>
-          <View
-            style={[
-              styles.docIconBox,
-              isVerified && styles.docIconBoxVerified,
-              isPending && styles.docIconBoxPending,
-              isRejected && styles.docIconBoxRejected,
-            ]}
-          >
-            <Ionicons
-              name={isVerified ? 'checkmark-circle' : isRejected ? 'alert-circle' : 'time'}
-              size={20}
-              color={isVerified ? '#16A34A' : isRejected ? '#DC2626' : '#D97706'}
-            />
-          </View>
+          <Ionicons
+            name={isVerified ? 'checkmark-circle' : isRejected ? 'alert-circle' : 'time'}
+            size={22}
+            color={isVerified ? '#00B13B' : isRejected ? '#FF3E3E' : '#FFB380'}
+            style={{ marginRight: 10 }}
+          />
 
           <View style={styles.docItemTitleBox}>
             <Text style={styles.docItemTitle} numberOfLines={1}>{docTitle}</Text>
@@ -574,7 +563,7 @@ export function VerificationStatusModal({
                 isRejected && styles.statusBadgeTextRejected,
               ]}
             >
-              {isVerified ? 'Approved ✓' : isRejected ? 'Needs Re-upload' : uiText("Under Review")}
+              {isVerified ? uiText("Approved") : isRejected ? 'Needs Re-upload' : uiText("Under Review")}
             </Text>
           </View>
         </View>
@@ -820,51 +809,66 @@ export function VerificationStatusModal({
     );
   };
 
+    if (!visible) return null;
+
   return (
     <>
-      <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-        <View style={styles.overlay}>
-          <View style={styles.modalContent}>
-            {/* Header */}
-            <View style={styles.header}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="shield-checkmark" size={22} color="#FFB43B" style={{ marginRight: 8 }} />
-                <Text style={styles.headerTitle}>{uiText("Document Verification")}</Text>
-              </View>
-              <Pressable onPress={handleClose} hitSlop={8}>
-                <Ionicons name="close" size={24} color="#333" />
-              </Pressable>
+      <Modal
+        visible={visible}
+        animationType="none"
+        transparent={false}
+        statusBarTranslucent
+        onRequestClose={handleClose}
+      >
+        <View
+          style={[
+            styles.container,
+            {
+              paddingTop: Math.max(insets.top, 14),
+              paddingBottom: Math.max(insets.bottom, 14),
+            },
+          ]}
+        >
+          {/* Global Aligned Header Matching Chat Screen & Booking Screens */}
+          <View style={styles.header}>
+            <Pressable onPress={handleClose} style={styles.backBtn} hitSlop={12}>
+              <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
+            </Pressable>
+
+            <View style={styles.headerTitleCenter}>
+              <Text style={styles.headerTitle}>{uiText("Document Verification")}</Text>
             </View>
 
-            <ScrollView style={styles.scrollBody} showsVerticalScrollIndicator={false}>
-              {loading ? (
-                <View style={styles.loadingBox}>
-                  <ActivityIndicator size="large" color="#FFB43B" />
-                  <Text style={styles.loadingText}>{uiText("Loading verification status...")}</Text>
-                </View>
-              ) : (
-                <>
-                  {renderStatusBanner()}
-
-                  {statusData?.documents && statusData.documents.length > 0 ? (
-                    <>
-                      <Text style={styles.sectionHeader}>{uiText("Submitted Documents")}</Text>
-                      {statusData.documents.map(renderDocumentItem)}
-                    </>
-                  ) : null}
-
-                  {renderUploadSection()}
-                </>
-              )}
-            </ScrollView>
-
-            {/* Footer */}
-            <View style={styles.footer}>
-              <Pressable style={styles.closeFooterBtn} onPress={handleClose}>
-                <Text style={styles.closeFooterBtnText}>{uiText("Close")}</Text>
-              </Pressable>
+            <View style={styles.headerRight}>
+              <Image source={logoSource} style={styles.logo} resizeMode="contain" />
             </View>
           </View>
+
+          <ScrollView
+            style={styles.scrollBody}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {loading ? (
+              <View style={styles.loadingBox}>
+                <ActivityIndicator size="large" color="#FFB380" />
+                <Text style={styles.loadingText}>{uiText("Loading verification status...")}</Text>
+              </View>
+            ) : (
+              <>
+                {renderStatusBanner()}
+
+                {statusData?.documents && statusData.documents.length > 0 ? (
+                  <>
+                    <Text style={styles.sectionHeader}>{uiText("Submitted Documents")}</Text>
+                    {statusData.documents.map(renderDocumentItem)}
+                  </>
+                ) : null}
+
+                {renderUploadSection()}
+              </>
+            )}
+          </ScrollView>
         </View>
       </Modal>
 
@@ -878,42 +882,52 @@ export function VerificationStatusModal({
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  container: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  modalContent: {
-    width: '100%',
-    maxHeight: '88%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    backgroundColor: '#F6F5F2',
   },
   header: {
-    flexDirection: 'row',
     alignItems: 'center',
+    flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0EFEA',
+    borderBottomColor: '#EBE9E4',
+    backgroundColor: '#F6F5F2',
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitleCenter: {
+    flex: 1,
+    alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#1F2937',
+    fontSize: 19,
+    fontWeight: '800',
+    color: '#1A1A1A',
+    fontFamily: THEME.typography.fontFamily.display,
+  },
+  headerRight: {
+    width: 40,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  logo: {
+    height: 34,
+    width: 34,
   },
   scrollBody: {
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 36,
   },
   loadingBox: {
     paddingVertical: 40,
@@ -922,63 +936,29 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 10,
     fontSize: 13,
-    color: '#6B7280',
+    color: '#727272',
   },
 
   /* Banner Card */
   bannerCard: {
-    padding: 14,
-    borderRadius: 14,
+    padding: 16,
+    borderRadius: 20,
     marginBottom: 16,
-    borderWidth: 1,
+    backgroundColor: '#FFFFFF',
   },
   bannerTopRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  bannerCardVerified: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#BBF7D0',
-  },
-  bannerCardPending: {
-    backgroundColor: '#FFFBEB',
-    borderColor: '#FDE68A',
-  },
-  bannerCardRejected: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FECACA',
-  },
-  bannerCardUnverified: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#E2E8F0',
-  },
-  bannerIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bannerIconBoxVerified: {
-    backgroundColor: '#DCFCE7',
-  },
-  bannerIconBoxPending: {
-    backgroundColor: '#FEF3C7',
-  },
-  bannerIconBoxRejected: {
-    backgroundColor: '#FEE2E2',
-  },
-  bannerIconBoxUnverified: {
-    backgroundColor: '#EDF2F7',
   },
   bannerTitle: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0D0D11',
     marginBottom: 3,
   },
   bannerSubtitle: {
     fontSize: 12.5,
-    color: '#4B5563',
+    color: '#727272',
     lineHeight: 18,
   },
 
@@ -1073,93 +1053,68 @@ const styles = StyleSheet.create({
   },
 
   sectionHeader: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 10,
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0D0D11',
+    marginBottom: 12,
+    fontFamily: THEME.typography.fontFamily.mainBold,
   },
 
   /* Document Item Card */
   docItemCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 14,
   },
   docItemHeader: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  docIconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
-    flexShrink: 0,
-  },
-  docIconBoxVerified: {
-    backgroundColor: '#DCFCE7',
-  },
-  docIconBoxPending: {
-    backgroundColor: '#FEF3C7',
-  },
-  docIconBoxRejected: {
-    backgroundColor: '#FEE2E2',
-  },
   docItemTitleBox: {
     flex: 1,
-    marginLeft: 10,
     marginRight: 8,
     minWidth: 0,
   },
   docItemTitle: {
-    fontSize: 14.5,
-    fontWeight: '600',
-    color: '#1F2937',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0D0D11',
   },
   docItemSub: {
-    fontSize: 11.5,
-    color: '#6B7280',
+    fontSize: 12,
+    color: '#727272',
     marginTop: 2,
   },
   statusBadge: {
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 12,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F6F5F2',
     flexShrink: 0,
   },
   statusBadgeVerified: {
-    backgroundColor: '#DCFCE7',
+    backgroundColor: '#F6F5F2',
   },
   statusBadgePending: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: '#F6F5F2',
   },
   statusBadgeRejected: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: '#F6F5F2',
   },
   statusBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#4B5563',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0D0D11',
   },
   statusBadgeTextVerified: {
-    color: '#15803D',
+    color: '#00B13B',
   },
   statusBadgeTextPending: {
-    color: '#B45309',
+    color: '#FFB380',
   },
   statusBadgeTextRejected: {
-    color: '#B91C1C',
+    color: '#FF3E3E',
   },
 
   /* Rejected State Card */
@@ -1248,18 +1203,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
+    backgroundColor: '#F6F5F2',
+    borderWidth: 0,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    marginTop: 10,
   },
   ocrToggleBtnActive: {
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
-    borderColor: '#D1D5DB',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F6F5F2',
   },
   ocrToggleLeft: {
     flex: 1,
@@ -1515,42 +1469,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   submitBtn: {
-    backgroundColor: '#FFB43B',
-    height: 42,
-    borderRadius: 8,
+    backgroundColor: '#FFB380',
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
-    marginBottom: 12,
+    marginTop: 8,
+    marginBottom: 16,
   },
   submitBtnDisabled: {
-    opacity: 0.7,
+    opacity: 0.6,
   },
   submitBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  /* Footer */
-  footer: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#F0EFEA',
-  },
-  closeFooterBtn: {
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F5F4F0',
-    paddingVertical: 11,
-    borderRadius: 8,
-  },
-  closeFooterBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
+    color: '#0D0D11',
+    fontSize: 15,
+    fontWeight: '800',
+    fontFamily: THEME.typography.fontFamily.mainBold,
   },
 });
 

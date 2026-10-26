@@ -2,10 +2,31 @@ import { useLanguage as useUiLanguage } from '../../../shared/localization/Langu
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { MapPinIcon } from '../../../shared/components/icons/LucideIcons';
 import THEME from '../../../shared/theme/theme';
 import type { FeedPost } from '../types';
 
-export function FeedPostCard({ post, saved, applied = false, onViewProfile, onDetails, onToggleSave }: { post: FeedPost; saved: boolean; applied?: boolean; onViewProfile: () => void; onDetails: () => void; onToggleSave: () => void }) {
+export interface FeedPostCardProps {
+  post: FeedPost;
+  saved: boolean;
+  applied?: boolean;
+  onViewProfile?: () => void;
+  onDetails?: () => void;
+  onToggleSave?: () => void;
+  leftActionButton?: React.ReactNode;
+  rightActionButton?: React.ReactNode;
+}
+
+export function FeedPostCard({
+  post,
+  saved,
+  applied = false,
+  onViewProfile,
+  onDetails,
+  onToggleSave,
+  leftActionButton,
+  rightActionButton,
+}: FeedPostCardProps) {
   const { tr: uiText } = useUiLanguage();
   return (
     <View style={styles.workerCard}>
@@ -38,25 +59,27 @@ export function FeedPostCard({ post, saved, applied = false, onViewProfile, onDe
         >
           <Ionicons
             name={saved ? "bookmark" : "bookmark-outline"}
-            size={22}
-            color={THEME.colors.ink}
+            size={24}
+            color={saved ? "#FFAA77" : THEME.colors.ink}
           />
         </Pressable>
       </View>
 
-      {/* Details Pills: Location, Term, Rate */}
-      <View style={styles.metaRow}>
-        <View style={styles.metaBadge}>
-          <Ionicons name="location-sharp" size={12} color="#6B7280" style={{ marginRight: 3 }} />
-          <Text style={styles.metaBadgeText}>{post.location}</Text>
+      {/* Details: Location on row 1, Term & Green Rate Pill on row 2 */}
+      <View style={styles.metaColumn}>
+        <View style={styles.locationBadge}>
+          <MapPinIcon size={14} color="#6B7280" style={{ marginRight: 4 }} />
+          <Text style={styles.metaBadgeText} numberOfLines={1}>{post.location}</Text>
         </View>
-        <View style={styles.metaBadge}>
-          <Ionicons name="briefcase-outline" size={12} color="#6B7280" style={{ marginRight: 3 }} />
-          <Text style={styles.metaBadgeText}>{uiText(post.termTag)}</Text>
-        </View>
-        <View style={styles.rateBadge}>
-          <Text style={styles.rateBadgeAmount}>{post.price}</Text>
-          <Text style={styles.rateBadgeUnit}> {uiText(post.unit)}</Text>
+        <View style={styles.termRateRow}>
+          <View style={styles.metaBadge}>
+            <Ionicons name="briefcase-outline" size={13} color="#6B7280" style={{ marginRight: 4 }} />
+            <Text style={styles.metaBadgeText}>{uiText(post.termTag)}</Text>
+          </View>
+          <View style={styles.rateBadge}>
+            <Text style={styles.rateBadgeAmount}>{post.price}</Text>
+            <Text style={styles.rateBadgeUnit}> / {uiText(post.unit || 'month').replace(/^\//, '').trim()}</Text>
+          </View>
         </View>
       </View>
 
@@ -69,18 +92,26 @@ export function FeedPostCard({ post, saved, applied = false, onViewProfile, onDe
 
       {/* Card Action Buttons: View Profile & See Details */}
       <View style={styles.cardActionsRow}>
-        <Pressable
-          style={styles.viewProfileBtn}
-          onPress={onViewProfile}
-        >
-          <Text style={styles.viewProfileText}>{uiText("View Profile")}</Text>
-        </Pressable>
-        <Pressable
-          style={styles.seeDetailsBtn}
-          onPress={onDetails}
-        >
-          <Text style={styles.seeDetailsBtnText}>{uiText(applied ? 'Applied' : 'See Details')}</Text>
-        </Pressable>
+        {leftActionButton !== undefined ? (
+          leftActionButton
+        ) : (
+          <Pressable
+            style={styles.viewProfileBtn}
+            onPress={onViewProfile}
+          >
+            <Text style={styles.viewProfileText}>{uiText("View Profile")}</Text>
+          </Pressable>
+        )}
+        {rightActionButton !== undefined ? (
+          rightActionButton
+        ) : (
+          <Pressable
+            style={styles.seeDetailsBtn}
+            onPress={onDetails}
+          >
+            <Text style={styles.seeDetailsBtnText}>{uiText(applied ? 'Applied' : 'See Details')}</Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -137,64 +168,74 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   roleBadge: {
-    backgroundColor: '#FFF4E5',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    backgroundColor: '#FFAA77',
+    paddingHorizontal: 9,
+    paddingVertical: 2.5,
     borderRadius: 8,
   },
   roleBadgeText: {
     fontSize: 11,
     fontFamily: THEME.typography.fontFamily.secondaryBold,
-    color: '#D97706',
+    color: '#FFFFFF',
   },
   workerTime: {
     fontSize: 11,
     fontFamily: THEME.typography.fontFamily.secondaryRegular,
     color: THEME.colors.textMuted,
   },
-  metaRow: {
+  metaColumn: {
+    gap: 7,
+    marginBottom: 12,
+  },
+  locationBadge: {
+    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 10,
+    backgroundColor: '#EAEAEA',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  termRateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   metaBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    backgroundColor: '#EAEAEA',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 8,
   },
   metaBadgeText: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontFamily: THEME.typography.fontFamily.secondaryMedium,
-    color: '#4B5563',
+    color: '#0D0D11',
   },
   rateBadge: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    backgroundColor: '#ECFDF5',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    alignItems: 'center',
+    backgroundColor: '#10B981',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 8,
-    marginLeft: 'auto',
   },
   rateBadgeAmount: {
     fontSize: 12,
-    fontFamily: THEME.typography.fontFamily.display,
-    color: '#059669',
+    fontFamily: THEME.typography.fontFamily.secondaryBold,
+    color: '#FFFFFF',
     fontWeight: '800',
   },
   rateBadgeUnit: {
-    fontSize: 10,
-    fontFamily: THEME.typography.fontFamily.secondaryRegular,
-    color: '#059669',
+    fontSize: 11,
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
+    color: '#FFFFFF',
   },
   descriptionText: {
     fontSize: 12.5,
-    fontFamily: THEME.typography.fontFamily.secondaryRegular,
+    fontFamily: THEME.typography.fontFamily.body,
     color: '#4B5563',
     lineHeight: 18,
     marginBottom: 14,
@@ -206,28 +247,30 @@ const styles = StyleSheet.create({
   },
   viewProfileBtn: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#ECECEC',
     borderRadius: THEME.roundness.pill,
-    paddingVertical: 11,
+    paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   viewProfileText: {
-    color: '#111827',
-    fontFamily: THEME.typography.fontFamily.display,
-    fontSize: 12.5,
+    color: '#0D0D11',
+    fontFamily: THEME.typography.fontFamily.secondaryBold,
+    fontSize: 13,
   },
   seeDetailsBtn: {
     flex: 1,
-    backgroundColor: '#FFB43B',
+    backgroundColor: '#FFAA77',
     borderRadius: THEME.roundness.pill,
-    paddingVertical: 11,
+    paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   seeDetailsBtnText: {
     color: '#FFFFFF',
-    fontFamily: THEME.typography.fontFamily.display,
-    fontSize: 12.5,
+    fontFamily: THEME.typography.fontFamily.secondaryBold,
+    fontSize: 13,
   },
 });
+
+export const feedPostStyles = styles;

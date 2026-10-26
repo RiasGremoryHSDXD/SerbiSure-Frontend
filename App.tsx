@@ -1,9 +1,10 @@
 import { AppProviders } from './src/app/providers/AppProviders';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, LogBox, Pressable, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Image, LogBox, Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
 LogBox.ignoreLogs(['Unable to activate keep awake', '[PostService]', '[PostJob]']);
+LogBox.ignoreAllLogs(true);
 import {
   useFonts,
   Nunito_400Regular,
@@ -63,8 +64,30 @@ export default function App() {
   const [suspensionMessage, setSuspensionMessage] = useState<string | null>(null);
   const [selfieUpload, setSelfieUpload] = useState<SelfieUploadTask | undefined>();
   const [restoringSession, setRestoringSession] = useState(true);
+  const [minimumSplashElapsed, setMinimumSplashElapsed] = useState(false);
+  const [showLaunchSplash, setShowLaunchSplash] = useState(true);
+  const launchSplashOpacity = useRef(new Animated.Value(1)).current;
   const [restoreError, setRestoreError] = useState('');
   const [loginMessage, setLoginMessage] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMinimumSplashElapsed(true), 900);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const appReady = fontsLoaded && !restoringSession && minimumSplashElapsed;
+
+  useEffect(() => {
+    if (!appReady) return;
+
+    Animated.timing(launchSplashOpacity, {
+      toValue: 0,
+      duration: 420,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) setShowLaunchSplash(false);
+    });
+  }, [appReady, launchSplashOpacity]);
 
   const clearSession = useCallback(() => {
     realtime.stop();
@@ -120,11 +143,17 @@ export default function App() {
     return unsubscribe;
   }, [clearSession, restoreSavedLogin]);
 
-  if (!fontsLoaded || restoringSession) {
+  if (showLaunchSplash) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#F6F5F2', alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color="#0D0D11" />
-      </View>
+      <Animated.View style={[styles.launchSplash, { opacity: launchSplashOpacity }]}>
+        <StatusBar style="dark" backgroundColor="#F6F5F2" />
+        <Image
+          source={require('./assets/serbisure_new_clean.png')}
+          style={styles.launchSplashLogo}
+          resizeMode="contain"
+          accessibilityLabel="SerbiSure"
+        />
+      </Animated.View>
     );
   }
 
@@ -246,3 +275,16 @@ export default function App() {
     </AppProviders>
   );
 }
+
+const styles = StyleSheet.create({
+  launchSplash: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F6F5F2',
+  },
+  launchSplashLogo: {
+    width: 92,
+    height: 92,
+  },
+});

@@ -1,107 +1,132 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
-import { WorkLocationFields } from '../../bookings/components/WorkLocationFields';
-import React from 'react';
-import { Text, View, Pressable, TextInput } from 'react-native';
-
+import React, { useState } from 'react';
+import { Text, View, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
-import THEME from '../../../shared/theme/theme';
 
 import { postingStyles as styles } from '../styles';
 import type { PostFormController } from '../hooks/usePostForm';
+import { PrivacyPolicyModal } from '../../profile/components/PrivacyPolicyModal';
 
 export function PostStep3({ form }: { form: PostFormController }) {
   const { tr: uiText } = useUiLanguage();
+  const [showTermsModal, setShowTermsModal] = useState(false);
   const {
-    config,
-    user,
     step,
+    config,
     engagementType,
-    instructions,
-    setInstructions,
-    wagePolicy,
+    setupPreference,
     offerAmount,
-    setOfferAmount,
-    applyUserProfileAddress,
+    agreedTerms,
+    setAgreedTerms,
     getSelectedRoleLabel,
+    getLocationLabel,
+    buildAutoMessage,
+    fieldErrors,
+    isPosting,
   } = form;
-  return (<>
-    {/* STEP 3: DETAILS, INSTRUCTIONS & RATE */}
-    {step === 3 && (
-      <View style={styles.step3Container}>
-        {/* Location Header & Profile Address Quick Use */}
-        <View style={styles.locationHeaderRow}>
-          <Text style={styles.inputGroupLabel}>{uiText(config.addressLabel)}</Text>
-          {user && (user.barangay || user.city) ? (
-            <Pressable style={styles.useProfileAddressBtn} onPress={applyUserProfileAddress}>
-              <Ionicons name="location" size={13} color="#EA580C" />
-              <Text style={styles.useProfileAddressText}>{uiText("Use Profile Address")}</Text>
-            </Pressable>
-          ) : null}
+
+  if (step !== 3) return null;
+
+  const handleCheckboxPress = () => {
+    if (!agreedTerms) {
+      // Must view and accept terms before checking agreement
+      setShowTermsModal(true);
+    } else {
+      setAgreedTerms(false);
+    }
+  };
+
+  return (
+    <View style={styles.stepContainer}>
+      {/* 1. Listing Preview */}
+      <Text style={styles.sectionHeader}>{uiText("LISTING PREVIEW")}</Text>
+      <View style={styles.previewCard}>
+        <Text style={styles.previewText}>{buildAutoMessage()}</Text>
+      </View>
+
+      {/* 2. Summary Card */}
+      <Text style={[styles.sectionHeader, { marginTop: 14 }]}>{uiText("SUMMARY")}</Text>
+      <View style={styles.summaryCard}>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>{uiText("Service")}</Text>
+          <Text style={styles.summaryValue}>{getSelectedRoleLabel()}</Text>
         </View>
 
-        <WorkLocationFields form={form} disabled={form.isPosting} />
+        <View style={styles.summaryDivider} />
 
-        <Text style={styles.inputGroupLabel}>{uiText(config.instructionsLabel)}</Text>
-        <TextInput
-          style={styles.multilineInput}
-          multiline
-          numberOfLines={4}
-          placeholder={uiText(config.instructionsPlaceholder)}
-          placeholderTextColor="#9CA3AF"
-          value={instructions}
-          onChangeText={setInstructions}
-        />
-
-        <Text style={styles.inputGroupLabel}>
-          {engagementType === 'short' ? 'OFFER AMOUNT (PER DAY)' : 'MONTHLY SALARY OFFER'}
-        </Text>
-        {(() => {
-          const num = Number(offerAmount.replace(/[^0-9.]/g, ''));
-          const isBelowMin = offerAmount.trim().length > 0 && (wagePolicy ? num < Number(wagePolicy.minimum_rate) : false);
-          return (
-            <>
-              <View style={[styles.offerInputWrapper, isBelowMin && styles.offerInputWrapperInvalid]}>
-                <Text style={[styles.currencyPrefix, isBelowMin && { color: '#DC2626' }]}>₱</Text>
-                <TextInput
-                  style={[styles.offerInput, isBelowMin && { color: '#DC2626' }]}
-                  value={offerAmount}
-                  onChangeText={setOfferAmount}
-                  keyboardType="numeric"
-                  placeholder={wagePolicy?.minimum_rate || 'Enter amount'}
-                  placeholderTextColor={isBelowMin ? '#FCA5A5' : '#9CA3AF'}
-                />
-                <Text style={[styles.rateUnitSuffix, isBelowMin && { color: '#DC2626' }]}>
-                  {engagementType === 'short' ? '/day' : '/month'}
-                </Text>
-              </View>
-              {isBelowMin ? (
-                <Text style={styles.invalidRateHint}>
-                  {engagementType === 'short'
-                    ? (wagePolicy?.description || 'Select the work region to load the daily policy.')
-                    : (wagePolicy?.description || 'Select your work region to load the monthly wage policy.')}
-                </Text>
-              ) : null}
-            </>
-          );
-        })()}
-
-        <View style={styles.recommendBox}>
-          <Text style={styles.recommendTitle}>
-            {engagementType === 'short'
-              ? `Suggested rate for ${getSelectedRoleLabel()}: `
-              : `Standard monthly rate for ${getSelectedRoleLabel()}: `}
-            <Text style={{ fontFamily: THEME.typography.fontFamily.mainExtraBold, fontWeight: '800', color: '#0D0D11' }}>
-              {wagePolicy ? 'Minimum: PHP ' + Number(wagePolicy.minimum_rate).toLocaleString() + '/' + wagePolicy.rate_period : 'Loading applicable minimum...'}
-            </Text>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>{uiText("Engagement")}</Text>
+          <Text style={styles.summaryValue}>
+            {engagementType === 'short' ? uiText("Short-term") : uiText("Long-term")}
           </Text>
-          <Text style={styles.recommendSub}>
-            {engagementType === 'short'
-              ? (wagePolicy?.description || 'The server checks the current platform daily minimum.')
-              : (wagePolicy?.description || 'The server checks the regional monthly minimum.')}
+        </View>
+
+        <View style={styles.summaryDivider} />
+
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>{uiText("Work Setup")}</Text>
+          <Text style={styles.summaryValue}>
+            {setupPreference === 'stay-in' ? uiText("Stay-in") : uiText("Stay-out")}
+          </Text>
+        </View>
+
+        <View style={styles.summaryDivider} />
+
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>{uiText("Offer Rate")}</Text>
+          <Text style={[styles.summaryValue, { color: '#EA580C', fontWeight: '800' }]}>
+            ₱{offerAmount} {engagementType === 'short' ? uiText("/ day") : uiText("/ month")}
+          </Text>
+        </View>
+
+        <View style={styles.summaryDivider} />
+
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>{uiText("Location")}</Text>
+          <Text style={[styles.summaryValue, { flex: 1, textAlign: 'right', marginLeft: 16 }]}>
+            {getLocationLabel()}
           </Text>
         </View>
       </View>
-    )}
-  </>);
+
+      {/* 3. Terms of Service Checkbox (opens terms modal before checking) */}
+      <Pressable
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: agreedTerms }}
+        style={styles.checkboxRow}
+        onPress={handleCheckboxPress}
+        disabled={isPosting}
+      >
+        <View style={[styles.checkbox, agreedTerms && styles.checkboxActive, fieldErrors.terms && styles.checkboxError]}>
+          {agreedTerms && <Ionicons name="checkmark" size={15} color="#0D0D11" />}
+        </View>
+        <Text style={styles.checkboxText}>
+          {uiText("I agree to the ")}
+          <Text
+            style={[styles.checkboxBoldText, { textDecorationLine: 'underline' }]}
+            onPress={() => setShowTermsModal(true)}
+          >
+            {uiText("SerbiSure Terms of Service")}
+          </Text>
+          {uiText(" and confirm these household details are accurate")}
+        </Text>
+      </Pressable>
+
+      {/* Terms of Service Consent Modal */}
+      <PrivacyPolicyModal
+        visible={showTermsModal}
+        document="terms"
+        mode="consent"
+        onClose={() => setShowTermsModal(false)}
+        onAccept={() => {
+          setAgreedTerms(true);
+          setShowTermsModal(false);
+        }}
+        onDecline={() => {
+          setAgreedTerms(false);
+          setShowTermsModal(false);
+        }}
+      />
+    </View>
+  );
 }

@@ -50,7 +50,7 @@ function postingScreen(t, mode = 'service') {
     Alert: { alert: (...args) => alerts.push(args) }, Easing: { linear: value => value },
     Animated: { Value: class { setValue() {} interpolate() { return 0; } }, spring: animation, loop: animation, timing: animation, View: 'AnimatedView' },
   };
-  for (const name of ['Modal', 'Pressable', 'ScrollView', 'Text', 'View', 'Image', 'StatusBar', 'KeyboardAvoidingView']) native[name] = name;
+  for (const name of ['Modal', 'Pressable', 'ScrollView', 'Text', 'View', 'Image', 'StatusBar', 'KeyboardAvoidingView', 'TextInput']) native[name] = name;
   const language = { useLanguage: () => ({ tr: text => text }) };
   const theme = load('src/shared/theme/theme.ts', { 'react-native': native });
   const posting = load('src/features/posting/postingConfig.ts');
@@ -73,11 +73,19 @@ function postingScreen(t, mode = 'service') {
   const restriction = load('src/features/bookings/components/BookingRestrictionModal.tsx', {
     'react-native': native, '../../../shared/localization/LanguageContext': language, '../../../shared/theme/theme': theme,
   });
+  const step1 = load('src/features/posting/components/PostStep1.tsx', {
+    'react-native': native, '@expo/vector-icons': { Ionicons: 'Icon' },
+    '../../../shared/localization/LanguageContext': language, '../styles': { postingStyles: {} },
+  });
   const step2 = load('src/features/posting/components/PostStep2.tsx', {
     'react-native': native, '@expo/vector-icons': { Ionicons: 'Icon' },
     '../../../shared/localization/LanguageContext': language, '../styles': { postingStyles: {} },
-    '../../bookings/components/WorkScheduleFields': { WorkScheduleFields: () => null },
     '../../bookings/components/WorkLocationFields': { WorkLocationFields: () => null },
+  });
+  const step3 = load('src/features/posting/components/PostStep3.tsx', {
+    'react-native': native, '@expo/vector-icons': { Ionicons: 'Icon' },
+    '../../../shared/localization/LanguageContext': language, '../styles': { postingStyles: {} },
+    '../../profile/components/PrivacyPolicyModal': { PrivacyPolicyModal: () => null },
   });
   let controller;
   const { PostScreen } = load('src/features/posting/screens/PostScreen.tsx', {
@@ -86,8 +94,9 @@ function postingScreen(t, mode = 'service') {
     '../hooks/usePostForm': { usePostForm: props => { controller = usePostForm(props); return controller; } },
     '../../bookings/components/BookingRestrictionModal': restriction,
     '../../verification/components/VerificationRequiredModal': { VerificationRequiredModal: props => props.visible ? React.createElement('Text', {}, 'Account Verification Required') : null },
-    ...Object.fromEntries([1, 3, 4].map(step => ['../components/PostStep' + step, { ['PostStep' + step]: () => null }])),
+    '../components/PostStep1': step1,
     '../components/PostStep2': step2,
+    '../components/PostStep3': step3,
   });
   const container = { children: [] };
   const root = renderer.createContainer(container, 0, null, false, null, '', error => { throw error; }, null);
@@ -103,19 +112,21 @@ function postingScreen(t, mode = 'service') {
   const next = async () => { await controller.handleNext(); await tick(); };
   const ready = async (duration = 'short') => {
     render();
-    set(form => form.handleToggleService('Cleaning')); await next();
     set(form => {
+      form.handleToggleService('Cleaning');
       form.handleEngagementChange(duration === 'short' ? 'short' : 'long');
-      if (duration !== 'short') form.setSetupPreference('stay-out');
+      form.setSetupPreference('stay-out');
+      form.setOfferAmount(duration === 'short' ? '800' : '8000');
       form.setSelectedTime('morning'); form.setStartDate('12/31/2099');
       if (duration !== 'short') {
         form.setOngoing(duration === 'ongoing'); form.setEndDate(duration === 'fixed' ? '01/30/2100' : '');
         form.setWorkHours('09:00 AM - 02:00 PM'); form.setWorkDays(['Th']);
       }
     });
-    await next(); await next();
+    await next();
+    await next();
     set(form => form.setAgreedTerms(true));
-    assert.equal(controller.step, 4);
+    assert.equal(controller.step, 3);
     assert.equal(alerts.length, 0);
   };
   const submit = async (status, body) => {
@@ -132,22 +143,18 @@ function postingScreen(t, mode = 'service') {
 }
 
 for (const mode of ['job', 'service']) {
-test(`${mode}: short-term hides work setup and replaces a previous Stay-in choice with Stay-out`, async t => {
+test(`${mode}: short-term replaces a previous Stay-in choice with Stay-out`, async t => {
   const screen = postingScreen(t, mode); await screen.ready();
   screen.set(form => form.handleBack());
   screen.set(form => form.handleBack());
-  assert.equal(screen.form.step, 2);
-  assert.doesNotMatch(screen.text(), /WORK SETUP PREFERENCE|Stay-in|Stay-out/);
+  assert.equal(screen.form.step, 1);
   screen.press('Long-term');
-  assert.match(screen.text(), /WORK SETUP PREFERENCE/);
   screen.press('Stay-in');
   assert.equal(screen.form.setupPreference, 'stay-in');
   screen.press('Short-term');
   assert.equal(screen.form.setupPreference, 'stay-out');
-  assert.doesNotMatch(screen.text(), /WORK SETUP PREFERENCE|Stay-in|Stay-out/);
-  screen.set(form => form.setSelectedTime('morning'));
   await screen.next(); await screen.next();
-  assert.equal(screen.form.step, 4);
+  assert.equal(screen.form.step, 3);
   await screen.submit(403, { code: 'booking_restricted' });
   assert.equal(screen.requests[0].args[1].work_setup, 'stay_out');
   assert.doesNotMatch(screen.requests[0].args[1].special_instruction, /stay-out/);
@@ -179,7 +186,7 @@ for (const mode of ['job', 'service']) {
     assert.equal(screen.alerts.length, 0);
     screen.press('Understood');
     assert.equal(screen.form.showBookingRestricted, false);
-    assert.equal(screen.form.step, 4);
+    assert.equal(screen.form.step, 3);
     assert.equal(screen.closed.length, 0);
     assert.equal(screen.verification.length, 0);
     await screen.submit(201, { data: { booking_id: 'new-post' } });

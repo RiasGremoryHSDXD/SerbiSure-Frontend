@@ -41,8 +41,8 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
     (resultBundle: FaceLandmarkDetectionResultBundle, viewSize: Dims, mirrored: boolean) => {
       if (!detecting) return;
       const now = Date.now();
-      // Drop excess JS callbacks before mapping hundreds of landmark points.
-      if (now - lastResultAt.current < 100) return;
+      // Allow responsive tracking at ~25 FPS without dropping head turns.
+      if (now - lastResultAt.current < 40) return;
       lastResultAt.current = now;
       setDetectorError(null);
       onLandmarks(

@@ -1,10 +1,12 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, Image, Pressable, Modal, Animated, PanResponder, Dimensions, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, Image, Pressable, Modal, Animated, PanResponder, Dimensions, ActivityIndicator, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '../../auth/session/UserContext';
 import { fetchReviewSummary, ReviewSummaryData } from '../../reviews/api/reviewApi';
+import { BottomSheetHandle } from '../../../shared/components/BottomSheetHandle';
+import { StarIcon } from '../../../shared/components/icons/LucideIcons';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SNAP_EXPANDED = 0;
@@ -117,6 +119,7 @@ export function JobDetailSheet({
   const currentTranslateY = useRef(SNAP_EXPANDED);
   const gestureStartY = useRef(SNAP_EXPANDED);
   const isClosingRef = useRef(false);
+  const scrollOffset = useRef(0);
 
   // Sync currentTranslateY with panY for precise gesture tracking
   useEffect(() => {
@@ -177,48 +180,20 @@ export function JobDetailSheet({
     }
   }, [visible, job]);
 
-  // Release physics for snapping between expanded, collapsed, and dismiss
+  // Release physics for hold & drag: pull down past threshold or downward flick closes sheet
   const handleRelease = (gestureState: { dy: number; vy: number }) => {
     const { dy, vy } = gestureState;
     const currentY = currentTranslateY.current;
 
-    if (currentSnapRef.current === 'collapsed') {
-      // 1. Swipe up to expand back to top default position
-      if (dy < -35 || vy < -0.25) {
-        snapTo(SNAP_EXPANDED, 'expanded');
-      }
-      // 2. Swipe down to dismiss completely
-      else if (dy > 55 || vy > 0.35) {
-        handleClose();
-      }
-      // Return to resting collapsed position
-      else {
-        snapTo(SNAP_COLLAPSED, 'collapsed');
-      }
+    if (dy > 70 || vy > 0.4 || currentY > 110) {
+      handleClose();
     } else {
-      // Currently expanded (top default position)
-      if (dy > 0) {
-        // Deep swipe down or rapid downward flick -> dismiss completely
-        if (dy > SNAP_COLLAPSED + 50 || vy > 0.95 || currentY > SNAP_COLLAPSED + 60) {
-          handleClose();
-        }
-        // Responsive swipe down -> collapse back to mid height
-        else if (dy > 45 || vy > 0.25 || currentY > SNAP_COLLAPSED * 0.25) {
-          snapTo(SNAP_COLLAPSED, 'collapsed');
-        }
-        // Small nudge -> stay expanded
-        else {
-          snapTo(SNAP_EXPANDED, 'expanded');
-        }
-      } else {
-        // Swiped up while already expanded -> stay expanded
-        snapTo(SNAP_EXPANDED, 'expanded');
-      }
+      snapTo(SNAP_EXPANDED, 'expanded');
     }
   };
 
-  // Single unified PanResponder for smooth 1:1 up/down drag gestures across the sheet
-  const panResponder = useRef(
+  // Dedicated PanResponder for the top handle & header (always moves sheet 1:1)
+  const headerPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onStartShouldSetPanResponderCapture: () => false,
@@ -233,7 +208,40 @@ export function JobDetailSheet({
       },
       onPanResponderMove: (_, gestureState) => {
         const rawY = gestureStartY.current + gestureState.dy;
-        // Strictly prevent pulling the sheet upward past its resting top position!
+        const targetY = Math.max(SNAP_EXPANDED, rawY);
+        panY.setValue(targetY);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        handleRelease(gestureState);
+      },
+      onPanResponderTerminate: (_, gestureState) => {
+        handleRelease(gestureState);
+      },
+    })
+  ).current;
+
+  // Body PanResponder coordinating with ScrollView
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        const isVertical = Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+        return isVertical && gestureState.dy > 3 && scrollOffset.current <= 5;
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        const isVertical = Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+        if (!isVertical || Math.abs(gestureState.dy) < 3) return false;
+        if (gestureState.dy > 0 && scrollOffset.current <= 5) {
+          return true;
+        }
+        return false;
+      },
+      onPanResponderGrant: () => {
+        gestureStartY.current = currentTranslateY.current;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const rawY = gestureStartY.current + gestureState.dy;
         const targetY = Math.max(SNAP_EXPANDED, rawY);
         panY.setValue(targetY);
       },
@@ -284,28 +292,14 @@ export function JobDetailSheet({
           style={[
             styles.sheetContent,
             {
-              paddingBottom: Math.max(insets.bottom, 20) + 80,
-              marginBottom: -80,
               transform: [{ translateY: panY }],
             },
           ]}
           {...panResponder.panHandlers}
         >
           {/* Top Drag & Header Area */}
-          <View style={styles.sheetTopArea}>
-            <Pressable
-              style={styles.handleHitZone}
-              onPress={() => {
-                if (currentSnapRef.current === 'collapsed') {
-                  snapTo(SNAP_EXPANDED, 'expanded');
-                } else {
-                  snapTo(SNAP_COLLAPSED, 'collapsed');
-                }
-              }}
-              hitSlop={12}
-            >
-              <View style={styles.sheetHandle} />
-            </Pressable>
+          <View style={styles.sheetTopArea} {...headerPanResponder.panHandlers}>
+            <BottomSheetHandle onPress={handleClose} />
 
             {/* Header: Employer Avatar, Name, Badges & Save Action */}
             <View style={styles.sheetHeader}>
@@ -355,23 +349,36 @@ export function JobDetailSheet({
                 >
                   <Ionicons
                     name={isSaved ? 'bookmark' : 'bookmark-outline'}
-                    size={22}
-                    color={isSaved ? '#F97316' : '#64748B'}
+                    size={26}
+                    color={isSaved ? '#FFAA77' : '#0D0D11'}
                   />
                 </Pressable>
               )}
             </View>
           </View>
 
-          {/* SWIPABLE BODY */}
-          <View style={styles.sheetScrollContent}>
+          {/* SCROLLABLE BODY */}
+          <ScrollView
+            style={styles.sheetScroll}
+            contentContainerStyle={[
+              styles.sheetScrollContent,
+              { paddingBottom: Math.max(insets.bottom, 20) + 24 },
+            ]}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+            onScroll={(e) => {
+              scrollOffset.current = e.nativeEvent.contentOffset.y;
+            }}
+            scrollEventThrottle={16}
+          >
             {/* Price & Term Display */}
             <View style={styles.priceRow}>
               <View style={styles.priceWrap}>
                 <Text style={styles.sheetPrice}>{price}</Text>
-                <Text style={styles.sheetUnit}>{unit}</Text>
+                <Text style={styles.sheetUnit}> / {unit?.replace(/^\//, '').trim() || 'month'}</Text>
               </View>
               <View style={[styles.termBadge, term.toLowerCase().includes('short') && styles.termBadgeShort]}>
+                <Ionicons name="briefcase-outline" size={14} color="#0D0D11" style={{ marginRight: 5 }} />
                 <Text style={[styles.termText, term.toLowerCase().includes('short') && styles.termTextShort]}>
                   {term}
                 </Text>
@@ -380,91 +387,70 @@ export function JobDetailSheet({
 
             {/* About This Role (Clean Squircle Card) */}
             <View style={styles.aboutCard}>
-              <View style={styles.aboutHeader}>
-                <Ionicons name="briefcase-outline" size={14} color="#F97316" />
-                <Text style={styles.aboutTitle}>{uiText("ABOUT THIS ROLE")}</Text>
-              </View>
+              <Text style={styles.aboutTitle}>{uiText("ABOUT THIS ROLE")}</Text>
               <Text style={styles.aboutBody}>{about}</Text>
             </View>
 
             {/* Dynamic Worker/Employer Feedback Summary from Database */}
             {(() => {
-              const totalReviews = summary?.total_reviews || 0;
-              const posCount = summary?.sentiment_breakdown?.Positive || 0;
-              const neuCount = summary?.sentiment_breakdown?.Neutral || 0;
-              const negCount = summary?.sentiment_breakdown?.Negative || 0;
+              if (isSummaryLoading || summaryError || !summary) return null;
 
-              const posPct = totalReviews > 0 ? Math.round((posCount / totalReviews) * 100) : 0;
-              const neuPct = totalReviews > 0 ? Math.round((neuCount / totalReviews) * 100) : 0;
-              const negPct = totalReviews > 0 ? Math.max(0, 100 - posPct - neuPct) : 0;
+              const totalReviews = summary.total_reviews || 0;
+              if (totalReviews === 0) return null;
 
-              const avgRating = summary?.average_rating ? Number(summary.average_rating) : 0;
-              const ratingBadgeText = avgRating > 0 ? `${avgRating.toFixed(1)} Rating` : 'Unrated';
+              const posCount = summary.sentiment_breakdown?.Positive || 0;
+              const neuCount = summary.sentiment_breakdown?.Neutral || 0;
+              const negCount = summary.sentiment_breakdown?.Negative || 0;
+
+              const posPct = Math.round((posCount / totalReviews) * 100);
+              const neuPct = Math.round((neuCount / totalReviews) * 100);
+              const negPct = Math.max(0, 100 - posPct - neuPct);
+
+              const avgRating = summary.average_rating ? Number(summary.average_rating) : 0;
+              const ratingBadgeText = avgRating > 0 ? `${avgRating.toFixed(1)} Rating` : uiText("Unrated");
 
               return (
                 <View style={styles.feedbackSection}>
                   <View style={styles.feedbackHeaderRow}>
                     <Text style={styles.feedbackSectionTitle}>{uiText("Feedback Summary")}</Text>
                     <View style={styles.feedbackPillBadge}>
-                      <Ionicons name="star" size={12} color="#F59E0B" />
+                      <StarIcon size={12} color="#0D0D11" />
                       <Text style={styles.feedbackPillBadgeText}>{ratingBadgeText}</Text>
                     </View>
                   </View>
 
-                  {isSummaryLoading ? (
-                    <View style={styles.feedbackLoadingBox}>
-                      <ActivityIndicator size="small" color="#FFB43B" />
-                      <Text style={styles.feedbackLoadingText}>{uiText("Loading feedback metrics...")}</Text>
-                    </View>
-                  ) : summaryError ? (
-                    <View style={styles.feedbackEmptyCard}>
-                      <Ionicons name="alert-circle-outline" size={22} color="#94A3B8" style={{ marginBottom: 4 }} />
-                      <Text style={styles.feedbackEmptyTitle}>{uiText("Feedback data unavailable")}</Text>
-                      <Text style={styles.feedbackEmptySubtitle}>{uiText("Could not load review summary at this time.")}</Text>
-                    </View>
-                  ) : totalReviews === 0 ? (
-                    <View style={styles.feedbackEmptyCard}>
-                      <Ionicons name="chatbubbles-outline" size={24} color="#CBD5E1" style={{ marginBottom: 6 }} />
-                      <Text style={styles.feedbackEmptyTitle}>{uiText("No reviews yet")}</Text>
-                      <Text style={styles.feedbackEmptySubtitle}>
-                        {uiText("This member has no completed service reviews yet. Feedback will appear here after bookings.")}</Text>
-                    </View>
-                  ) : (
-                    <React.Fragment>
-                      {/* Proportional Segmented Progress Bar */}
-                      <View style={styles.progressBarWrap}>
-                        {posPct > 0 && (
-                          <View style={[styles.progressSegment, { flex: Math.max(posPct, 1), backgroundColor: '#10B981' }]} />
-                        )}
-                        {neuPct > 0 && (
-                          <View style={[styles.progressSegment, { flex: Math.max(neuPct, 1), backgroundColor: '#94A3B8' }]} />
-                        )}
-                        {negPct > 0 && (
-                          <View style={[styles.progressSegment, { flex: Math.max(negPct, 1), backgroundColor: '#F87171' }]} />
-                        )}
-                      </View>
+                  {/* Proportional Segmented Progress Bar */}
+                  <View style={styles.progressBarWrap}>
+                    {posPct > 0 && (
+                      <View style={[styles.progressSegment, { flex: Math.max(posPct, 1), backgroundColor: '#10B981' }]} />
+                    )}
+                    {neuPct > 0 && (
+                      <View style={[styles.progressSegment, { flex: Math.max(neuPct, 1), backgroundColor: '#94A3B8' }]} />
+                    )}
+                    {negPct > 0 && (
+                      <View style={[styles.progressSegment, { flex: Math.max(negPct, 1), backgroundColor: '#EF4444' }]} />
+                    )}
+                  </View>
 
-                      {/* 3 Metric Cards */}
-                      <View style={styles.feedbackRow}>
-                        <View style={[styles.feedbackCard, styles.feedbackPositive]}>
-                          <Text style={[styles.feedbackValue, { color: '#059669' }]}>{posPct}%</Text>
-                          <Text style={[styles.feedbackLabel, { color: '#047857' }]}>Positive ({posCount})</Text>
-                        </View>
-                        <View style={[styles.feedbackCard, styles.feedbackNeutral]}>
-                          <Text style={[styles.feedbackValue, { color: '#475569' }]}>{neuPct}%</Text>
-                          <Text style={[styles.feedbackLabel, { color: '#64748B' }]}>Neutral ({neuCount})</Text>
-                        </View>
-                        <View style={[styles.feedbackCard, styles.feedbackNegative]}>
-                          <Text style={[styles.feedbackValue, { color: '#DC2626' }]}>{negPct}%</Text>
-                          <Text style={[styles.feedbackLabel, { color: '#B91C1C' }]}>Negative ({negCount})</Text>
-                        </View>
-                      </View>
+                  {/* 3 Metric Cards */}
+                  <View style={styles.feedbackRow}>
+                    <View style={[styles.feedbackCard, styles.feedbackPositive]}>
+                      <Text style={[styles.feedbackValue, { color: '#FFFFFF' }]}>{posPct}%</Text>
+                      <Text style={[styles.feedbackLabel, { color: '#FFFFFF' }]}>Positive ({posCount})</Text>
+                    </View>
+                    <View style={[styles.feedbackCard, styles.feedbackNeutral]}>
+                      <Text style={[styles.feedbackValue, { color: '#0D0D11' }]}>{neuPct}%</Text>
+                      <Text style={[styles.feedbackLabel, { color: '#0D0D11' }]}>Neutral ({neuCount})</Text>
+                    </View>
+                    <View style={[styles.feedbackCard, styles.feedbackNegative]}>
+                      <Text style={[styles.feedbackValue, { color: '#FFFFFF' }]}>{negPct}%</Text>
+                      <Text style={[styles.feedbackLabel, { color: '#FFFFFF' }]}>Negative ({negCount})</Text>
+                    </View>
+                  </View>
 
-                      <Text style={styles.feedbackSubCountText}>
-                        Based on {totalReviews} {totalReviews === 1 ? 'review' : 'reviews'} from completed bookings
-                      </Text>
-                    </React.Fragment>
-                  )}
+                  <Text style={styles.feedbackSubCountText}>
+                    Based on {totalReviews} {totalReviews === 1 ? 'review' : 'reviews'} from completed bookings
+                  </Text>
                 </View>
               );
             })()}
@@ -494,16 +480,20 @@ export function JobDetailSheet({
                   <Text style={styles.applyBtnText}>{uiText("Application Submitted")}</Text>
                 </View>
               ) : (
-                <Text style={styles.applyBtnText}>{ctaText || 'Apply Now'}</Text>
+                <Text style={styles.applyBtnText}>
+                  {ctaText || ((job as any)?.kind === 'service' || (job as any)?.authorRole === 'Kasambahay' ? uiText('Offer to Book') : uiText('Apply Now'))}
+                </Text>
               )}
             </Pressable>
 
             <Text style={styles.applyNotice}>
               {isClosed
                 ? 'This post has been filled and contract made with an applicant.'
-                : ctaNotice || 'Your application goes directly to the employer'}
+                : ctaNotice || ((job as any)?.kind === 'service' || (job as any)?.authorRole === 'Kasambahay'
+                    ? uiText('Send a direct booking offer to this worker')
+                    : uiText('Your application goes directly to the employer'))}
             </Text>
-          </View>
+          </ScrollView>
         </Animated.View>
       </View>
     </Modal>
@@ -521,31 +511,33 @@ const styles = StyleSheet.create({
   },
   sheetContent: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 36,
-    borderTopRightRadius: 36,
-    maxHeight: '90%',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    maxHeight: '94%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1,
     shadowRadius: 16,
     elevation: 20,
+    overflow: 'hidden',
   },
   sheetTopArea: {
     paddingHorizontal: 22,
-    paddingTop: 8,
-    paddingBottom: 14,
+    paddingTop: 4,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
   },
   handleHitZone: {
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
   sheetHandle: {
-    width: 48,
-    height: 5,
+    width: 42,
+    height: 4,
+    borderRadius: 2,
     backgroundColor: '#CBD5E1',
-    borderRadius: 9999,
   },
   sheetHeader: {
     flexDirection: 'row',
@@ -594,9 +586,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   rolePill: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#FFAA77',
     borderRadius: 9999,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 3.5,
   },
   rolePillText: {
@@ -610,64 +602,65 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
   },
   bookmarkBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#F8FAFC',
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 6,
     marginLeft: 8,
   },
   sheetScroll: {
-    flexGrow: 0,
+    flexGrow: 1,
   },
   sheetScrollContent: {
     paddingHorizontal: 22,
-    paddingTop: 18,
-    paddingBottom: 16,
+    paddingTop: 16,
   },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 16,
+    gap: 8,
   },
   priceWrap: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    gap: 6,
+    gap: 4,
+    flexShrink: 1,
   },
   sheetPrice: {
-    fontSize: 32,
-    fontWeight: '900',
+    fontSize: 24,
+    fontWeight: '800',
     color: '#0F172A',
-    letterSpacing: -0.8,
+    letterSpacing: -0.5,
   },
   sheetUnit: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#64748B',
   },
   termBadge: {
-    backgroundColor: '#FFF7ED',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFAA77',
     borderRadius: 9999,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5.5,
+    flexShrink: 0,
   },
   termBadgeShort: {
-    backgroundColor: '#E0F2FE',
+    backgroundColor: '#FFAA77',
   },
   termText: {
-    color: '#C2410C',
+    color: '#0D0D11',
     fontSize: 12,
     fontWeight: '700',
   },
   termTextShort: {
-    color: '#0369A1',
+    color: '#0D0D11',
   },
   aboutCard: {
-    backgroundColor: '#FFF9F5',
-    borderRadius: 22,
+    backgroundColor: '#FFD2B8',
+    borderRadius: 18,
     padding: 16,
     marginBottom: 16,
   },
@@ -680,13 +673,13 @@ const styles = StyleSheet.create({
   aboutTitle: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#EA580C',
+    color: '#0D0D11',
     letterSpacing: 0.8,
   },
   aboutBody: {
     fontSize: 13.5,
     lineHeight: 21,
-    color: '#334155',
+    color: '#0D0D11',
     fontWeight: '500',
   },
   feedbackSection: {
@@ -708,15 +701,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 10,
-    paddingVertical: 3.5,
+    backgroundColor: '#FFAA77',
+    paddingHorizontal: 12,
+    paddingVertical: 4.5,
     borderRadius: 9999,
   },
   feedbackPillBadgeText: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '700',
-    color: '#B45309',
+    color: '#0D0D11',
   },
   progressBarWrap: {
     height: 6,
@@ -742,13 +735,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   feedbackPositive: {
-    backgroundColor: '#ECFDF5',
+    backgroundColor: '#10B981',
   },
   feedbackNeutral: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#D1D5DB',
   },
   feedbackNegative: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: '#EF4444',
   },
   feedbackValue: {
     fontSize: 18,
@@ -803,7 +796,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   applyBtn: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#0D0D11',
     borderRadius: 9999,
     height: 52,
     alignItems: 'center',
@@ -825,7 +818,7 @@ const styles = StyleSheet.create({
   },
   applyNotice: {
     fontSize: 11.5,
-    color: '#94A3B8',
+    color: '#6B7280',
     fontWeight: '500',
     textAlign: 'center',
   },

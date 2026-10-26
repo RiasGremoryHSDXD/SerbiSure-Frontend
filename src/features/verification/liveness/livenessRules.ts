@@ -2,12 +2,12 @@ import { FACE_LANDMARKS } from '../face/landmarkIndexes';
 import { landmark } from '../face/geometry';
 import type { FaceAlignment, FaceLandmarks, HeadPoseDirection, LandmarkFrame } from '../face/types';
 
-const CENTER_TOLERANCE = 0.16;
-const MIN_FACE_SIZE = 0.2;
-const MAX_FACE_SIZE = 0.72;
-const HEAD_TURN_THRESHOLD = 0.055;
+const CENTER_TOLERANCE = 0.26;
+const MIN_FACE_SIZE = 0.15;
+const MAX_FACE_SIZE = 0.85;
+const HEAD_TURN_THRESHOLD = 0.045;
 const STILLNESS_DURATION_MS = 1000;
-const MOVEMENT_TOLERANCE = 0.15;
+const MOVEMENT_TOLERANCE = 0.17;
 const STILLNESS_GRACE_MS = 600;
 const MAX_STILL_FRAME_GAP_MS = 500;
 
@@ -45,12 +45,12 @@ export function getHeadPoseDirection(face: FaceLandmarks): HeadPoseDirection {
   const yawAngle = face.signals?.yawAngle;
 
   if (typeof yawAngle === 'number' && Number.isFinite(yawAngle)) {
-    if (yawAngle > 10) {
-      return 'right';
+    if (yawAngle > 8) {
+      return 'left';
     }
 
-    if (yawAngle < -10) {
-      return 'left';
+    if (yawAngle < -8) {
+      return 'right';
     }
 
     return 'center';
@@ -66,16 +66,16 @@ export function getHeadPoseDirection(face: FaceLandmarks): HeadPoseDirection {
 
   const faceMidline = (leftCheek.x + rightCheek.x) / 2;
   const faceWidth = Math.max(Math.abs(rightCheek.x - leftCheek.x), 1);
-  // Mirroring changes screen coordinates, not the applicant's left/right.
+  // Mirroring changes screen coordinates, matching the applicant's selfie view.
   const rawOffset = (nose.x - faceMidline) / faceWidth * (face.signals?.mirrored ? -1 : 1);
   if (!Number.isFinite(rawOffset)) return 'unknown';
 
   if (rawOffset > HEAD_TURN_THRESHOLD) {
-    return 'left';
+    return 'right';
   }
 
   if (rawOffset < -HEAD_TURN_THRESHOLD) {
-    return 'right';
+    return 'left';
   }
 
   return 'center';

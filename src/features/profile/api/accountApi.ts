@@ -534,7 +534,7 @@ export async function fetchUserSocialLinks(token: string): Promise<UserSocialLin
 
     return await res.json();
   } catch (error: any) {
-    console.warn('[accountApi] fetchUserSocialLinks error:', error?.message || error);
+    console.log('[accountApi] fetchUserSocialLinks error:', error?.message || error);
     throw error;
   }
 }

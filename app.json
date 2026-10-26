@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/serbisure_new_clean.png",
       "resizeMode": "contain",
-      "backgroundColor": "#05070A"
+      "backgroundColor": "#F6F5F2"
     },
     "assetBundlePatterns": [
       "**/*"
