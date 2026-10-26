@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { HomeIcon, MessageCircleIcon, UserIcon, PlusIcon } from '../shared/components/icons/LucideIcons';
 import { useLanguage } from '../shared/localization/LanguageContext';
 import THEME from '../shared/theme/theme';
 
@@ -18,6 +19,9 @@ import { HomeScreen } from '../features/feed/screens/HomeScreen';
 import { ChatsScreen } from '../features/chat/screens/ChatsScreen';
 import { ProfileScreen } from '../features/profile/screens/ProfileScreen';
 import { PostScreen } from '../features/posting/screens/PostScreen';
+import { MyBookingsModal } from '../features/bookings/components/MyBookingsModal';
+import { AppHeader } from '../shared/components/AppHeader';
+import { NotificationBell } from '../features/notifications/NotificationContext';
 export type Tab = 'home' | 'browse' | 'chats' | 'profile';
 
 interface AppNavigatorProps {
@@ -36,7 +40,10 @@ export function AppNavigator({ role = 'homeowner', avatarUri: oldAvatarUri, toke
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [profileInitialView, setProfileInitialView] = useState<'main' | 'personal_info'>('main');
+  const [profileCurrentView, setProfileCurrentView] = useState<'main' | 'personal_info'>('main');
+  const [profileKey, setProfileKey] = useState(0);
   const [postJobVisible, setPostJobVisible] = useState(false);
+  const [bookingsModalVisible, setBookingsModalVisible] = useState(false);
   const [totalUnreadChats, setTotalUnreadChats] = useState(chatStore.getTotalUnreadCount());
 
   const activeRole = resolveRole(user.accountType, role);
@@ -62,19 +69,25 @@ export function AppNavigator({ role = 'homeowner', avatarUri: oldAvatarUri, toke
 
   const handleOpenProfileView = () => {
     setProfileInitialView('personal_info');
+    setProfileCurrentView('personal_info');
+    setProfileKey((k) => k + 1);
     setActiveTab('profile');
+  };
+
+  const handleOpenBookings = () => {
+    setBookingsModalVisible(true);
   };
 
   const renderScreen = () => {
     switch (activeTab) {
       case 'home':
-        return <HomeScreen role={activeRole} avatarUri={avatarUri} onAvatarPress={handleOpenProfileView} onViewAll={() => setActiveTab('browse')} token={authToken} />;
+        return <HomeScreen role={activeRole} avatarUri={avatarUri} onAvatarPress={handleOpenProfileView} onViewAll={() => setActiveTab('browse')} token={authToken} onBookingsPress={handleOpenBookings} />;
       case 'browse':
-        return <BrowseScreen key={`${activeRole}:${user.id}`} role={activeRole} avatarUri={avatarUri} onViewProfile={handleOpenProfileView} token={authToken} />;
+        return <BrowseScreen key={`${activeRole}:${user.id}`} role={activeRole} avatarUri={avatarUri} onViewProfile={handleOpenProfileView} token={authToken} onBookingsPress={handleOpenBookings} />;
       case 'chats':
-        return <ChatsScreen role={activeRole} />;
+        return <ChatsScreen role={activeRole} onBookingsPress={handleOpenBookings} />;
       case 'profile':
-        return <ProfileScreen role={activeRole} avatarUri={avatarUri} initialView={profileInitialView} onUpdateAvatar={onUpdateAvatar} onBack={() => setActiveTab('home')} onLogout={onLogout} />;
+        return <ProfileScreen key={`profile-${profileKey}`} role={activeRole} avatarUri={avatarUri} initialView={profileInitialView} onViewChange={setProfileCurrentView} onUpdateAvatar={onUpdateAvatar} onBack={() => setActiveTab('home')} onLogout={onLogout} onBookingsPress={handleOpenBookings} />;
     }
   };
 
@@ -83,18 +96,29 @@ export function AppNavigator({ role = 'homeowner', avatarUri: oldAvatarUri, toke
   return (
     <View style={styles.root}>
       {/* Top Status Bar Solid Background Overlay */}
-      <View
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: insets.top,
-          backgroundColor: topBgColor,
-          zIndex: 999,
-        }}
-        pointerEvents="none"
+      <View style={{ height: insets.top, backgroundColor: topBgColor }} />
+
+      {/* Shared fixed header across all tabs: Bookings, Logo, Notifications */}
+      <AppHeader
+        onBookingsPress={handleOpenBookings}
+        right={<NotificationBell />}
+        left={
+          activeTab === 'profile' && profileCurrentView === 'personal_info' ? (
+            <Pressable
+              style={styles.backCircleButton}
+              onPress={() => {
+                setProfileInitialView('main');
+                setProfileCurrentView('main');
+                setProfileKey((k) => k + 1);
+              }}
+              hitSlop={8}
+            >
+              <Ionicons name="arrow-back" size={24} color="#0D0D11" />
+            </Pressable>
+          ) : undefined
+        }
       />
+
       <View style={styles.content}>{renderScreen()}</View>
 
       {/* Floating Bottom Navigation Dock */}
@@ -105,10 +129,9 @@ export function AppNavigator({ role = 'homeowner', avatarUri: oldAvatarUri, toke
               style={[styles.tabIconBg, activeTab === 'home' && styles.tabIconBgActive]}
               onPress={() => setActiveTab('home')}
             >
-              <Ionicons
-                name={activeTab === 'home' ? 'home' : 'home-outline'}
-                size={23}
-                color={activeTab === 'home' ? THEME.colors.ink : THEME.colors.textMuted}
+              <HomeIcon
+                size={22}
+                color={activeTab === 'home' ? '#0D0D11' : '#71717A'}
               />
             </Pressable>
           </View>
@@ -119,9 +142,9 @@ export function AppNavigator({ role = 'homeowner', avatarUri: oldAvatarUri, toke
               onPress={() => setActiveTab('browse')}
             >
               <Ionicons
-                name={activeTab === 'browse' ? 'briefcase' : 'briefcase-outline'}
+                name="briefcase-outline"
                 size={23}
-                color={activeTab === 'browse' ? THEME.colors.ink : THEME.colors.textMuted}
+                color={activeTab === 'browse' ? '#0D0D11' : '#71717A'}
               />
             </Pressable>
           </View>
@@ -132,10 +155,9 @@ export function AppNavigator({ role = 'homeowner', avatarUri: oldAvatarUri, toke
               onPress={() => setActiveTab('chats')}
             >
               <View style={styles.tabIconWrapper}>
-                <Ionicons
-                  name={activeTab === 'chats' ? 'chatbubble' : 'chatbubble-outline'}
-                  size={23}
-                  color={activeTab === 'chats' ? THEME.colors.ink : THEME.colors.textMuted}
+                <MessageCircleIcon
+                  size={22}
+                  color={activeTab === 'chats' ? '#0D0D11' : '#71717A'}
                 />
                 {totalUnreadChats > 0 && (
                   <View style={styles.tabBadge}>
@@ -151,12 +173,15 @@ export function AppNavigator({ role = 'homeowner', avatarUri: oldAvatarUri, toke
           <View style={styles.tabItem}>
             <Pressable
               style={[styles.tabIconBg, activeTab === 'profile' && styles.tabIconBgActive]}
-              onPress={() => setActiveTab('profile')}
+              onPress={() => {
+                setProfileInitialView('main');
+                setProfileKey((k) => k + 1);
+                setActiveTab('profile');
+              }}
             >
-              <Ionicons
-                name={activeTab === 'profile' ? 'person' : 'person-outline'}
-                size={23}
-                color={activeTab === 'profile' ? THEME.colors.ink : THEME.colors.textMuted}
+              <UserIcon
+                size={22}
+                color={activeTab === 'profile' ? '#0D0D11' : '#71717A'}
               />
             </Pressable>
           </View>
@@ -169,7 +194,7 @@ export function AppNavigator({ role = 'homeowner', avatarUri: oldAvatarUri, toke
           style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
           onPress={() => setPostJobVisible(true)}
         >
-          <Ionicons name="add" size={30} color={THEME.colors.white} />
+          <PlusIcon size={28} color="#FFFFFF" />
         </Pressable>
       </View>
 
@@ -179,6 +204,13 @@ export function AppNavigator({ role = 'homeowner', avatarUri: oldAvatarUri, toke
         onClose={() => setPostJobVisible(false)}
         token={authToken}
         onOpenVerification={() => { setPostJobVisible(false); setProfileInitialView('personal_info'); setActiveTab('profile'); }}
+      />
+
+      <MyBookingsModal
+        visible={bookingsModalVisible}
+        onClose={() => setBookingsModalVisible(false)}
+        token={authToken}
+        accountType={user.accountType || (activeRole === 'homeowner' ? 'Homeowner' : 'Kasambahay')}
       />
     </View>
   );
@@ -225,7 +257,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabIconBgActive: {
-    backgroundColor: THEME.colors.brandLight,
+    backgroundColor: '#FFAA77',
   },
   tabIconWrapper: {
     position: 'relative',
@@ -257,12 +289,18 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: THEME.roundness.pill,
-    backgroundColor: THEME.colors.brandDark,
+    backgroundColor: '#FFAA77',
     alignItems: 'center',
     justifyContent: 'center',
   },
   fabPressed: {
     opacity: 0.88,
     transform: [{ scale: 0.95 }],
+  },
+  backCircleButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
