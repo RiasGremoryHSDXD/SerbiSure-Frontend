@@ -105,6 +105,7 @@ function screen(t, options = {}) {
     PanResponder: { create: () => ({ panHandlers: {} }) },
     AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },
     Alert: { alert: (...args) => alerts.push(args) }, ToastAndroid: { show() {}, SHORT: 0 }, NativeModules: {},
+    Keyboard: { dismiss() {} },
     Modal: function NativeModal(props) {
       React.useLayoutEffect(() => { if (props.visible) props.onShow?.(); }, [props.visible]);
       return props.visible ? React.createElement('Modal', props, props.children) : null;
@@ -193,6 +194,16 @@ function screen(t, options = {}) {
   };
 }
 
+test('Android chat pads the full-screen modal above the keyboard without fixing its height', t => {
+  const chat = screen(t);
+  chat.update('Support');
+
+  const keyboardAvoider = chat.nodes().find(node => node.type === 'KeyboardAvoidingView');
+  const chatModal = chat.nodes().find(node => node.type === 'Modal');
+  assert.equal(keyboardAvoider.props.behavior, 'padding');
+  assert.equal(chatModal.props.statusBarTranslucent, true);
+});
+
 for (const accountType of ['Homeowner', 'Kasambahay']) {
   for (const duration of ['short_term', 'fixed_long_term', 'ongoing_long_term']) {
     test(`${accountType}: chat details and quick acceptance use the saved ${duration} booking type`, async t => {
@@ -210,7 +221,7 @@ for (const accountType of ['Homeowner', 'Kasambahay']) {
       assert.equal(chat.bookingModals.at(-1).initialDetails.bookingType, bookingType);
       assert.equal(chat.bookingModals.at(-1).canRespond, true);
       renderer.flushSync(() => chat.bookingModals.at(-1).onClose());
-      const accept = () => renderer.flushSync(() => chat.nodes().find(node => node.type === 'Pressable' && content(node) === 'Agree & Accept').props.onPress({ stopPropagation() {} }));
+      const accept = () => renderer.flushSync(() => chat.nodes().find(node => node.type === 'Pressable' && (content(node) === 'Agree & Accept' || content(node) === 'Accept')).props.onPress({ stopPropagation() {} }));
       accept();
       assert.equal(chat.bookingResponses.length, 0);
       assert.equal(chat.alerts.at(-1)[0], bookingType === 'short_term' ? 'Accept booking?' : 'Confirm Contract Agreement');
@@ -224,7 +235,7 @@ for (const accountType of ['Homeowner', 'Kasambahay']) {
       assert.equal(chat.closedBookings.length, 0);
       chat.bookingResponses[0].resolve(); await tick();
       assert.deepEqual(chat.closedBookings, ['booking-one']);
-      assert.ok(!chat.nodes().some(node => node.type === 'Pressable' && content(node) === 'Agree & Accept'));
+      assert.ok(!chat.nodes().some(node => node.type === 'Pressable' && (content(node) === 'Agree & Accept' || content(node) === 'Accept')));
     });
   }
 }
@@ -235,12 +246,12 @@ test('quick booking acceptance keeps the offer available after a connection fail
   chat.threadCache.cacheThread(JSON.stringify(['account-one', 'Other Person']), [{ id: 'offer', sender: 'system', bookingInfo: card, time: 'Now' }], chat.threadCache.threadCacheGeneration());
   chat.update('Other Person', true, { contactRole: 'Kasambahay' });
   const content = node => node.text || node.children.map(content).join('');
-  renderer.flushSync(() => chat.nodes().find(node => node.type === 'Pressable' && content(node) === 'Agree & Accept').props.onPress({ stopPropagation() {} }));
+  renderer.flushSync(() => chat.nodes().find(node => node.type === 'Pressable' && (content(node) === 'Agree & Accept' || content(node) === 'Accept')).props.onPress({ stopPropagation() {} }));
   renderer.flushSync(() => chat.alerts.at(-1)[2][1].onPress());
   chat.bookingResponses[0].reject(new Error('Network request failed')); await tick();
   assert.deepEqual(chat.alerts.at(-1), ['Booking not updated', 'Could not connect. Check your connection and try again.']);
   assert.deepEqual(chat.closedBookings, []);
-  assert.ok(chat.nodes().some(node => node.type === 'Pressable' && content(node) === 'Agree & Accept'));
+  assert.ok(chat.nodes().some(node => node.type === 'Pressable' && (content(node) === 'Agree & Accept' || content(node) === 'Accept')));
 });
 
 test('reply relationships cover incoming, outgoing and self replies', () => {
@@ -884,14 +895,14 @@ test('a slow HTTP offline snapshot cannot overwrite a newer live online event', 
 test('disconnect and reconnect keep a stable status label and wait for a fresh confirmed presence', t => {
   const chat = screen(t, { autoPresence: false }); chat.update('A');
   chat.event({ type: 'presence.changed', partner_id: 'A', is_online: true });
-  const width = chat.nodes().find(node => node.props?.testID === 'chat-presence-status').props.style[1].width;
+  const statusNode = chat.nodes().find(node => node.props?.testID === 'chat-presence-status'); const width = Array.isArray(statusNode.props.style) ? statusNode.props.style[1]?.width : statusNode.props.style?.width;
   renderer.flushSync(() => chat.live.status('reconnecting'));
   assert.equal(chat.nodes().find(node => node.props?.testID === 'chat-presence-status').children[0].text, 'Checking…');
   assert.equal(chat.nodes().some(node => node.props?.testID === 'chat-presence-online'), false);
   renderer.flushSync(() => chat.live.status('connected'));
   chat.event({ type: 'presence.changed', partner_id: 'A', is_online: false });
   const label = chat.nodes().find(node => node.props?.testID === 'chat-presence-status');
-  assert.equal(label.children[0].text, 'Inactive'); assert.equal(label.props.style[1].width, width);
+  assert.equal(label.children[0].text, 'Inactive'); assert.equal(Array.isArray(label.props.style) ? label.props.style[1]?.width : label.props.style?.width, width);
 });
 
 test('HTTP presence works as an offline-socket fallback without replacing a newer snapshot', async t => {
