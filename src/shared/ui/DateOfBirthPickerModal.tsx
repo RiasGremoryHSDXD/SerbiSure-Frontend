@@ -1,422 +1,348 @@
-import { useLanguage as useUiLanguage } from '../localization/LanguageContext';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Modal,
-  View,
-  Text,
-  Pressable,
   FlatList,
+  Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
   StyleSheet,
-  Platform,
+  Text,
+  View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import THEME from '../theme/theme';
 
 interface DateOfBirthPickerModalProps {
   visible: boolean;
-  currentValue?: string; // YYYY-MM-DD
+  currentValue?: string;
   onSelect: (isoDate: string, calculatedAge: number) => void;
   onClose: () => void;
 }
 
+const ITEM_HEIGHT = 40;
+const VISIBLE_ITEMS = 7;
+const WHEEL_HEIGHT = ITEM_HEIGHT * VISIBLE_ITEMS; // 280
+const WHEEL_PADDING = ITEM_HEIGHT * 3; // 120
+
 const MONTHS = [
-  { value: 1, name: 'January', short: 'Jan' },
-  { value: 2, name: 'February', short: 'Feb' },
-  { value: 3, name: 'March', short: 'Mar' },
-  { value: 4, name: 'April', short: 'Apr' },
-  { value: 5, name: 'May', short: 'May' },
-  { value: 6, name: 'June', short: 'Jun' },
-  { value: 7, name: 'July', short: 'Jul' },
-  { value: 8, name: 'August', short: 'Aug' },
-  { value: 9, name: 'September', short: 'Sep' },
-  { value: 10, name: 'October', short: 'Oct' },
-  { value: 11, name: 'November', short: 'Nov' },
-  { value: 12, name: 'December', short: 'Dec' },
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-export function DateOfBirthPickerModal({
-  visible,
-  currentValue,
+function getTextStyle(distance: number) {
+  if (distance === 0) {
+    return styles.textDistance0;
+  }
+  if (distance === 1) {
+    return styles.textDistance1;
+  }
+  if (distance === 2) {
+    return styles.textDistance2;
+  }
+  if (distance === 3) {
+    return styles.textDistance3;
+  }
+  return styles.textDistanceFar;
+}
+
+function WheelColumn<T extends string | number>({
+  data,
+  selected,
   onSelect,
-  onClose,
-}: DateOfBirthPickerModalProps) {
-  const { tr: uiText } = useUiLanguage();
+  flex = 1,
+}: Readonly<{
+  data: T[];
+  selected: T;
+  onSelect: (value: T) => void;
+  flex?: number;
+}>) {
+  const listRef = useRef<FlatList<T>>(null);
+  const selectedIndex = Math.max(0, data.indexOf(selected));
+  const [scrollIndex, setScrollIndex] = useState(selectedIndex);
+  const isInteractingRef = useRef(false);
+  const isMomentumRef = useRef(false);
+  const ignoreNextSyncRef = useRef(false);
+
+  useEffect(() => {
+    setScrollIndex(selectedIndex);
+    if (ignoreNextSyncRef.current) {
+      ignoreNextSyncRef.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      listRef.current?.scrollToIndex({ index: selectedIndex, animated: false });
+    }, 40);
+    return () => clearTimeout(timer);
+  }, [selectedIndex]);
+
+  const commitSelection = (offsetY: number) => {
+    const index = Math.max(0, Math.min(data.length - 1, Math.round(offsetY / ITEM_HEIGHT)));
+    const targetItem = data[index];
+    if (targetItem !== undefined) {
+      setScrollIndex(index);
+      if (targetItem !== selected) {
+        ignoreNextSyncRef.current = true;
+        onSelect(targetItem);
+      }
+    }
+  };
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    const index = Math.max(0, Math.min(data.length - 1, Math.round(offsetY / ITEM_HEIGHT)));
+    if (index !== scrollIndex) {
+      setScrollIndex(index);
+    }
+  };
+
+  const handleScrollBeginDrag = () => {
+    isInteractingRef.current = true;
+    isMomentumRef.current = false;
+  };
+
+  const handleMomentumScrollBegin = () => {
+    isMomentumRef.current = true;
+  };
+
+  const handleMomentumScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    isMomentumRef.current = false;
+    isInteractingRef.current = false;
+    commitSelection(event.nativeEvent.contentOffset.y);
+  };
+
+  const handleScrollEndDrag = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const velocityY = event.nativeEvent.velocity?.y ?? 0;
+    if (Math.abs(velocityY) > 0.05) {
+      return;
+    }
+    setTimeout(() => {
+      if (!isMomentumRef.current) {
+        isInteractingRef.current = false;
+        commitSelection(event.nativeEvent.contentOffset.y);
+      }
+    }, 50);
+  };
+
+  return (
+    <View style={[styles.wheelContainer, { flex }]}>
+      <FlatList
+        ref={listRef}
+        data={data}
+        style={styles.wheel}
+        contentContainerStyle={styles.wheelContent}
+        keyExtractor={(item) => String(item)}
+        showsVerticalScrollIndicator={false}
+        snapToInterval={ITEM_HEIGHT}
+        decelerationRate="fast"
+        bounces={false}
+        initialScrollIndex={selectedIndex}
+        getItemLayout={(_, index) => ({ length: ITEM_HEIGHT, offset: ITEM_HEIGHT * index, index })}
+        onScrollToIndexFailed={() => {
+          setTimeout(() => {
+            listRef.current?.scrollToIndex({ index: selectedIndex, animated: false });
+          }, 50);
+        }}
+        onScrollBeginDrag={handleScrollBeginDrag}
+        onMomentumScrollBegin={handleMomentumScrollBegin}
+        onMomentumScrollEnd={handleMomentumScrollEnd}
+        onScrollEndDrag={handleScrollEndDrag}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        renderItem={({ item, index }) => {
+          const distance = Math.abs(index - scrollIndex);
+          return (
+            <Pressable
+              style={styles.wheelItem}
+              onPress={() => {
+                setScrollIndex(index);
+                ignoreNextSyncRef.current = true;
+                onSelect(item);
+                listRef.current?.scrollToIndex({ index, animated: true });
+              }}
+            >
+              <Text style={[styles.wheelTextBase, getTextStyle(distance)]} numberOfLines={1}>
+                {item}
+              </Text>
+            </Pressable>
+          );
+        }}
+      />
+    </View>
+  );
+}
+
+export function DateOfBirthPickerModal({ visible, currentValue, onSelect, onClose }: DateOfBirthPickerModalProps) {
+  const insets = useSafeAreaInsets();
   const currentYear = new Date().getFullYear();
-  const maxYear = currentYear - 18; // Strict legal working age (min 18 years old)
+  const maxYear = currentYear - 18;
   const minYear = currentYear - 85;
+  const years = useMemo(
+    () => Array.from({ length: maxYear - minYear + 1 }, (_, index) => minYear + index),
+    [maxYear, minYear]
+  );
 
-  // Generate Year list from maxYear down to minYear
-  const years = useMemo(() => {
-    const list: number[] = [];
-    for (let y = maxYear; y >= minYear; y--) {
-      list.push(y);
-    }
-    return list;
-  }, [maxYear, minYear]);
+  const parsed = currentValue?.split('-').map(Number) ?? [];
+  const initialYear = parsed[0] && parsed[0] <= maxYear && parsed[0] >= minYear ? parsed[0] : currentYear - 24;
+  const initialMonth = parsed[1] && parsed[1] >= 1 && parsed[1] <= 12 ? parsed[1] : 1;
+  const initialDay = parsed[2] && parsed[2] >= 1 && parsed[2] <= 31 ? parsed[2] : 1;
 
-  // Initial State Setup
-  const [selectedYear, setSelectedYear] = useState<number>(() => {
-    if (currentValue) {
-      const parts = currentValue.split('-');
-      const y = parseInt(parts[0] ?? '', 10);
-      if (!isNaN(y) && y <= maxYear && y >= minYear) return y;
-    }
-    return currentYear - 24; // Default to ~24 years old
-  });
+  const [selectedYear, setSelectedYear] = useState(initialYear);
+  const [selectedMonth, setSelectedMonth] = useState(initialMonth);
+  const [selectedDay, setSelectedDay] = useState(initialDay);
 
-  const [selectedMonth, setSelectedMonth] = useState<number>(() => {
-    if (currentValue) {
-      const parts = currentValue.split('-');
-      const m = parseInt(parts[1] ?? '', 10);
-      if (!isNaN(m) && m >= 1 && m <= 12) return m;
-    }
-    return 1;
-  });
-
-  const [selectedDay, setSelectedDay] = useState<number>(() => {
-    if (currentValue) {
-      const parts = currentValue.split('-');
-      const d = parseInt(parts[2] ?? '', 10);
-      if (!isNaN(d) && d >= 1 && d <= 31) return d;
-    }
-    return 1;
-  });
+  const daysInMonth = useMemo(() => new Date(selectedYear, selectedMonth, 0).getDate(), [selectedYear, selectedMonth]);
+  const days = useMemo(() => Array.from({ length: daysInMonth }, (_, index) => index + 1), [daysInMonth]);
 
   useEffect(() => {
-    if (currentValue) {
-      const parts = currentValue.split('-');
-      const y = parseInt(parts[0] ?? '', 10);
-      const m = parseInt(parts[1] ?? '', 10);
-      const d = parseInt(parts[2] ?? '', 10);
-      if (!isNaN(y) && y <= maxYear && y >= minYear) setSelectedYear(y);
-      if (!isNaN(m) && m >= 1 && m <= 12) setSelectedMonth(m);
-      if (!isNaN(d) && d >= 1 && d <= 31) setSelectedDay(d);
-    }
-  }, [currentValue, maxYear, minYear]);
+    if (!visible) return;
+    const parts = currentValue?.split('-').map(Number) ?? [];
+    setSelectedYear(parts[0] && parts[0] <= maxYear && parts[0] >= minYear ? parts[0] : currentYear - 24);
+    setSelectedMonth(parts[1] && parts[1] >= 1 && parts[1] <= 12 ? parts[1] : 1);
+    setSelectedDay(parts[2] && parts[2] >= 1 && parts[2] <= 31 ? parts[2] : 1);
+  }, [visible, currentValue, currentYear, maxYear, minYear]);
 
-  // Calculate days in selected month and year
-  const daysInMonth = useMemo(() => {
-    return new Date(selectedYear, selectedMonth, 0).getDate();
-  }, [selectedYear, selectedMonth]);
-
-  // Dynamic Day list for the current month/year
-  const days = useMemo(() => {
-    return Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  }, [daysInMonth]);
-
-  // Idiot-proof auto-clamping (e.g. Feb 30 -> Feb 28/29)
   useEffect(() => {
-    if (selectedDay > daysInMonth) {
-      setSelectedDay(daysInMonth);
-    }
+    if (selectedDay > daysInMonth) setSelectedDay(daysInMonth);
   }, [daysInMonth, selectedDay]);
 
-  // Live Age Calculation
-  const liveAge = useMemo(() => {
+  const confirm = () => {
+    const isoDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`;
     const today = new Date();
     let age = today.getFullYear() - selectedYear;
-    const m = today.getMonth() + 1 - selectedMonth;
-    if (m < 0 || (m === 0 && today.getDate() < selectedDay)) {
-      age--;
-    }
-    return age;
-  }, [selectedYear, selectedMonth, selectedDay]);
-
-  const monthName = useMemo(() => {
-    return MONTHS.find((m) => m.value === selectedMonth)?.name || 'January';
-  }, [selectedMonth]);
-
-  const handleConfirm = () => {
-    const formattedMonth = String(selectedMonth).padStart(2, '0');
-    const formattedDay = String(selectedDay).padStart(2, '0');
-    const isoDate = `${selectedYear}-${formattedMonth}-${formattedDay}`;
-    onSelect(isoDate, liveAge);
+    const monthDifference = today.getMonth() + 1 - selectedMonth;
+    if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < selectedDay)) age -= 1;
+    onSelect(isoDate, age);
     onClose();
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.headerTitle}>{uiText("Select Date of Birth")}</Text>
-            <Text style={styles.headerSubtitle}>{uiText("Must be at least 18 years old")}</Text>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={confirm}>
+      <View style={styles.overlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={confirm} />
+        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom + 22, 36) }]}>
+          <View style={styles.toolbar}>
+            <Pressable onPress={confirm} hitSlop={{ top: 12, bottom: 12, left: 24, right: 24 }}>
+              <Text style={styles.next}>Next</Text>
+            </Pressable>
           </View>
-          <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={10}>
-            <Ionicons name="close" size={22} color="#4A4945" />
-          </Pressable>
-        </View>
 
-        {/* Live Selection Summary Banner */}
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryLeft}>
-            <Text style={styles.summaryLabel}>{uiText("Selected Birth Date")}</Text>
-            <Text style={styles.summaryDateText}>
-              {monthName} {selectedDay}, {selectedYear}
-            </Text>
-          </View>
-          <View style={styles.ageBadge}>
-            <Ionicons name="shield-checkmark" size={14} color="#10B981" />
-            <Text style={styles.ageBadgeText}>{liveAge} {uiText("yrs old")}</Text>
-          </View>
-        </View>
-
-        {/* 3-Column Wheel Selectors */}
-        <View style={styles.selectorContainer}>
-          {/* Column 1: Month */}
-          <View style={styles.columnWrapper}>
-            <Text style={styles.columnHeader}>{uiText("Month")}</Text>
-            <FlatList
+          <View style={styles.wheels}>
+            <View pointerEvents="none" style={styles.selectionBand} />
+            <WheelColumn<string>
               data={MONTHS}
-              keyExtractor={(item) => `m-${item.value}`}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.listContent}
-              renderItem={({ item }) => {
-                const isSelected = item.value === selectedMonth;
-                return (
-                  <Pressable
-                    style={[styles.itemPill, isSelected && styles.itemPillSelected]}
-                    onPress={() => setSelectedMonth(item.value)}
-                  >
-                    <Text style={[styles.itemText, isSelected && styles.itemTextSelected]} numberOfLines={1}>
-                      {item.short}
-                    </Text>
-                  </Pressable>
-                );
-              }}
+              selected={MONTHS[selectedMonth - 1] ?? 'January'}
+              onSelect={(month) => setSelectedMonth(MONTHS.indexOf(month) + 1)}
+              flex={1.15}
             />
-          </View>
-
-          {/* Column 2: Day */}
-          <View style={styles.columnWrapper}>
-            <Text style={styles.columnHeader}>{uiText("Day")}</Text>
-            <FlatList
+            <WheelColumn<number>
               data={days}
-              keyExtractor={(item) => `d-${item}`}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.listContent}
-              renderItem={({ item }) => {
-                const isSelected = item === selectedDay;
-                return (
-                  <Pressable
-                    style={[styles.itemPill, isSelected && styles.itemPillSelected]}
-                    onPress={() => setSelectedDay(item)}
-                  >
-                    <Text style={[styles.itemText, isSelected && styles.itemTextSelected]}>
-                      {item}
-                    </Text>
-                  </Pressable>
-                );
-              }}
+              selected={selectedDay}
+              onSelect={setSelectedDay}
+              flex={0.75}
             />
-          </View>
-
-          {/* Column 3: Year */}
-          <View style={[styles.columnWrapper, { flex: 1.2 }]}>
-            <Text style={styles.columnHeader}>{uiText("Year")}</Text>
-            <FlatList
+            <WheelColumn<number>
               data={years}
-              keyExtractor={(item) => `y-${item}`}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.listContent}
-              renderItem={({ item }) => {
-                const isSelected = item === selectedYear;
-                return (
-                  <Pressable
-                    style={[styles.itemPill, isSelected && styles.itemPillSelected]}
-                    onPress={() => setSelectedYear(item)}
-                  >
-                    <Text style={[styles.itemText, isSelected && styles.itemTextSelected]}>
-                      {item}
-                    </Text>
-                  </Pressable>
-                );
-              }}
+              selected={selectedYear}
+              onSelect={setSelectedYear}
+              flex={1.0}
             />
           </View>
         </View>
-
-        {/* Footer Actions */}
-        <View style={styles.footer}>
-          <Pressable style={styles.cancelBtn} onPress={onClose}>
-            <Text style={styles.cancelBtnText}>{uiText("Cancel")}</Text>
-          </Pressable>
-          <Pressable style={styles.confirmBtn} onPress={handleConfirm}>
-            <Text style={styles.confirmBtnText}>{uiText("Set Date of Birth")}</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  overlay: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
   },
-  header: {
+  sheet: {
+    backgroundColor: '#F0F2F5',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    overflow: 'hidden',
+  },
+  toolbar: {
+    height: 48,
+    paddingHorizontal: 22,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0EC',
+    justifyContent: 'flex-end',
+    backgroundColor: '#F0F2F5',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontFamily: THEME.typography.fontFamily.mainBold,
-    color: '#0D0D11',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    fontFamily: THEME.typography.fontFamily.mainRegular,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F5F5F0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  summaryCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F9F9F6',
-    marginHorizontal: 16,
-    marginTop: 14,
-    marginBottom: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#EFEFEA',
-  },
-  summaryLeft: {
-    flex: 1,
-  },
-  summaryLabel: {
-    fontSize: 11,
-    fontFamily: THEME.typography.fontFamily.mainMedium,
-    color: '#8A8985',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  summaryDateText: {
+  next: {
+    color: '#FFB380',
     fontSize: 16,
     fontFamily: THEME.typography.fontFamily.mainBold,
-    color: '#0D0D11',
-    marginTop: 2,
+    letterSpacing: -0.2,
   },
-  ageBadge: {
+  wheels: {
+    height: WHEEL_HEIGHT,
     flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#E8F8EE',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    gap: 4,
+    paddingHorizontal: 24,
+    position: 'relative',
+    marginTop: 4,
   },
-  ageBadgeText: {
-    fontSize: 12,
-    fontFamily: THEME.typography.fontFamily.mainBold,
-    color: '#059669',
+  selectionBand: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: WHEEL_PADDING,
+    height: ITEM_HEIGHT,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#C6C6C8',
+    zIndex: 10,
   },
-  selectorContainer: {
+  wheelContainer: {
+    height: WHEEL_HEIGHT,
+  },
+  wheel: {
     flex: 1,
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 10,
+    height: WHEEL_HEIGHT,
   },
-  columnWrapper: {
-    flex: 1,
-    backgroundColor: '#F9F9F6',
-    borderRadius: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-    borderWidth: 1,
-    borderColor: '#EFEFEA',
+  wheelContent: {
+    paddingVertical: WHEEL_PADDING,
   },
-  columnHeader: {
-    fontSize: 12,
-    fontFamily: THEME.typography.fontFamily.mainBold,
-    color: '#4A4945',
-    textAlign: 'center',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  listContent: {
-    paddingVertical: 4,
-  },
-  itemPill: {
-    height: 42,
+  wheelItem: {
+    height: ITEM_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
-    marginVertical: 3,
-    backgroundColor: 'transparent',
   },
-  itemPillSelected: {
-    backgroundColor: '#0D0D11',
+  wheelTextBase: {
+    textAlign: 'center',
+    includeFontPadding: false,
+    fontFamily: THEME.typography.fontFamily.mainRegular,
   },
-  itemText: {
+  textDistance0: {
+    color: '#000000',
+    fontSize: 18,
+    fontFamily: THEME.typography.fontFamily.mainBold,
+  },
+  textDistance1: {
+    color: '#8E8E93',
+    fontSize: 16.5,
+    fontFamily: THEME.typography.fontFamily.mainMedium,
+  },
+  textDistance2: {
+    color: '#AEAEB2',
+    fontSize: 15,
+    fontFamily: THEME.typography.fontFamily.mainRegular,
+  },
+  textDistance3: {
+    color: '#C7C7CC',
     fontSize: 14,
     fontFamily: THEME.typography.fontFamily.mainRegular,
-    color: '#2A2925',
   },
-  itemTextSelected: {
-    fontFamily: THEME.typography.fontFamily.mainBold,
-    color: '#FFFFFF',
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0EC',
-    backgroundColor: '#FFFFFF',
-  },
-  cancelBtn: {
-    flex: 1,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: '#F5F5F0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cancelBtnText: {
-    fontSize: 14,
-    fontFamily: THEME.typography.fontFamily.mainBold,
-    color: '#4A4945',
-  },
-  confirmBtn: {
-    flex: 2,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: '#0D0D11',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  confirmBtnText: {
-    fontSize: 14,
-    fontFamily: THEME.typography.fontFamily.mainBold,
-    color: '#FFFFFF',
+  textDistanceFar: {
+    color: '#D1D1D6',
+    fontSize: 13,
+    fontFamily: THEME.typography.fontFamily.mainRegular,
+    opacity: 0.25,
   },
 });
