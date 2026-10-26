@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, Pressable, Modal, TextInput, Dimensions, TouchableWithoutFeedback, KeyboardAvoidingView, Platform, Animated, PanResponder } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { BottomSheetHandle } from '../../../shared/components/BottomSheetHandle';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
@@ -75,30 +76,69 @@ export function FilterModal({
     initialFilters.sortBy || 'newest'
   );
 
-  const panY = useRef(new Animated.Value(0)).current;
+  const panY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const currentTranslateY = useRef(SCREEN_HEIGHT);
+  const gestureStartY = useRef(0);
   const isClosingRef = useRef(false);
   const scrollOffset = useRef(0);
   const contentHeight = useRef(0);
   const layoutHeight = useRef(0);
   const canScrollRef = useRef(false);
 
+  useEffect(() => {
+    const id = panY.addListener(({ value }) => {
+      currentTranslateY.current = value;
+    });
+    return () => {
+      panY.removeListener(id);
+    };
+  }, [panY]);
+
+  const prevVisibleRef = useRef(false);
+
   const handleClose = useCallback(() => {
     if (isClosingRef.current) return;
     isClosingRef.current = true;
+    onApply({
+      categories,
+      bookingType,
+      workSetup,
+      maxRate,
+      ratePeriod: bookingType === 'long_term' ? 'month' : bookingType === 'short_term' ? 'day' : ratePeriod,
+      location: location.trim(),
+      sortBy,
+    });
     Animated.timing(panY, {
       toValue: SCREEN_HEIGHT,
       duration: 220,
       useNativeDriver: true,
     }).start(() => {
       onClose();
-      panY.setValue(0);
+      panY.setValue(SCREEN_HEIGHT);
+      currentTranslateY.current = SCREEN_HEIGHT;
       isClosingRef.current = false;
     });
-  }, [onClose, panY]);
+  }, [onClose, onApply, panY, categories, bookingType, workSetup, maxRate, ratePeriod, location, sortBy]);
 
-  // Sync state when modal is opened with new initialFilters
+  const handleRelease = useCallback((gestureState: { dy: number; vy: number }) => {
+    const { dy, vy } = gestureState;
+    if (dy > 80 || vy > 0.4 || currentTranslateY.current > 120) {
+      handleClose();
+    } else {
+      Animated.spring(panY, {
+        toValue: 0,
+        damping: 24,
+        stiffness: 260,
+        mass: 0.8,
+        overshootClamping: true,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [handleClose, panY]);
+
+  // Sync state ONLY when modal transitions from closed to open
   useEffect(() => {
-    if (visible) {
+    if (visible && !prevVisibleRef.current) {
       setCategories(initialFilters.categories || []);
       setBookingType(initialFilters.bookingType || null);
       setWorkSetup(initialFilters.workSetup || null);
@@ -107,87 +147,119 @@ export function FilterModal({
       setCustomRateText(initialFilters.maxRate ? String(initialFilters.maxRate) : '');
       setLocation(initialFilters.location || '');
       setSortBy(initialFilters.sortBy || 'newest');
-      panY.setValue(0);
+
       isClosingRef.current = false;
+      currentTranslateY.current = SCREEN_HEIGHT;
+      panY.setValue(SCREEN_HEIGHT);
+      Animated.spring(panY, {
+        toValue: 0,
+        damping: 24,
+        stiffness: 260,
+        mass: 0.8,
+        overshootClamping: true,
+        useNativeDriver: true,
+      }).start();
     }
+    prevVisibleRef.current = visible;
   }, [visible, initialFilters, panY]);
 
-  // Single unified PanResponder across the entire bottom sheet
+  const headerPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 3 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 3 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onPanResponderGrant: () => {
+        gestureStartY.current = currentTranslateY.current;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const rawY = gestureStartY.current + gestureState.dy;
+        panY.setValue(Math.max(0, rawY));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        handleRelease(gestureState);
+      },
+      onPanResponderTerminate: (_, gestureState) => {
+        handleRelease(gestureState);
+      },
+    })
+  ).current;
+
+  // Single unified PanResponder across the scrollable area
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onStartShouldSetPanResponderCapture: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dy) > 4 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+        const isVertical = Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+        return isVertical && gestureState.dy > 3 && scrollOffset.current <= 5;
       },
       onMoveShouldSetPanResponderCapture: (_, gestureState) => {
         const isVertical = Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
-        if (!isVertical || Math.abs(gestureState.dy) < 4) return false;
-        // If pulling down at top of scrollview, capture immediately to drag sheet down
-        if (gestureState.dy > 0 && scrollOffset.current <= 2) return true;
-        // If content fits completely without needing scrolling, capture both up and down drags
-        if (!canScrollRef.current) return true;
+        if (!isVertical || Math.abs(gestureState.dy) < 3) return false;
+        if (gestureState.dy > 0 && scrollOffset.current <= 5) return true;
+        if (!canScrollRef.current && gestureState.dy > 0) return true;
         return false;
       },
+      onPanResponderGrant: () => {
+        gestureStartY.current = currentTranslateY.current;
+      },
       onPanResponderMove: (_, gestureState) => {
-        // Strictly prevent pulling upward past top resting position
-        panY.setValue(Math.max(0, gestureState.dy));
+        const rawY = gestureStartY.current + gestureState.dy;
+        panY.setValue(Math.max(0, rawY));
       },
       onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 80 || (gestureState.dy > 20 && gestureState.vy > 0.4)) {
-          handleClose();
-        } else {
-          Animated.spring(panY, {
-            toValue: 0,
-            damping: 20,
-            stiffness: 240,
-            mass: 0.8,
-            overshootClamping: true,
-            useNativeDriver: true,
-          }).start();
-        }
+        handleRelease(gestureState);
       },
-      onPanResponderTerminate: () => {
-        Animated.spring(panY, {
-          toValue: 0,
-          damping: 20,
-          stiffness: 240,
-          mass: 0.8,
-          overshootClamping: true,
-          useNativeDriver: true,
-        }).start();
+      onPanResponderTerminate: (_, gestureState) => {
+        handleRelease(gestureState);
       },
     })
   ).current;
 
   const toggleCategory = (cat: string) => {
-    setCategories((prev) => {
-      if (prev.includes(cat)) {
-        return prev.filter((c) => c !== cat);
-      } else {
-        return [...prev, cat];
-      }
-    });
+    setCategories((prev) => (prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]));
+  };
+
+  const handleBookingType = (bt: string | null) => {
+    setBookingType(bt);
+    const nextPeriod = bt === 'long_term' ? 'month' : bt === 'short_term' ? 'day' : ratePeriod;
+    setRatePeriod(nextPeriod);
+  };
+
+  const handleWorkSetup = (ws: WorkSetup | null) => {
+    setWorkSetup(ws);
+  };
+
+  const handlePeriodChange = (period: 'day' | 'month') => {
+    setRatePeriod(period);
+    setMaxRate(null);
+    setCustomRateText('');
   };
 
   const handleRatePreset = (rate: number) => {
-    if (maxRate === rate) {
-      setMaxRate(null);
-      setCustomRateText('');
-    } else {
-      setMaxRate(rate);
-      setCustomRateText(String(rate));
-    }
+    const nextRate = maxRate === rate ? null : rate;
+    setMaxRate(nextRate);
+    setCustomRateText(nextRate ? String(nextRate) : '');
   };
 
   const handleCustomRateChange = (text: string) => {
     const cleaned = text.replace(/[^0-9]/g, '');
     setCustomRateText(cleaned);
-    if (cleaned === '') {
-      setMaxRate(null);
-    } else {
-      setMaxRate(parseInt(cleaned, 10));
-    }
+    const nextRate = cleaned === '' ? null : parseInt(cleaned, 10);
+    setMaxRate(nextRate);
+  };
+
+  const handleLocationChange = (text: string) => {
+    setLocation(text);
+  };
+
+  const handleSortChange = (newSort: 'newest' | 'rate_asc' | 'rate_desc') => {
+    setSortBy(newSort);
   };
 
   const handleReset = () => {
@@ -208,18 +280,11 @@ export function FilterModal({
     (location.trim() !== '' ? 1 : 0) +
     (sortBy !== 'newest' ? 1 : 0);
 
-  const handleApply = () => {
-    onApply({
-      categories,
-      bookingType,
-      workSetup,
-      maxRate,
-      ratePeriod: bookingType === 'long_term' ? 'month' : bookingType === 'short_term' ? 'day' : ratePeriod,
-      location: location.trim(),
-      sortBy,
-    });
-    handleClose();
-  };
+  const backdropOpacity = panY.interpolate({
+    inputRange: [0, SCREEN_HEIGHT * 0.5, SCREEN_HEIGHT],
+    outputRange: [1, 0.5, 0],
+    extrapolate: 'clamp',
+  });
 
   return (
     <Modal
@@ -230,9 +295,9 @@ export function FilterModal({
       onRequestClose={handleClose}
     >
       <View style={styles.overlay}>
-        <TouchableWithoutFeedback onPress={handleClose}>
-          <View style={styles.backdrop} />
-        </TouchableWithoutFeedback>
+        <Animated.View style={[styles.modalBackdrop, { opacity: backdropOpacity }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+        </Animated.View>
 
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -242,23 +307,20 @@ export function FilterModal({
             style={[
               styles.sheetContent,
               {
-                paddingBottom: Math.max(insets.bottom, 16),
+                paddingBottom: Math.max(insets.bottom, 24),
                 transform: [{ translateY: panY }],
               },
             ]}
             {...panResponder.panHandlers}
           >
-            {/* Top Swipable Area */}
-            <View>
-              {/* Drag Bar Indicator */}
-              <View style={styles.handleContainer}>
-                <View style={styles.handleBar} />
-              </View>
+            {/* Swipable Handle & Header Area */}
+            <View {...headerPanResponder.panHandlers}>
+              <BottomSheetHandle onPress={handleClose} />
 
               {/* Header */}
               <View style={styles.header}>
                 <View style={styles.headerLeft}>
-                  <Ionicons name="funnel" size={20} color={THEME.colors.brandDark} style={{ marginRight: 8 }} />
+                  <Ionicons name="funnel-outline" size={22} color={THEME.colors.ink} style={{ marginRight: 8 }} />
                   <Text style={styles.title}>{uiText("Filter & Sort")}</Text>
                   {activeFilterCount > 0 && (
                     <View style={styles.badge}>
@@ -266,21 +328,7 @@ export function FilterModal({
                     </View>
                   )}
                 </View>
-                <Pressable
-                  style={styles.closeBtn}
-                  onPress={handleClose}
-                  hitSlop={8}
-                >
-                  <Ionicons name="close" size={22} color={THEME.colors.textSecondary} />
-                </Pressable>
               </View>
-
-              {/* Subtitle / context */}
-              <Text style={styles.subtitle}>
-                {mode === 'homeowner'
-                  ? 'Filter available Kasambahay workers to match your household needs.'
-                  : 'Filter available job posts and service requests from homeowners.'}
-              </Text>
             </View>
 
             {/* Scrollable Filter Body */}
@@ -323,14 +371,8 @@ export function FilterModal({
                         style={[styles.chip, isSelected && styles.chipActive]}
                         onPress={() => toggleCategory(cat)}
                       >
-                        <Ionicons
-                          name={isSelected ? 'checkmark' : 'add'}
-                          size={14}
-                          color={isSelected ? THEME.colors.ink : THEME.colors.textSecondary}
-                          style={{ marginRight: 4 }}
-                        />
                         <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                          {uiText(cat)}
+                          + {uiText(cat)}
                         </Text>
                       </Pressable>
                     );
@@ -348,7 +390,7 @@ export function FilterModal({
                       <Pressable
                         key={String(bt.value)}
                         style={[styles.toggleBtn, isSelected && styles.toggleBtnActive]}
-                        onPress={() => setBookingType(bt.value)}
+                        onPress={() => handleBookingType(bt.value)}
                       >
                         <Text
                           style={[styles.toggleBtnText, isSelected && styles.toggleBtnTextActive]}
@@ -367,7 +409,7 @@ export function FilterModal({
                   {([{ label: 'Any Setup', value: null }, { label: 'Stay-in', value: 'stay_in' }, { label: 'Stay-out', value: 'stay_out' }] as const).map(option => (
                     <Pressable key={String(option.value)} accessibilityRole="button"
                       style={[styles.toggleBtn, workSetup === option.value && styles.toggleBtnActive]}
-                      onPress={() => setWorkSetup(option.value)}>
+                      onPress={() => handleWorkSetup(option.value)}>
                       <Text style={[styles.toggleBtnText, workSetup === option.value && styles.toggleBtnTextActive]}>{uiText(option.label)}</Text>
                     </Pressable>
                   ))}
@@ -390,13 +432,25 @@ export function FilterModal({
                   )}
                 </View>
 
-                {!bookingType ? <View style={styles.ratePresetsRow}>
-                  {(['day', 'month'] as const).map(period => <Pressable key={period}
-                    style={[styles.rateChip, ratePeriod === period && styles.rateChipActive]}
-                    onPress={() => { setRatePeriod(period); setMaxRate(null); setCustomRateText(''); }}>
-                    <Text style={styles.rateChipText}>{period === 'day' ? uiText("Daily budget") : uiText("Monthly budget")}</Text>
-                  </Pressable>)}
-                </View> : null}
+                {!bookingType ? (
+                  <View style={styles.periodRow}>
+                    {(['day', 'month'] as const).map(period => {
+                      const isSelected = ratePeriod === period;
+                      return (
+                        <Pressable
+                          key={period}
+                          style={[styles.periodBtn, isSelected && styles.periodBtnActive]}
+                          onPress={() => handlePeriodChange(period)}
+                        >
+                          <Text style={[styles.periodBtnText, isSelected && styles.periodBtnTextActive]}>
+                            {period === 'day' ? uiText("Daily Budget") : uiText("Monthly Budget")}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : null}
+
                 {/* Quick Presets */}
                 <View style={styles.ratePresetsRow}>
                   {(bookingType === 'long_term' || (!bookingType && ratePeriod === 'month') ? [6500, 8000, 10000, 15000] : RATE_PRESETS).map((rate) => {
@@ -408,7 +462,7 @@ export function FilterModal({
                         onPress={() => handleRatePreset(rate)}
                       >
                         <Text style={[styles.rateChipText, isSelected && styles.rateChipTextActive]}>
-                          ≤ ₱{rate}
+                          ≤ P{rate}
                         </Text>
                       </Pressable>
                     );
@@ -421,7 +475,7 @@ export function FilterModal({
                   <TextInput
                     style={styles.rateInput}
                     placeholder={uiText("Enter custom max budget")}
-                    placeholderTextColor="#999"
+                    placeholderTextColor="#888888"
                     keyboardType="numeric"
                     value={customRateText}
                     onChangeText={handleCustomRateChange}
@@ -433,7 +487,7 @@ export function FilterModal({
                         setMaxRate(null);
                       }}
                     >
-                      <Ionicons name="close-circle" size={18} color="#999" />
+                      <Ionicons name="close-circle" size={18} color="#888888" />
                     </Pressable>
                   )}
                 </View>
@@ -450,18 +504,18 @@ export function FilterModal({
                   )}
                 </View>
                 <View style={styles.inputBox}>
-                  <Ionicons name="location-outline" size={18} color={THEME.colors.brandDark} style={{ marginRight: 8 }} />
+                  <Ionicons name="location-outline" size={18} color="#555555" style={{ marginRight: 8 }} />
                   <TextInput
                     style={styles.locationInput}
-                    placeholder="e.g. Carmen, Nazareth, Macasandig..."
-                    placeholderTextColor="#999"
+                    placeholder="e.g. Carmen, Nazareth, Macasandig"
+                    placeholderTextColor="#888888"
                     value={location}
-                    onChangeText={setLocation}
+                    onChangeText={handleLocationChange}
                     returnKeyType="done"
                   />
                   {location !== '' && (
                     <Pressable onPress={() => setLocation('')}>
-                      <Ionicons name="close-circle" size={18} color="#999" />
+                      <Ionicons name="close-circle" size={18} color="#888888" />
                     </Pressable>
                   )}
                 </View>
@@ -471,50 +525,39 @@ export function FilterModal({
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>{uiText("SORT RESULTS BY")}</Text>
                 <View style={styles.sortContainer}>
-                  {SORT_OPTIONS.map((opt) => {
+                  {SORT_OPTIONS.map((opt, index) => {
                     const isSelected = sortBy === opt.value;
+                    const isLast = index === SORT_OPTIONS.length - 1;
                     return (
                       <Pressable
                         key={opt.value}
-                        style={[styles.sortRow, isSelected && styles.sortRowActive]}
-                        onPress={() => setSortBy(opt.value)}
+                        style={[styles.sortRow, !isLast && styles.sortRowDivider]}
+                        onPress={() => handleSortChange(opt.value)}
                       >
                         <View style={styles.sortRowLeft}>
                           <Ionicons
                             name={opt.icon}
                             size={18}
-                            color={isSelected ? THEME.colors.brandDark : THEME.colors.textSecondary}
+                            color={isSelected ? THEME.colors.ink : '#888888'}
                             style={{ marginRight: 10 }}
                           />
-                          <Text style={[styles.sortLabel, isSelected && styles.sortLabelActive]}>
+                          <Text style={[styles.sortLabel, !isSelected && styles.sortLabelUnselected]}>
                             {uiText(opt.label)}
                           </Text>
                         </View>
-                        <Ionicons
-                          name={isSelected ? 'radio-button-on' : 'radio-button-off'}
-                          size={20}
-                          color={isSelected ? THEME.colors.brandDark : '#CCC'}
-                        />
+                        <View style={[styles.radioCircle, isSelected && styles.radioCircleActive]} />
                       </Pressable>
                     );
                   })}
                 </View>
               </View>
+
+              {/* Bottom Reset Action */}
+              <Pressable style={styles.resetBottomRow} onPress={handleReset}>
+                <Ionicons name="refresh-outline" size={15} color="#888888" style={{ marginRight: 6 }} />
+                <Text style={styles.resetBottomText}>{uiText("Reset all filters")}</Text>
+              </Pressable>
             </ScrollView>
-
-            {/* Sticky Action Footer */}
-            <View style={styles.footer}>
-              <Pressable style={styles.resetButton} onPress={handleReset}>
-                <Ionicons name="refresh-outline" size={16} color={THEME.colors.textSecondary} style={{ marginRight: 6 }} />
-                <Text style={styles.resetButtonText}>{uiText("Reset All")}</Text>
-              </Pressable>
-
-              <Pressable style={styles.applyButton} onPress={handleApply}>
-                <Text style={styles.applyButtonText}>
-                  {uiText("Apply Filters")}{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-                </Text>
-              </Pressable>
-            </View>
           </Animated.View>
         </KeyboardAvoidingView>
       </View>
@@ -527,15 +570,15 @@ export default FilterModal;
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
-  backdrop: {
-    flex: 1,
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   sheetWrapper: {
     width: '100%',
-    maxHeight: SCREEN_HEIGHT * 0.88,
+    maxHeight: SCREEN_HEIGHT * 0.90,
   },
   sheetContent: {
     backgroundColor: THEME.colors.white,
@@ -543,29 +586,18 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 8,
-    paddingBottom: 80,
-    marginBottom: -80,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
     elevation: 20,
   },
-  handleContainer: {
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  handleBar: {
-    width: 44,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#D1D1D6',
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 8,
+    marginBottom: 10,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -573,7 +605,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontWeight: '700',
+    fontFamily: THEME.typography.fontFamily.display,
     color: THEME.colors.ink,
   },
   badge: {
@@ -587,17 +619,6 @@ const styles = StyleSheet.create({
     color: THEME.colors.white,
     fontSize: 12,
     fontWeight: '700',
-  },
-  closeBtn: {
-    padding: 4,
-    borderRadius: 16,
-    backgroundColor: '#F2F2F2',
-  },
-  subtitle: {
-    fontSize: 13,
-    color: THEME.colors.textSecondary,
-    marginBottom: 14,
-    lineHeight: 18,
   },
   scrollBody: {
     maxHeight: SCREEN_HEIGHT * 0.58,
@@ -617,8 +638,8 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 12,
     fontWeight: '700',
-    color: THEME.colors.textSecondary,
-    letterSpacing: 0.8,
+    color: THEME.colors.ink,
+    letterSpacing: 0.6,
   },
   clearSectionText: {
     fontSize: 12,
@@ -631,23 +652,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
     borderRadius: 20,
-    backgroundColor: THEME.colors.canvas,
-    borderWidth: 1,
-    borderColor: '#E8E6DF',
+    backgroundColor: '#EAEAEB',
   },
   chipActive: {
-    backgroundColor: THEME.colors.brand,
-    borderColor: THEME.colors.brandDark,
+    backgroundColor: '#FFB380',
   },
   chipText: {
     fontSize: 13,
-    color: THEME.colors.textSecondary,
-    fontWeight: '500',
+    color: THEME.colors.ink,
+    fontWeight: '600',
   },
   chipTextActive: {
     color: THEME.colors.ink,
@@ -655,14 +671,14 @@ const styles = StyleSheet.create({
   },
   toggleRow: {
     flexDirection: 'row',
-    backgroundColor: THEME.colors.canvasSubtle,
+    backgroundColor: '#EAEAEB',
     borderRadius: 12,
     padding: 4,
     gap: 4,
   },
   toggleBtn: {
     flex: 1,
-    paddingVertical: 9,
+    paddingVertical: 10,
     alignItems: 'center',
     borderRadius: 9,
   },
@@ -670,60 +686,81 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.colors.white,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 2,
     elevation: 2,
   },
   toggleBtnText: {
     fontSize: 13,
-    fontWeight: '600',
-    color: THEME.colors.textSecondary,
+    fontWeight: '500',
+    color: '#666666',
   },
   toggleBtnTextActive: {
     color: THEME.colors.ink,
     fontWeight: '700',
   },
+  periodRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  periodBtn: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 12,
+    backgroundColor: '#EAEAEB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  periodBtnActive: {
+    backgroundColor: '#FFB380',
+  },
+  periodBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: THEME.colors.ink,
+  },
+  periodBtnTextActive: {
+    fontWeight: '700',
+    color: THEME.colors.ink,
+  },
   ratePresetsRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     marginBottom: 10,
   },
   rateChip: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 10,
-    backgroundColor: THEME.colors.canvas,
-    borderWidth: 1,
-    borderColor: '#E8E6DF',
+    backgroundColor: '#EAEAEB',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   rateChipActive: {
-    backgroundColor: THEME.colors.brandLight,
-    borderColor: THEME.colors.brandDark,
+    backgroundColor: '#FFB380',
   },
   rateChipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: THEME.colors.textSecondary,
+    color: THEME.colors.ink,
   },
   rateChipTextActive: {
-    color: THEME.colors.brandDark,
+    color: THEME.colors.ink,
     fontWeight: '700',
   },
   inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: THEME.colors.canvas,
+    backgroundColor: '#EAEAEB',
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E8E6DF',
     paddingHorizontal: 14,
     height: 46,
   },
   currencyPrefix: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    color: THEME.colors.textSecondary,
+    color: '#555555',
     marginRight: 6,
   },
   rateInput: {
@@ -737,10 +774,8 @@ const styles = StyleSheet.create({
     color: THEME.colors.ink,
   },
   sortContainer: {
-    backgroundColor: '#FBFBFA',
+    backgroundColor: '#EAEAEB',
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#EFEFEA',
     overflow: 'hidden',
   },
   sortRow: {
@@ -748,12 +783,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0EFEA',
+    paddingVertical: 13,
   },
-  sortRowActive: {
-    backgroundColor: '#FFFBF5',
+  sortRowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#DCDCE0',
   },
   sortRowLeft: {
     flexDirection: 'row',
@@ -761,51 +795,36 @@ const styles = StyleSheet.create({
   },
   sortLabel: {
     fontSize: 14,
-    color: THEME.colors.textSecondary,
+    color: THEME.colors.ink,
+    fontWeight: '700',
+  },
+  sortLabelUnselected: {
+    color: '#888888',
     fontWeight: '500',
   },
-  sortLabelActive: {
-    color: THEME.colors.ink,
-    fontWeight: '700',
+  radioCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: '#888888',
+    backgroundColor: 'transparent',
   },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#EEEEEE',
+  radioCircleActive: {
+    borderColor: '#1E1E1E',
+    backgroundColor: '#FFB380',
   },
-  resetButton: {
+  resetBottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 13,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    backgroundColor: THEME.colors.canvasSubtle,
+    paddingVertical: 14,
+    marginTop: 8,
+    marginBottom: 4,
   },
-  resetButtonText: {
-    fontSize: 14,
+  resetBottomText: {
+    fontSize: 13,
+    color: '#888888',
     fontWeight: '600',
-    color: THEME.colors.textSecondary,
-  },
-  applyButton: {
-    flex: 1,
-    backgroundColor: THEME.colors.brand,
-    paddingVertical: 13,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: THEME.colors.brandDark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  applyButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: THEME.colors.ink,
   },
 });
