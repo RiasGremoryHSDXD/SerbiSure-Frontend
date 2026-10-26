@@ -87,10 +87,7 @@ export function LandingScreen({
   }
 
   // Account Remembered State
-  const [rememberedAccount, setRememberedAccountState] = useState<RememberedAccount | null>({
-    firstName: 'Daven',
-    identifier: 'daventheabyss@gmail.com',
-  });
+  const [rememberedAccount, setRememberedAccountState] = useState<RememberedAccount | null>(null);
   const [isSwitchAccount, setIsSwitchAccount] = useState(false);
 
   // Login Form States
@@ -232,17 +229,19 @@ export function LandingScreen({
 
       if (!isSessionTokens(data)) throw new Error('Could not sign in. Please try again.');
 
-      // Persist remembered account for future "Welcome back" logins
-      let firstName = 'Daven';
+      // Persist remembered account for future "Welcome back" logins if valid user
+      let firstName = '';
       const claims = parseJwtPayload(data.access);
       if (claims?.first_name) {
-        firstName = String(claims.first_name).trim().split(' ')[0] || 'Daven';
+        firstName = String(claims.first_name).trim().split(' ')[0] || '';
       } else if (rememberedAccount?.firstName) {
         firstName = rememberedAccount.firstName;
       }
       const savedIdentifier = claims?.email || claims?.contact_number || targetIdentifier;
-      await setRememberedAccount({ firstName, identifier: savedIdentifier });
-      setRememberedAccountState({ firstName, identifier: savedIdentifier });
+      if (firstName && savedIdentifier) {
+        await setRememberedAccount({ firstName, identifier: savedIdentifier });
+        setRememberedAccountState({ firstName, identifier: savedIdentifier });
+      }
 
       if (onLoginSuccess) {
         await onLoginSuccess(data);
@@ -394,7 +393,7 @@ export function LandingScreen({
                       adjustsFontSizeToFit
                       minimumFontScale={0.75}
                     >
-                      Welcome back, <Text style={styles.welcomeBackName}>{rememberedAccount?.firstName || 'Daven'}</Text>
+                      Welcome back, <Text style={styles.welcomeBackName}>{rememberedAccount?.firstName || ''}</Text>
                     </Text>
                   </View>
                 )}

@@ -262,3 +262,72 @@ test('LandingScreen: back button on Welcome Back view also goes back to landing 
 
   assert.equal(backCount, 1, 'Expected back button on Welcome Back screen to navigate to landing page');
 });
+
+test('LandingScreen: fresh user with no remembered account shows standard login UI by default', async t => {
+  const native = surfaces();
+  const secureStoreMock = {
+    getItemAsync: async () => null,
+    setItemAsync: async () => {},
+    deleteItemAsync: async () => {},
+  };
+
+  const rememberedAccountModule = load('src/shared/auth/rememberedAccount.ts', {
+    'expo-secure-store': secureStoreMock,
+  });
+
+  const languageApi = {
+    useLanguage: () => ({ tr: text => text, formatDate: d => d }),
+  };
+
+  const { LandingScreen } = load('src/features/auth/screens/LandingScreen.tsx', {
+    'react-native': native,
+    'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
+    '@expo/vector-icons': { Ionicons: 'Icon' },
+    '../../../shared/localization/LanguageContext': languageApi,
+    '../../../shared/api/config': { API_BASE_URL: 'http://test.local' },
+    '../../../shared/api/httpClient': { fetchWithTimeout: async () => ({ ok: true, json: async () => ({}) }) },
+    '../../../shared/theme/theme': {
+      default: {
+        colors: { brand: '#FFB380', brandDark: '#E28B50', ink: '#0D0D11', canvas: '#F6F5F2' },
+        roundness: { pill: 9999 },
+        typography: { fontFamily: { displayExtraBold: 'DisplayExtraBold', display: 'Display', bodyMedium: 'BodyMedium', body: 'Body' }, tracking: { tighter: -1, tight: -0.5 } },
+      },
+    },
+    '../../../shared/auth/session': { isSessionTokens: () => true },
+    '../../../shared/components/AppHeader': { APP_HEADER_BACK_ICON_COLOR: '#2A2925', APP_HEADER_BACK_ICON_SIZE: 26 },
+    '../../../shared/auth/rememberedAccount': rememberedAccountModule,
+    '../../auth/session/UserContext': { useUser: () => ({ user: null }) },
+    '../../../../assets/serbisure_new_clean.png': 1,
+    '../../../../assets/landingpage1-transparent.png': 2,
+  });
+
+  const screen = mount(t);
+  screen.render(
+    React.createElement(LandingScreen, {
+      isLoginView: true,
+      onBackToLanding: () => {},
+      onSignUp: () => {},
+    })
+  );
+
+  await tick();
+
+  // 1. Should NOT display "Welcome back"
+  const allTexts = screen.all('Text').map(screen.textContent);
+  assert.ok(
+    !allTexts.some(t => t.includes('Welcome back')),
+    'Expected "Welcome back" NOT to be displayed for fresh user'
+  );
+
+  // 2. Should display standard inputs: Email or phone number + Password
+  const textInputs = screen.all('TextInput');
+  assert.equal(textInputs.length, 2, 'Expected 2 TextInputs (email and password) by default');
+  assert.equal(textInputs[0].props.placeholder, 'Email or phone number');
+  assert.equal(textInputs[1].props.placeholder, 'Password');
+
+  // 3. Should display standard footer "Don't have an account? Sign up"
+  assert.ok(
+    allTexts.some(t => t.includes("Don't have an account?")),
+    'Expected "Don\'t have an account?" footer by default'
+  );
+});
