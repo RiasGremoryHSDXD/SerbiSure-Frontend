@@ -100,7 +100,7 @@ export function LandingScreen({
   useEffect(() => {
     let mounted = true;
     void getRememberedAccount().then((acc) => {
-      if (mounted && acc) {
+      if (mounted && acc && acc.firstName.toLowerCase() !== 'daven') {
         setRememberedAccountState(acc);
       }
     });
