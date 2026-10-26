@@ -8,7 +8,13 @@ import { profileStyles as styles } from '../styles';
 import type { ProfileController } from '../hooks/useProfile';
 import { ProfileAvatar } from '../../../shared/ui/ProfileAvatar';
 
-export function ReviewsSection({ profile }: { profile: Pick<ProfileController, 't' | 'copy' | 'reviews' | 'isReviewsExpanded' | 'setIsReviewsExpanded'> }) {
+export function ReviewsSection({
+  profile,
+  showHeader = false,
+}: {
+  profile: Pick<ProfileController, 't' | 'copy' | 'reviews' | 'isReviewsExpanded' | 'setIsReviewsExpanded'>;
+  showHeader?: boolean;
+}) {
   const { tr: uiText, formatDate } = useUiLanguage();
   const {
     t,
@@ -21,7 +27,30 @@ export function ReviewsSection({ profile }: { profile: Pick<ProfileController, '
   const visibleReviews = isReviewsExpanded ? reviews : reviews.slice(0, 3);
   return (<>
     <View style={styles.reviewsSection}>
-      {hasMoreReviews ? (
+      {showHeader ? (
+        <View style={styles.tabSectionHeader}>
+          <View style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
+            <Text style={styles.tabSectionTitle}>{uiText("Reviews & Feedback")}</Text>
+          </View>
+          {hasMoreReviews ? (
+            <Pressable
+              onPress={() => setIsReviewsExpanded((prev) => !prev)}
+              hitSlop={15}
+              style={({ pressed }) => [styles.viewAllBtnWrap, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.viewAllPill}>
+                {isReviewsExpanded ? uiText("Show Less") : t.viewAll}
+              </Text>
+              <Ionicons
+                name={isReviewsExpanded ? 'chevron-up' : 'chevron-down'}
+                size={13}
+                color="#F97316"
+                style={{ marginLeft: 3 }}
+              />
+            </Pressable>
+          ) : null}
+        </View>
+      ) : hasMoreReviews ? (
         <View style={styles.reviewsHeader}>
           <Pressable
             onPress={() => setIsReviewsExpanded((prev) => !prev)}
