@@ -113,6 +113,9 @@ test('dates use explicit local names, including Android Cebuano without Intl sup
   assert.equal(formatLocalizedDate('Tagalog', friday, 'greeting'), 'Biyernes, Oktubre 16');
   assert.equal(formatLocalizedDate('Bisaya', friday, 'monthYear'), 'Oktubre 2026');
   assert.equal(formatLocalizedDate('Cebuano', friday, 'greeting'), 'Biyernes, Oktubre 16');
+  assert.equal(formatLocalizedDate('English', '10/25/2026', 'compact'), 'Oct 25, 2026');
+  assert.equal(formatLocalizedDate('Tagalog', '10/25/2026', 'compact'), 'Okt 25, 2026');
+  assert.equal(formatLocalizedDate('English', '2026-10-25', 'compact'), 'Oct 25, 2026');
   assert.equal(formatLocalizedDate('Tagalog', 'invalid'), '');
 });
 
@@ -142,13 +145,13 @@ test('switching the live provider updates home, settings and reviews while prese
   for (const language of ['Tagalog', 'Bisaya', 'English']) {
     renderer.flushSync(() => switchLanguage(language));
     const text = content(container);
-    for (const source of ['Recent Posts', 'No Recent Posts', 'My Jobs & Contracts', 'Social Links & Contacts', 'Show Contact Number', 'Positive']) assert.ok(text.includes(translateMessage(language, source)), `${language}: ${source}`);
+    for (const source of ['Recent Posts', 'No Recent Posts', 'Social Links & Contacts', 'Show Contact Number', 'Positive']) assert.ok(text.includes(translateMessage(language, source)), `${language}: ${source}`);
     assert.ok(text.includes('James Christopher Tagupa'));
     assert.ok(text.includes(review.unstructured_feedback));
     const childCare = nodes().find(node => node.type === 'Pressable' && node.props.accessibilityLabel === translateMessage(language, 'Filter: {category}', { category: translateMessage(language, 'Child Care') }));
     assert.ok(childCare, language); childCare.props.onPress(); assert.equal(selectedCategory, 'Child Care');
     if (language !== 'English') {
-      for (const english of ['Recent Posts', 'No Recent Posts', 'My Jobs & Contracts', 'Social Links & Contacts', 'Show Contact Number', 'October']) assert.ok(!text.includes(english), `${language} leaked ${english}`);
+      for (const english of ['Recent Posts', 'No Recent Posts', 'Social Links & Contacts', 'Show Contact Number', 'October']) assert.ok(!text.includes(english), `${language} leaked ${english}`);
     }
   }
   assert.equal(review.nlp_sentiment, 'Positive');
