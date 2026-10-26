@@ -1,7 +1,8 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { ErrorNotice } from '../../../shared/ui/ErrorNotice';
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { resolveRole, ROLE_CONFIG, type Role } from '../../../app/roleConfig';
 import { useUser } from '../../auth/session/UserContext';
 import { useLanguage } from '../../../shared/localization/LanguageContext';
@@ -26,6 +27,7 @@ interface HomeScreenProps {
   readonly onAvatarPress?: () => void;
   readonly onViewAll?: () => void;
   readonly token?: string | null;
+  readonly onBookingsPress?: () => void;
 }
 
 interface ActiveChat {
@@ -34,7 +36,7 @@ interface ActiveChat {
   initialReplyTo?: { author: string; text: string };
 }
 
-export function HomeScreen({ role: requestedRole, avatarUri, onAvatarPress, onViewAll, token }: HomeScreenProps) {
+export function HomeScreen({ role: requestedRole, avatarUri, onAvatarPress, onViewAll, token, onBookingsPress }: HomeScreenProps) {
   const { tr: uiText } = useUiLanguage();
   const { user, getFirstNameOnly } = useUser();
   const { t } = useLanguage();
@@ -93,11 +95,13 @@ export function HomeScreen({ role: requestedRole, avatarUri, onAvatarPress, onVi
 
   return (
     <View style={styles.container}>
-      <ScreenLayout refreshing={isRefreshing} onRefresh={handleRefresh}>
-        <AppHeader right={<NotificationBell />} />
+      <ScreenLayout
+        refreshing={isRefreshing}
+        onRefresh={handleRefresh}
+      >
         <GreetingCard name={getFirstNameOnly()} greeting={t.greeting} avatarUri={avatarUri} onAvatarPress={onAvatarPress} />
         <HomeFeedFilters placeholder={t[ROLE_CONFIG[role].searchKey]} searchQuery={searchQuery} selectedCategory={selectedCategory} onSearchChange={setSearchQuery} onCategoryChange={setSelectedCategory} />
-        <HomeFeedHeader onViewAll={onViewAll} />
+        {(!isLoading && visiblePosts.length > 0) ? <HomeFeedHeader onViewAll={onViewAll} /> : null}
         <View style={styles.list}>
           {error && <ErrorNotice message={error} onRetry={() => { void handleRefresh(); }} />}
           {renderPosts()}
@@ -113,7 +117,7 @@ export function HomeScreen({ role: requestedRole, avatarUri, onAvatarPress, onVi
         onToggleSave={() => { if (selectedPost) void toggleSave(selectedPost, authToken); }}
         onViewProfile={() => selectedPost && setProfilePost(selectedPost)}
         ctaText={role === 'homeowner' ? uiText("Message Kasambahay") : undefined}
-        ctaNotice={role === 'homeowner' ? uiText("Start a direct chat with this kasambahay") : undefined}
+        ctaNotice={role === 'homeowner' ? uiText("Start direct chat with this kasambahay") : undefined}
         token={authToken}
       />
       {activeChat && <ChatDetailScreen visible onClose={() => setActiveChat(null)} partnerId={activeChat.post.partnerId} token={authToken} contactName={activeChat.post.employerName} contactRole={activeChat.post.kind === 'job' ? 'Homeowner' : activeChat.post.roleTag} contactAvatar={activeChat.post.avatar} initialMessage={activeChat.initialMessage} initialReplyTo={activeChat.initialReplyTo} userRole={role} />}
