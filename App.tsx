@@ -64,30 +64,8 @@ export default function App() {
   const [suspensionMessage, setSuspensionMessage] = useState<string | null>(null);
   const [selfieUpload, setSelfieUpload] = useState<SelfieUploadTask | undefined>();
   const [restoringSession, setRestoringSession] = useState(true);
-  const [minimumSplashElapsed, setMinimumSplashElapsed] = useState(false);
-  const [showLaunchSplash, setShowLaunchSplash] = useState(true);
-  const launchSplashOpacity = useRef(new Animated.Value(1)).current;
   const [restoreError, setRestoreError] = useState('');
   const [loginMessage, setLoginMessage] = useState('');
-
-  useEffect(() => {
-    const timer = setTimeout(() => setMinimumSplashElapsed(true), 900);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const appReady = fontsLoaded && !restoringSession && minimumSplashElapsed;
-
-  useEffect(() => {
-    if (!appReady) return;
-
-    Animated.timing(launchSplashOpacity, {
-      toValue: 0,
-      duration: 420,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) setShowLaunchSplash(false);
-    });
-  }, [appReady, launchSplashOpacity]);
 
   const clearSession = useCallback(() => {
     realtime.stop();
@@ -143,18 +121,8 @@ export default function App() {
     return unsubscribe;
   }, [clearSession, restoreSavedLogin]);
 
-  if (showLaunchSplash) {
-    return (
-      <Animated.View style={[styles.launchSplash, { opacity: launchSplashOpacity }]}>
-        <StatusBar style="dark" backgroundColor="#F6F5F2" />
-        <Image
-          source={require('./assets/serbisure_new_clean.png')}
-          style={styles.launchSplashLogo}
-          resizeMode="contain"
-          accessibilityLabel="SerbiSure"
-        />
-      </Animated.View>
-    );
+  if (!fontsLoaded || restoringSession) {
+    return null;
   }
 
   if (restoreError) {
@@ -275,16 +243,3 @@ export default function App() {
     </AppProviders>
   );
 }
-
-const styles = StyleSheet.create({
-  launchSplash: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F6F5F2',
-  },
-  launchSplashLogo: {
-    width: 92,
-    height: 92,
-  },
-});
