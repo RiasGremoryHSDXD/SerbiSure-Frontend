@@ -9,6 +9,7 @@ import { fetchWithTimeout } from '../../../shared/api/httpClient';
 import THEME from '../../../shared/theme/theme';
 import { RegistrationStepper } from '../../auth/components/RegistrationStepper';
 import type { SelfieUploadTask } from '../api/selfieUpload';
+import { APP_HEADER_BACK_ICON_COLOR, APP_HEADER_BACK_ICON_SIZE, APP_HEADER_LOGO_SIZE, APP_HEADER_SIDE_WIDTH } from '../../../shared/components/AppHeader';
 
 const noSubscription = () => () => {};
 const noSelfieUpload = () => null;
@@ -187,51 +188,72 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, selfieUpload,
     <View style={[styles.root, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 14) }]}>
       <View style={styles.header}>
         <View style={styles.headerSide}>
-          <Pressable onPress={onBack} disabled={loading || selfieState?.status === 'uploading'} style={(loading || selfieState?.status === 'uploading') && { opacity: 0.4 }}>
-            <Ionicons name="arrow-back" size={26} color="#2A2925" />
+          <Pressable onPress={onBack} disabled={loading || selfieState?.status === 'uploading'} style={(loading || selfieState?.status === 'uploading') && { opacity: 0.4 }} hitSlop={10}>
+            <Ionicons name="arrow-back" size={APP_HEADER_BACK_ICON_SIZE} color={APP_HEADER_BACK_ICON_COLOR} />
           </Pressable>
         </View>
         <Image source={logoSource} style={styles.logo} resizeMode="contain" />
         <View style={[styles.headerSide, styles.headerSideRight]}>
-          <Pressable onPress={() => { void finishRegistration(onSkip); }} disabled={loading}>
+          <Pressable onPress={() => { void finishRegistration(onSkip); }} disabled={loading} hitSlop={10}>
             <Text style={styles.skipText}>{uiText("Skip")}</Text>
           </Pressable>
         </View>
       </View>
 
       <View style={styles.titleBlock}>
-        <Text style={styles.title}>{uiText("Verify Your Identity")}</Text>
-        <Text style={styles.subtitle}>{uiText("Upload your documents to activate your profile")}</Text>
+        <Text style={styles.title}>
+          {role === 'homeowner' ? (
+            <>Join as <Text style={styles.titleHighlight}>Homeowner</Text></>
+          ) : (
+            <>Join as <Text style={styles.titleHighlight}>Kasambahay</Text></>
+          )}
+        </Text>
+        {role !== 'homeowner' ? (
+          <Text style={styles.subtitle}>{uiText("Upload your documents to activate your profile")}</Text>
+        ) : null}
       </View>
 
-      <View style={styles.alertBox}>
-        <Ionicons name="alert-circle" size={16} color="#000" style={styles.alertIcon} />
-        <View style={styles.alertContent}>
-          <Text style={styles.alertTitle}>{uiText("Verification Process")}</Text>
-          <Text style={styles.alertText}>{uiText("Documents are securely stored and typically reviewed within 24 hours.")}</Text>
-          {selfieState?.status === 'uploading' && <View style={styles.selfieStatus}>
-            <ActivityIndicator size="small" color={THEME.colors.ink} />
-            <Text accessibilityLiveRegion="polite" style={styles.selfieStatusText}>{uiText("Saving your selfie. You can select documents now.")}</Text>
-          </View>}
-          {selfieState?.status === 'failed' && <View style={styles.selfieStatus}>
-            <Text accessibilityRole="alert" style={styles.selfieStatusText}>{selfieState.error}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Retry saving selfie" disabled={loading} onPress={() => { void finishRegistration(); }} style={styles.selfieRetry}>
-              <Text style={styles.selfieRetryText}>{uiText("Retry")}</Text>
-            </Pressable>
-          </View>}
+      {(selfieState?.status === 'uploading' || selfieState?.status === 'failed') ? (
+        <View style={styles.alertBox}>
+          <Ionicons name="alert-circle" size={20} color="#0D0D11" style={styles.alertIcon} />
+          {selfieState?.status === 'uploading' ? (
+            <View style={styles.selfieStatus}>
+              <ActivityIndicator size="small" color={THEME.colors.ink} />
+              <Text accessibilityLiveRegion="polite" style={styles.selfieStatusText}>
+                {uiText("Saving your selfie. You can select documents now.")}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.selfieStatus}>
+              <Text accessibilityRole="alert" style={styles.selfieStatusText}>
+                {selfieState?.error}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Retry saving selfie"
+                disabled={loading}
+                onPress={() => { void finishRegistration(); }}
+                hitSlop={12}
+                style={({ pressed }) => [styles.selfieRetryIconBtn, pressed && { opacity: 0.6 }]}
+              >
+                <Ionicons name="refresh" size={22} color="#0D0D11" />
+              </Pressable>
+            </View>
+          )}
         </View>
-      </View>
+      ) : null}
 
       <View style={styles.card}>
-        <RegistrationStepper
-          currentStep={role === 'kasambahay' ? 5 : 4}
-          totalSteps={role === 'kasambahay' ? 5 : 4}
-          title={role === 'kasambahay' ? 'Step 5: Identity Documents' : 'Step 4: Identity Documents'}
-          help="Upload your government ID to complete your registration."
-        />
-
         <View style={styles.cardContent}>
           <View>
+            <RegistrationStepper
+              currentStep={role === 'kasambahay' ? 5 : 4}
+              totalSteps={role === 'kasambahay' ? 5 : 4}
+              title={role === 'kasambahay' ? uiText('Step 5: Identity Documents') : uiText('Step 4: Identity Documents')}
+            />
+          </View>
+
+          <View style={styles.uploadBoxesSection}>
             {role === 'homeowner' ? (
               <>
                 <Pressable style={[styles.uploadBox, styles.uploadBoxHomeowner, (!!nationalFrontImage || existingDocs.has('national_id_front')) && styles.uploadBoxHasImage]} onPress={() => handleBoxPress('national_front')}>
@@ -250,10 +272,9 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, selfieUpload,
                     </View>
                   ) : (
                     <>
-                      <Ionicons name="cloud-upload" size={26} color={THEME.colors.brand} style={styles.uploadIcon} />
+                      <Ionicons name="cloud-upload-outline" size={28} color={THEME.colors.brand} style={styles.uploadIcon} />
                       <Text style={styles.uploadTitle}>{uiText("National ID (Front)")}</Text>
                       <Text style={styles.uploadSubtitle}>{uiText("Tap or upload image")}</Text>
-                      <Text style={styles.uploadMeta}>{uiText("JPG, PNG, PDF (Max 5MB)")}</Text>
                     </>
                   )}
                 </Pressable>
@@ -274,10 +295,9 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, selfieUpload,
                     </View>
                   ) : (
                     <>
-                      <Ionicons name="cloud-upload" size={26} color={THEME.colors.brand} style={styles.uploadIcon} />
+                      <Ionicons name="cloud-upload-outline" size={28} color={THEME.colors.brand} style={styles.uploadIcon} />
                       <Text style={styles.uploadTitle}>{uiText("National ID (Back)")}</Text>
                       <Text style={styles.uploadSubtitle}>{uiText("Tap or upload image")}</Text>
-                      <Text style={styles.uploadMeta}>{uiText("JPG, PNG, PDF (Max 5MB)")}</Text>
                     </>
                   )}
                 </Pressable>
@@ -294,10 +314,9 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, selfieUpload,
                     </View>
                   ) : (
                     <>
-                      <Ionicons name="cloud-upload" size={26} color={THEME.colors.brand} style={styles.uploadIcon} />
+                      <Ionicons name="cloud-upload-outline" size={28} color={THEME.colors.brand} style={styles.uploadIcon} />
                       <Text style={styles.uploadTitle}>{uiText("NBI Clearance")}</Text>
-                      <Text style={styles.uploadSubtitle}>{uiText("Click or drag file to upload")}</Text>
-                      <Text style={styles.uploadMeta}>{uiText("JPG, PNG, PDF (Max 5MB)")}</Text>
+                      <Text style={styles.uploadSubtitle}>{uiText("Tap or upload image")}</Text>
                     </>
                   )}
                 </Pressable>
@@ -312,10 +331,9 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, selfieUpload,
                     </View>
                   ) : (
                     <>
-                      <Ionicons name="cloud-upload" size={26} color={THEME.colors.brand} style={styles.uploadIcon} />
+                      <Ionicons name="cloud-upload-outline" size={28} color={THEME.colors.brand} style={styles.uploadIcon} />
                       <Text style={styles.uploadTitle}>{uiText("Police Clearance")}</Text>
-                      <Text style={styles.uploadSubtitle}>{uiText("Click or drag file to upload")}</Text>
-                      <Text style={styles.uploadMeta}>{uiText("JPG, PNG, PDF (Max 5MB)")}</Text>
+                      <Text style={styles.uploadSubtitle}>{uiText("Tap or upload image")}</Text>
                     </>
                   )}
                 </Pressable>
@@ -351,10 +369,9 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, selfieUpload,
 }
 
 const styles = StyleSheet.create({
-  selfieStatus: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-  selfieStatusText: { flex: 1, fontSize: 11, lineHeight: 16, color: THEME.colors.textSecondary, fontFamily: THEME.typography.fontFamily.body },
-  selfieRetry: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, backgroundColor: THEME.colors.white },
-  selfieRetryText: { fontSize: 12, color: THEME.colors.ink, fontFamily: THEME.typography.fontFamily.mainBold },
+  selfieStatus: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  selfieStatusText: { flex: 1, fontSize: 13, lineHeight: 18, color: '#0D0D11', fontFamily: THEME.typography.fontFamily.bodyMedium },
+  selfieRetryIconBtn: { padding: 4, alignItems: 'center', justifyContent: 'center' },
   root: {
     backgroundColor: THEME.colors.canvas,
     flex: 1,
@@ -367,25 +384,25 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   headerSide: {
-    width: 44,
+    minWidth: APP_HEADER_SIDE_WIDTH,
     justifyContent: 'center',
   },
   headerSideRight: {
     alignItems: 'flex-end',
+    justifyContent: 'center',
   },
   logo: {
-    height: 44,
-    width: 44,
+    height: APP_HEADER_LOGO_SIZE,
+    width: APP_HEADER_LOGO_SIZE,
   },
   skipText: {
-    color: THEME.colors.brandDark,
-    fontSize: 13,
-    fontFamily: THEME.typography.fontFamily.bodyBold,
+    color: THEME.colors.brand,
+    fontSize: 16,
+    fontFamily: THEME.typography.fontFamily.secondaryBold,
   },
   titleBlock: {
-    marginTop: 8,
+    marginTop: -2,
     paddingHorizontal: 24,
-    minHeight: 58,
   },
   title: {
     color: THEME.colors.ink,
@@ -393,6 +410,9 @@ const styles = StyleSheet.create({
     fontFamily: THEME.typography.fontFamily.display,
     lineHeight: 28,
     marginBottom: 4,
+  },
+  titleHighlight: {
+    color: THEME.colors.brand,
   },
   subtitle: {
     color: THEME.colors.textSecondary,
@@ -402,13 +422,13 @@ const styles = StyleSheet.create({
   },
   card: {
     alignSelf: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: THEME.roundness.card,
+    backgroundColor: 'transparent',
+    borderRadius: 0,
     flex: 1,
-    marginTop: 10,
-    paddingBottom: 14,
+    marginTop: 6,
+    paddingBottom: 10,
     paddingHorizontal: 18,
-    paddingTop: 12,
+    paddingTop: 8,
     width: '92%',
   },
   cardContent: {
@@ -417,53 +437,41 @@ const styles = StyleSheet.create({
   },
   alertBox: {
     flexDirection: 'row',
-    backgroundColor: THEME.colors.brandLight,
-    borderRadius: 16,
-    padding: 12,
+    alignItems: 'center',
+    backgroundColor: '#FFC9A6',
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     marginTop: 8,
     marginHorizontal: 18,
-    marginBottom: 0,
   },
   alertIcon: {
     marginRight: 10,
-    marginTop: 2,
   },
-  alertContent: {
+  uploadBoxesSection: {
     flex: 1,
-  },
-  alertTitle: {
-    fontSize: 12,
-    fontFamily: THEME.typography.fontFamily.bodyBold,
-    color: THEME.colors.ink,
-    marginBottom: 2,
-  },
-  alertText: {
-    fontSize: 11,
-    fontFamily: THEME.typography.fontFamily.body,
-    color: THEME.colors.textSecondary,
-    lineHeight: 15,
+    justifyContent: 'center',
+    paddingVertical: 8,
   },
   uploadBox: {
     borderWidth: 1.5,
-    borderColor: '#D8D8D2',
+    borderColor: '#6B7280',
     borderStyle: 'dashed',
     borderRadius: 18,
-    paddingVertical: 14,
+    paddingVertical: 24,
     paddingHorizontal: 16,
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 6,
-    backgroundColor: '#FAFAF8',
+    justifyContent: 'center',
+    marginVertical: 8,
+    backgroundColor: '#ECECEC',
   },
   uploadBoxKasambahay: {
-    paddingVertical: 12,
-    marginTop: 6,
-    marginBottom: 6,
+    paddingVertical: 20,
+    marginVertical: 6,
   },
   uploadBoxHomeowner: {
-    paddingVertical: 14,
-    marginTop: 8,
-    marginBottom: 6,
+    paddingVertical: 24,
+    marginVertical: 8,
   },
   uploadBoxHasImage: {
     paddingVertical: 8,
@@ -496,16 +504,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   uploadTitle: {
-    fontSize: 13,
-    fontFamily: THEME.typography.fontFamily.bodyBold,
+    fontSize: 16,
+    fontFamily: THEME.typography.fontFamily.secondaryBold,
     color: THEME.colors.ink,
-    marginBottom: 2,
+    marginTop: 8,
+    marginBottom: 4,
+    textAlign: 'center',
   },
   uploadSubtitle: {
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: THEME.typography.fontFamily.body,
-    color: THEME.colors.textSecondary,
-    marginBottom: 2,
+    color: '#6B7280',
+    textAlign: 'center',
   },
   uploadMeta: {
     fontSize: 9,
@@ -515,16 +525,15 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: THEME.colors.divider,
-    marginTop: 6,
-    marginBottom: 10,
+    marginTop: 8,
+    marginBottom: 12,
     width: '100%',
   },
   buttonRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginHorizontal: 12,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   primaryButton: {
     flex: 1,
@@ -541,20 +550,20 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: THEME.colors.white,
     fontSize: 15,
-    fontFamily: THEME.typography.fontFamily.display,
+    fontFamily: THEME.typography.fontFamily.secondaryBold,
     letterSpacing: THEME.typography.tracking.tight,
   },
   secondaryButton: {
     flex: 1,
     alignItems: 'center',
-    backgroundColor: THEME.colors.canvas,
+    backgroundColor: '#ECECEC',
     borderRadius: THEME.roundness.pill,
     height: 48,
     justifyContent: 'center',
   },
   secondaryButtonText: {
     color: THEME.colors.ink,
-    fontSize: 14,
-    fontFamily: THEME.typography.fontFamily.display,
+    fontSize: 15,
+    fontFamily: THEME.typography.fontFamily.secondaryBold,
   },
 });
