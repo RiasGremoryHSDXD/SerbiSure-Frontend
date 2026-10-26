@@ -57,6 +57,7 @@ export const UI_MESSAGES = {
   'My Jobs & Contracts': ['Mga Trabaho at Kontrata Ko', 'Akong mga Trabaho ug Kontrata'],
   'My Bookings & Hires': ['Mga Booking at Kinuha Kong Kasambahay', 'Akong mga Booking ug Gikuha nga Kasambahay'],
   'Social Links & Contacts': ['Social Media at mga Contact', 'Social Media ug mga Kontak'],
+  'Tags & Socials': ['Mga Tag at Socials', 'Mga Tag ug Socials'],
   'Show Contact Number': ['Ipakita ang Numero ng Telepono', 'Ipakita ang Numero sa Telepono'],
   'Under Review': ['Sinusuri', 'Gisusi'],
   'Verified': ['Beripikado', 'Napamatud-an'],
@@ -456,6 +457,8 @@ export const UI_MESSAGES = {
   'Minimum: ₱': ['Minimum: ₱', 'Minimum: ₱'],
   'Minimum pay unavailable · Retry': ['Hindi makuha ang minimum na sahod · Subukan Muli', 'Dili makuha ang minimum nga sweldo · Sulayi Pag-usab'],
   'This job position has already been acquired.': ['May nakakuha na ng trabahong ito.', 'Adunay nakakuha na niini nga trabaho.'],
+  'Job filled': ['May kumuha na', 'Adunay mikuha na'],
+  'Offer': ['Alok', 'Tanyag'],
   'Booking Offer Declined': ['Tinanggihan ang Alok na Booking', 'Gibalibaran ang Tanyag nga Booking'],
   'Booking Confirmed': ['Kumpirmado na ang Booking', 'Nakumpirma na ang Booking'],
   'Long-term engagement terms': ['Mga Tuntunin ng Pangmatagalang Kasunduan', 'Mga Kondisyon sa Dugay nga Kasabotan'],
@@ -906,8 +909,23 @@ const DAYS = {
 
 // Use explicit Cebuano names: Android Intl may silently fall back to English.
 export function formatLocalizedDate(language: AppLanguage, value: Date | string, style: 'greeting' | 'monthYear' | 'full' | 'compact' = 'full'): string {
-  const date = typeof value === 'string' ? new Date(value) : value;
-  if (Number.isNaN(date.getTime())) return '';
+  if (!value) return '';
+  let date: Date;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const mmddyyyy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+    const yyyymmdd = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(trimmed);
+    if (mmddyyyy) {
+      date = new Date(Number(mmddyyyy[3]), Number(mmddyyyy[1]) - 1, Number(mmddyyyy[2]));
+    } else if (yyyymmdd) {
+      date = new Date(Number(yyyymmdd[1]), Number(yyyymmdd[2]) - 1, Number(yyyymmdd[3]));
+    } else {
+      date = new Date(trimmed);
+    }
+  } else {
+    date = value;
+  }
+  if (!date || Number.isNaN(date.getTime())) return '';
   const key = language === 'Cebuano' ? 'Bisaya' : language;
   const month = MONTHS[key][date.getMonth()];
   const shortMonth = MONTHS_SHORT[key][date.getMonth()];
