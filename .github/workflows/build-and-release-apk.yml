@@ -92,22 +92,22 @@ jobs:
           OUTPUT_DIR="dist/apks"
           mkdir -p "$OUTPUT_DIR"
 
-          # Copy and rename for clear branding and architecture identification
+          # Standard Developer Pattern:
+          # 1. SerbiSure-vX.Y.Z.apk        -> Universal (works on any Android device without thinking)
+          # 2. SerbiSure-vX.Y.Z-arm64.apk  -> Slim build (for 99% of modern 64-bit smartphones)
+          # 3. SerbiSure-vX.Y.Z-arm32.apk  -> Legacy build (for older 32-bit budget devices)
+          if [ -f "$RELEASE_DIR/app-universal-release.apk" ]; then
+            cp "$RELEASE_DIR/app-universal-release.apk" "$OUTPUT_DIR/SerbiSure-v${APP_VERSION}.apk"
+          elif [ -f "$RELEASE_DIR/app-release.apk" ]; then
+            cp "$RELEASE_DIR/app-release.apk" "$OUTPUT_DIR/SerbiSure-v${APP_VERSION}.apk"
+          fi
+
           if [ -f "$RELEASE_DIR/app-arm64-v8a-release.apk" ]; then
-            cp "$RELEASE_DIR/app-arm64-v8a-release.apk" "$OUTPUT_DIR/SerbiSure-v${APP_VERSION}-arm64-v8a.apk"
+            cp "$RELEASE_DIR/app-arm64-v8a-release.apk" "$OUTPUT_DIR/SerbiSure-v${APP_VERSION}-arm64.apk"
           fi
 
           if [ -f "$RELEASE_DIR/app-armeabi-v7a-release.apk" ]; then
-            cp "$RELEASE_DIR/app-armeabi-v7a-release.apk" "$OUTPUT_DIR/SerbiSure-v${APP_VERSION}-armeabi-v7a.apk"
-          fi
-
-          if [ -f "$RELEASE_DIR/app-universal-release.apk" ]; then
-            cp "$RELEASE_DIR/app-universal-release.apk" "$OUTPUT_DIR/SerbiSure-v${APP_VERSION}-universal.apk"
-          fi
-
-          # Fallback if standard release APK was built without splits
-          if [ -f "$RELEASE_DIR/app-release.apk" ]; then
-            cp "$RELEASE_DIR/app-release.apk" "$OUTPUT_DIR/SerbiSure-v${APP_VERSION}.apk"
+            cp "$RELEASE_DIR/app-armeabi-v7a-release.apk" "$OUTPUT_DIR/SerbiSure-v${APP_VERSION}-arm32.apk"
           fi
 
           echo "Generated APK files:"
@@ -125,7 +125,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          name: SerbiSure Release ${{ env.RELEASE_TAG }}
+          name: SerbiSure ${{ env.RELEASE_TAG }}
+          body: |
+            ### 📱 Which APK should I install?
+            * **`SerbiSure-v${{ env.APP_VERSION }}.apk`** *(Recommended)* — Universal build. Works on **all Android devices**.
+            * **`SerbiSure-v${{ env.APP_VERSION }}-arm64.apk`** — Lightweight (~37 MB) build for modern 64-bit Android smartphones.
+            * **`SerbiSure-v${{ env.APP_VERSION }}-arm32.apk`** — Legacy build for older 32-bit devices.
           generate_release_notes: true
           draft: false
           prerelease: ${{ github.event.inputs.prerelease == 'true' }}
