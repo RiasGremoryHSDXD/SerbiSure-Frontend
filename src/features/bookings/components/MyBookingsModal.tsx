@@ -6,14 +6,21 @@ import { getBookingCounterparty, isBookingPoster } from '../bookingParticipants'
 import { useUser } from '../../auth/session/UserContext';
 import { ContractDownloadCard } from './ContractDownloadCard';
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, Pressable, Modal, ActivityIndicator, Alert, ScrollView, RefreshControl, Image } from 'react-native';
+import { StyleSheet, Text, View, Pressable, Modal, ActivityIndicator, Alert, ScrollView, RefreshControl, Image, Animated, PanResponder, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { BookingItem, formatBookingAddress, fetchMyBookings, fetchMyAssignedBookings, startBooking, completeBooking, fetchBookingPenaltyStatus, type BookingPenaltyStatus } from '../api/bookingApi';
 import { CancelBookingModal } from './CancelBookingModal';
 import { ReviewModal } from '../../reviews/components/ReviewModal';
 import { ProposalsModal } from './ProposalsModal';
+import { BookingModal } from './BookingModal';
 import { UserProfileModal } from '../../profile/components/UserProfileModal';
+import { BottomSheetHandle } from '../../../shared/components/BottomSheetHandle';
+import THEME from '../../../shared/theme/theme';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const SNAP_EXPANDED = 0;
+const SNAP_DISMISSED = SCREEN_HEIGHT;
 
 export interface MyBookingsModalProps {
   visible: boolean;
@@ -45,6 +52,34 @@ export function MyBookingsModal({
   const insets = useSafeAreaInsets();
   const { user, updateUser } = useUser();
   const [penalty, setPenalty] = useState<BookingPenaltyStatus | null>(null);
+  const [showPenaltyBanner, setShowPenaltyBanner] = useState<boolean>(true);
+  const penaltyOpacity = useRef(new Animated.Value(1)).current;
+  const penaltyTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const dismissPenaltyBanner = () => {
+    if (penaltyTimerRef.current) clearTimeout(penaltyTimerRef.current);
+    Animated.timing(penaltyOpacity, {
+      toValue: 0,
+      duration: 350,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowPenaltyBanner(false);
+    });
+  };
+
+  useEffect(() => {
+    if (visible && penalty && penalty.penalty_points > 0) {
+      setShowPenaltyBanner(true);
+      penaltyOpacity.setValue(1);
+      if (penaltyTimerRef.current) clearTimeout(penaltyTimerRef.current);
+      penaltyTimerRef.current = setTimeout(() => {
+        dismissPenaltyBanner();
+      }, 5000);
+    }
+    return () => {
+      if (penaltyTimerRef.current) clearTimeout(penaltyTimerRef.current);
+    };
+  }, [visible, penalty?.penalty_points]);
 
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [bookings, setBookings] = useState<BookingItem[]>([]);
@@ -79,6 +114,9 @@ export function MyBookingsModal({
     avatar?: string;
     role?: string;
   } | null>(null);
+
+  // Booking Details Modal State
+  const [selectedBookingForDetails, setSelectedBookingForDetails] = useState<BookingItem | null>(null);
 
   const loadData = async (isPullToRefresh = false) => {
     if (!token) { setLoading(false); setRefreshing(false); setErrorMessage('Sign in to view your bookings.'); return; }
@@ -206,37 +244,208 @@ export function MyBookingsModal({
   const getStatusBadgeStyle = (status: string) => {
     switch (status) {
       case 'Accepted':
-        return { bg: '#EFF6FF', text: '#2563EB', border: '#BFDBFE' };
+      case 'Confirmed':
+        return { bg: '#00B13B', text: '#FFFFFF', border: '#0D0D11' };
       case 'InProgress':
-        return { bg: '#FFF7ED', text: '#EA580C', border: '#FED7AA' };
+        return { bg: '#FFB380', text: '#0D0D11', border: '#0D0D11' };
       case 'Completed':
-        return { bg: '#ECFDF5', text: '#059669', border: '#A7F3D0' };
+        return { bg: '#00B13B', text: '#FFFFFF', border: '#0D0D11' };
       case 'Cancelled':
-        return { bg: '#FEF2F2', text: '#DC2626', border: '#FECACA' };
+      case 'Declined':
+        return { bg: '#FF3E3E', text: '#FFFFFF', border: '#0D0D11' };
       default:
-        return { bg: '#FFFBEB', text: '#D97706', border: '#FDE68A' };
+        return { bg: '#F6F5F2', text: '#0D0D11', border: '#0D0D11' };
     }
   };
 
-  return (
-    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
-          <Pressable onPress={onClose} style={styles.backBtn} hitSlop={12}>
-            <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
-          </Pressable>
-          <Text style={styles.headerTitle}>
-            {uiText(accountType === 'Kasambahay' ? 'My Jobs & Contracts' : 'My Bookings & Hires')}
-          </Text>
-          <View style={{ width: 40 }} />
-        </View>
+  const panY = useRef(new Animated.Value(SNAP_EXPANDED)).current;
+  const currentTranslateY = useRef(SNAP_EXPANDED);
+  const gestureStartY = useRef(SNAP_EXPANDED);
+  const isClosingRef = useRef(false);
+  const scrollOffset = useRef(0);
 
-        {penalty && penalty.penalty_points > 0 && <View style={{ paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#FFF7ED' }}>
-          <Text style={{ color: '#9A3412', fontSize: 13, lineHeight: 19 }}>
-            {penalty.penalty_points}/3 penalty points this month. {penalty.is_restricted ? 'Booking and posting are restricted until the 1st of next month.' : 'Points reset on the 1st of next month.'}
-          </Text>
-        </View>}
+  useEffect(() => {
+    const id = panY.addListener(({ value }) => {
+      currentTranslateY.current = value;
+    });
+    return () => {
+      panY.removeListener(id);
+    };
+  }, [panY]);
+
+  const snapTo = (toValue: number, onComplete?: () => void) => {
+    currentTranslateY.current = toValue;
+    Animated.spring(panY, {
+      toValue,
+      damping: 24,
+      stiffness: 260,
+      mass: 0.8,
+      overshootClamping: true,
+      useNativeDriver: true,
+    }).start(onComplete);
+  };
+
+  const handleClose = () => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+    setSelectedBookingForDetails(null);
+    Animated.timing(panY, {
+      toValue: SNAP_DISMISSED,
+      duration: 220,
+      useNativeDriver: true,
+    }).start(() => {
+      onClose();
+      isClosingRef.current = false;
+      currentTranslateY.current = SNAP_EXPANDED;
+    });
+  };
+
+  useEffect(() => {
+    setSelectedBookingForDetails(null);
+    if (visible) {
+      isClosingRef.current = false;
+      currentTranslateY.current = SNAP_EXPANDED;
+      panY.setValue(SNAP_DISMISSED);
+      Animated.spring(panY, {
+        toValue: SNAP_EXPANDED,
+        damping: 24,
+        stiffness: 260,
+        mass: 0.8,
+        overshootClamping: true,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible, panY]);
+
+  const handleRelease = (gestureState: { dy: number; vy: number }) => {
+    const { dy, vy } = gestureState;
+    const currentY = currentTranslateY.current;
+
+    if (dy > 70 || vy > 0.4 || currentY > 110) {
+      handleClose();
+    } else {
+      snapTo(SNAP_EXPANDED);
+    }
+  };
+
+  const headerPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 3 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 3 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onPanResponderGrant: () => {
+        gestureStartY.current = currentTranslateY.current;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const rawY = gestureStartY.current + gestureState.dy;
+        const targetY = Math.max(SNAP_EXPANDED, rawY);
+        panY.setValue(targetY);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        handleRelease(gestureState);
+      },
+      onPanResponderTerminate: (_, gestureState) => {
+        handleRelease(gestureState);
+      },
+    })
+  ).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        const isVertical = Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+        return isVertical && gestureState.dy > 3 && scrollOffset.current <= 5;
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        const isVertical = Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+        if (!isVertical || Math.abs(gestureState.dy) < 3) return false;
+        if (gestureState.dy > 0 && scrollOffset.current <= 5) {
+          return true;
+        }
+        return false;
+      },
+      onPanResponderGrant: () => {
+        gestureStartY.current = currentTranslateY.current;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const rawY = gestureStartY.current + gestureState.dy;
+        const targetY = Math.max(SNAP_EXPANDED, rawY);
+        panY.setValue(targetY);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        handleRelease(gestureState);
+      },
+      onPanResponderTerminate: (_, gestureState) => {
+        handleRelease(gestureState);
+      },
+    })
+  ).current;
+
+  const backdropOpacity = panY.interpolate({
+    inputRange: [SNAP_EXPANDED, SNAP_DISMISSED],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
+  return (
+    <>
+      <Modal visible={visible && !selectedBookingForDetails} animationType="none" transparent={true} onRequestClose={handleClose}>
+      <View style={styles.modalOverlay}>
+        <Animated.View style={[styles.modalBackdrop, { opacity: backdropOpacity }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+        </Animated.View>
+        <Animated.View
+          style={[
+            styles.sheetContainer,
+            {
+              paddingBottom: Math.max(insets.bottom, 16),
+              transform: [{ translateY: panY }],
+            },
+          ]}
+          {...panResponder.panHandlers}
+        >
+          {/* Swipable Header Area */}
+          <View {...headerPanResponder.panHandlers}>
+            {/* Sheet Handle */}
+            <BottomSheetHandle onPress={handleClose} />
+
+            {/* Title */}
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>
+                {uiText(accountType === 'Kasambahay' ? 'My Jobs & Contracts' : 'My Bookings & Hires')}
+              </Text>
+            </View>
+          </View>
+
+        {penalty && penalty.penalty_points > 0 && showPenaltyBanner && (
+          <Animated.View style={[styles.penaltyBanner, { opacity: penaltyOpacity }]}>
+            <View style={styles.penaltyIconWrap}>
+              <Ionicons name="alert-circle" size={17} color="#EA580C" />
+            </View>
+            <Text style={styles.penaltyText}>
+              <Text style={styles.penaltyTextBold}>{penalty.penalty_points}/3 {uiText("penalty points this month.")} </Text>
+              {penalty.is_restricted
+                ? uiText("Booking and posting are restricted until the 1st of next month.")
+                : uiText("Points reset on the 1st of next month.")}
+            </Text>
+            <Pressable
+              onPress={dismissPenaltyBanner}
+              hitSlop={12}
+              style={styles.penaltyCloseBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss penalty alert"
+            >
+              <Ionicons name="close" size={16} color="#727272" />
+            </Pressable>
+          </Animated.View>
+        )}
 
         {/* Mandatory Quality Feedback Banner for Completed Bookings */}
         {(() => {
@@ -292,6 +501,10 @@ export function MyBookingsModal({
           style={styles.scrollBody}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          onScroll={(e) => {
+            scrollOffset.current = e.nativeEvent.contentOffset.y;
+          }}
+          scrollEventThrottle={16}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -321,195 +534,154 @@ export function MyBookingsModal({
           ) : bookings.length > 0 ? (
             bookings.map((booking) => {
               const counterparty = getBookingCounterparty(booking, user.id);
-              const statusStyle = getStatusBadgeStyle(booking.booking_status);
-              const categories = Array.isArray(booking.service_category)
-                ? booking.service_category
-                : [booking.service_category];
-              const startDate = booking.start_time ? formatDate(booking.start_time, 'compact') : '';
-              const safeStartDate = startDate || uiText('Date unavailable');
-              const endDate = booking.end_time ? formatDate(booking.end_time, 'compact') : '';
-              const safeEndDate = endDate || (booking.booking_type === 'long_term'
-                ? uiText('No end date')
-                : startDate ? uiText('Same day') : uiText('Date unavailable'));
+              const partnerInfo = counterparty || (booking.poster?.id !== user.id ? booking.poster : null);
+              const displayName = partnerInfo?.name || uiText("Waiting for Kasambahay");
+              const displayRole = partnerInfo?.account_type || uiText("Kasambahay");
+              const displayRating = (partnerInfo?.rating && partnerInfo.rating > 0)
+                ? `${partnerInfo.rating} Rating`
+                : '3.7 Rating';
+              const avatarUri = partnerInfo?.profile_link ||
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=FFB380&color=fff`;
+
+              const categoryName = (
+                Array.isArray(booking.service_category)
+                  ? booking.service_category[0]
+                  : booking.service_category
+              ) || 'Cleaning';
+              const formattedCategory = categoryName.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+
+              const durationLabel = booking.booking_type === 'long_term' ? 'Long-term' : 'Short-term';
+              const setupRaw = booking.work_setup || (booking.booking_type === 'short_term' ? 'stay_out' : 'stay_in');
+              const setupLabel = workSetupLabel(setupRaw);
+              const combinedTerms = `${durationLabel} · ${setupLabel}`;
+
+              const canStart = booking.booking_status === 'Accepted' || (booking.booking_status === 'InProgress' && !booking.started_at);
+              const canComplete = booking.booking_status === 'InProgress' && !!booking.started_at;
+              const isCompleted = booking.booking_status === 'Completed';
+              const canCancel = ['Pending', 'Accepted', 'InProgress'].includes(booking.booking_status);
 
               return (
                 <View key={booking.booking_id} style={styles.card}>
-                  {/* Card Top Row */}
-                  <View style={styles.cardHeaderRow}>
-                    <View style={styles.categoriesPillGroup}>
-                      {categories.map((cat, idx) => (
-                        <View key={`${cat}-${idx}`} style={styles.categoryPill}>
-                          <Text style={styles.categoryPillText}>{cat}</Text>
+                  {/* Top Row: Avatar, Name, Category Badge, Role & Rating */}
+                  <Pressable
+                    style={styles.cardHeaderRow}
+                    onPress={() => {
+                      if (partnerInfo) {
+                        setProfileTarget({
+                          id: partnerInfo.id,
+                          name: partnerInfo.name,
+                          avatar: partnerInfo.profile_link || undefined,
+                          role: partnerInfo.account_type,
+                        });
+                      }
+                    }}
+                  >
+                    <Image
+                      source={{ uri: avatarUri }}
+                      style={styles.cardAvatar}
+                    />
+                    <View style={styles.cardHeaderTextCol}>
+                      <View style={styles.cardHeaderTopLine}>
+                        <Text style={styles.cardPartnerName} numberOfLines={1}>{displayName}</Text>
+                        <View style={styles.categoryBadge}>
+                          <Text style={styles.categoryBadgeText}>{formattedCategory}</Text>
                         </View>
-                      ))}
+                      </View>
+                      <View style={styles.cardSubRow}>
+                        <Text style={styles.cardRoleText}>{displayRole}</Text>
+                        <Ionicons name="star-outline" size={13.5} color="#FFB380" style={styles.starIcon} />
+                        <Text style={styles.cardRatingText}>{displayRating}</Text>
+                      </View>
                     </View>
+                  </Pressable>
 
-                    <View
-                      style={[
-                        styles.statusPill,
-                        { backgroundColor: statusStyle.bg, borderColor: statusStyle.border },
-                      ]}
-                    >
-                      <Text style={[styles.statusPillText, { color: statusStyle.text }]}>
-                        {booking.booking_status}
+                  {/* Middle Row: Rate & Combined Terms Badge */}
+                  <View style={styles.cardMiddleRow}>
+                    <View style={styles.rateContainer}>
+                      <Text style={styles.rateAmount}>₱{String(booking.rate_amount).replace(/\.00$/, '')}</Text>
+                      <Text style={styles.ratePeriod}>
+                        / {booking.rate_period || (booking.booking_type === 'long_term' ? 'month' : 'day')}
+                      </Text>
+                    </View>
+                    <View style={styles.combinedTermsPill}>
+                      <Text style={styles.combinedTermsPillText}>
+                        {combinedTerms}
                       </Text>
                     </View>
                   </View>
 
-                  {/* Daily Rate & Type */}
-                  <View style={styles.rateRow}>
-                    <Text style={styles.rateValue}>₱{booking.rate_amount}</Text>
-                    <Text style={styles.rateUnit}>
-                      / {booking.rate_period} · {booking.booking_type === 'long_term' ? uiText("Long-term") : uiText("Short-term")} · {workSetupLabel(booking.work_setup)}
-                    </Text>
-                  </View>
-
-                  {booking.rate_needs_review ? <Text style={{ color: '#B45309', marginBottom: 8 }}>{uiText("Legacy rate: the monthly amount needs confirmation.")}</Text> : null}
-                  {booking.contract_summary ? <ContractDownloadCard summary={booking.contract_summary} /> : null}
-
-                  {/* Address */}
-                  <View style={styles.infoRow}>
-                    <Ionicons name="location-outline" size={14} color="#6B7280" />
-                    <Text style={styles.infoText} numberOfLines={1}>
-                      {formatBookingAddress(booking)}
-                    </Text>
-                  </View>
-
-                  {/* Date/Time */}
-                  <View style={styles.infoRow}>
-                    <Ionicons name="calendar-outline" size={14} color="#6B7280" />
-                    <Text style={styles.infoText}>
-                      {uiText("Start:")} {safeStartDate}
-                    </Text>
-                  </View>
-                  <View style={styles.infoRow}>
-                    <Ionicons name="calendar-outline" size={14} color="#6B7280" />
-                    <Text style={styles.infoText}>{uiText('Ends')}: {safeEndDate}</Text>
-                  </View>
-
-                  {/* Special Instruction preview */}
-                  {booking.special_instruction ? (
-                    <Text style={styles.instructionPreview} numberOfLines={2}>
-                      "{booking.special_instruction}"
+                  {booking.rate_needs_review ? (
+                    <Text style={{ color: '#B45309', marginBottom: 8, fontSize: 12 }}>
+                      {uiText("Legacy rate: the monthly amount needs confirmation.")}
                     </Text>
                   ) : null}
-
-                  {/* Counterparty Mini Profile Card */}
-                  {counterparty ? (
-                    <Pressable
-                      style={styles.partnerRow}
-                      onPress={() =>
-                        setProfileTarget({
-                          id: counterparty.id,
-                          name: counterparty.name,
-                          avatar: counterparty.profile_link || undefined,
-                          role: counterparty.account_type,
-                        })
-                      }
-                    >
-                      <Image
-                        source={{
-                          uri:
-                            counterparty.profile_link ||
-                            `https://ui-avatars.com/api/?name=${encodeURIComponent(counterparty.name)}&background=FFB43B&color=fff`,
-                        }}
-                        style={styles.partnerAvatar}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.partnerName}>{counterparty.name}</Text>
-                        <Text style={styles.partnerRole}>
-                          {counterparty.account_type} · ⭐ {counterparty.rating > 0 ? counterparty.rating : 'Unrated'}
-                        </Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
-                    </Pressable>
-                  ) : (
-                    <View style={styles.waitingAssignmentBox}>
-                      <Ionicons name="hourglass-outline" size={16} color="#D97706" />
-                      <Text style={styles.waitingAssignmentText}>
-                        {uiText("Waiting for worker assignment / acceptance")}</Text>
-                    </View>
-                  )}
-
-
+                  {booking.contract_summary ? <ContractDownloadCard summary={booking.contract_summary} /> : null}
 
                   {/* Action Buttons Row */}
                   <View style={styles.actionRow}>
-                    {/* Proposals view button */}
+                    {/* Details button */}
                     <Pressable
-                      style={styles.actionBtnOutline}
-                      onPress={() =>
-                        setProposalsTarget({
-                          id: booking.booking_id,
-                          isPoster: isBookingPoster(booking, user.id),
-                          currentRate: booking.rate_amount,
-                          ratePeriod: booking.rate_period,
-                          rateNeedsReview: booking.rate_needs_review,
-                        })
-                      }
+                      style={styles.detailsBtn}
+                      onPress={() => setSelectedBookingForDetails(booking)}
                     >
-                      <Ionicons name="pricetag-outline" size={14} color="#4B5563" style={{ marginRight: 4 }} />
-                      <Text style={styles.actionBtnOutlineText}>
-                        {uiText("Offers")}{booking.proposals_count ? ` (${booking.proposals_count})` : ''}
-                      </Text>
+                      <Text style={styles.detailsBtnText}>{uiText("Details")}</Text>
                     </Pressable>
 
-                    {/* Status-specific triggers */}
-                    {(booking.booking_status === 'Accepted' || (booking.booking_status === 'InProgress' && !booking.started_at)) && (
+                    {/* Middle button: Start Job / Complete / Leave Review */}
+                    {canStart && (
                       <Pressable
-                        style={styles.actionBtnPrimary}
+                        style={styles.startJobBtn}
                         disabled={actionInProgress}
                         onPress={() => handleStart(booking.booking_id)}
                       >
-                        <Text style={styles.actionBtnPrimaryText}>{uiText("Start Job")}</Text>
+                        <Text style={styles.startJobBtnText}>{uiText("Start Job")}</Text>
                       </Pressable>
                     )}
 
-                    {booking.booking_status === 'InProgress' && !!booking.started_at && (
+                    {canComplete && (
                       <Pressable
-                        style={[styles.actionBtnPrimary, { backgroundColor: '#10B981' }]}
+                        style={[styles.startJobBtn, { backgroundColor: '#00B13B' }]}
                         disabled={actionInProgress}
                         onPress={() => handleComplete(booking.booking_id)}
                       >
-                        <Text style={styles.actionBtnPrimaryText}>{uiText("Complete")}</Text>
+                        <Text style={styles.startJobBtnText}>{uiText("Complete")}</Text>
                       </Pressable>
                     )}
 
-                    {booking.booking_status === 'Completed' && (
+                    {isCompleted && (
                       <Pressable
                         style={[
-                          styles.actionBtnPrimary,
-                          booking.has_reviewed && { backgroundColor: '#E5E7EB' },
+                          styles.startJobBtn,
+                          booking.has_reviewed && { backgroundColor: '#EAEAEA' },
                         ]}
                         disabled={booking.has_reviewed || actionInProgress}
                         onPress={() => {
-                          const targetName = counterparty ? counterparty.name : 'Partner';
+                          const targetName = partnerInfo ? partnerInfo.name : 'Partner';
                           setReviewBooking({
                             id: booking.booking_id,
                             revieweeName: targetName,
                           });
                         }}
                       >
-                        <Ionicons
-                          name={booking.has_reviewed ? 'checkmark-circle' : 'star'}
-                          size={14}
-                          color={booking.has_reviewed ? '#6B7280' : '#FFFFFF'}
-                          style={{ marginRight: 4 }}
-                        />
                         <Text
                           style={[
-                            styles.actionBtnPrimaryText,
+                            styles.startJobBtnText,
                             booking.has_reviewed && { color: '#6B7280' },
                           ]}
                         >
-                          {booking.has_reviewed ? 'Reviewed' : 'Leave Review'}
+                          {booking.has_reviewed ? uiText("Reviewed") : uiText("Leave Review")}
                         </Text>
                       </Pressable>
                     )}
 
-                    {['Pending', 'Accepted', 'InProgress'].includes(booking.booking_status) && (
-                      <Pressable style={styles.actionBtnDanger} disabled={actionInProgress} onPress={() => handleCancel(booking.booking_id)}>
-                        <Text style={styles.actionBtnDangerText}>{uiText("Cancel")}</Text>
+                    {/* Cancel button */}
+                    {canCancel && (
+                      <Pressable
+                        style={styles.cancelBtn}
+                        disabled={actionInProgress}
+                        onPress={() => handleCancel(booking.booking_id)}
+                      >
+                        <Text style={styles.cancelBtnText}>{uiText("Cancel")}</Text>
                       </Pressable>
                     )}
                   </View>
@@ -528,8 +700,8 @@ export function MyBookingsModal({
                         ? 'checkmark-done-circle-outline'
                         : 'close-circle-outline'
                 }
-                size={44}
-                color="#9CA3AF"
+                size={52}
+                color="#0D0D11"
               />
               <Text style={styles.emptyTitle}>
                 {activeTab === 'active'
@@ -597,65 +769,123 @@ export function MyBookingsModal({
             prefilledRole={profileTarget.role}
           />
         )}
+
+        </Animated.View>
       </View>
     </Modal>
+
+    {selectedBookingForDetails && (
+      <BookingModal
+        visible={!!selectedBookingForDetails}
+        useNativeModal={true}
+        onClose={() => setSelectedBookingForDetails(null)}
+        contactName={
+          getBookingCounterparty(selectedBookingForDetails, user.id)?.name ||
+          selectedBookingForDetails.poster?.name ||
+          'Kasambahay'
+        }
+        contactRole={
+          getBookingCounterparty(selectedBookingForDetails, user.id)?.account_type ||
+          selectedBookingForDetails.poster?.account_type ||
+          'Kasambahay'
+        }
+        contactAvatar={
+          getBookingCounterparty(selectedBookingForDetails, user.id)?.profile_link ||
+          selectedBookingForDetails.poster?.profile_link ||
+          undefined
+        }
+        readOnly={true}
+        bookingType={selectedBookingForDetails.booking_type}
+        bookingId={selectedBookingForDetails.booking_id}
+        isConfirmed={['Accepted', 'InProgress', 'Completed'].includes(selectedBookingForDetails.booking_status)}
+        isDeclined={selectedBookingForDetails.booking_status === 'Cancelled'}
+        initialDetails={{
+          serviceCategory: Array.isArray(selectedBookingForDetails.service_category)
+            ? selectedBookingForDetails.service_category
+            : [selectedBookingForDetails.service_category || 'Cleaning'],
+          workSetup: selectedBookingForDetails.work_setup || (selectedBookingForDetails.booking_type === 'short_term' ? 'stay_out' : 'stay_in'),
+          region: selectedBookingForDetails.region || 'Northern Mindanao',
+          startDate: selectedBookingForDetails.start_time || '',
+          endDate: selectedBookingForDetails.end_time || selectedBookingForDetails.start_time || '',
+          workHours: (selectedBookingForDetails.daily_start_time && selectedBookingForDetails.daily_end_time)
+            ? `${selectedBookingForDetails.daily_start_time} - ${selectedBookingForDetails.daily_end_time}`
+            : '08:00 AM - 12:00 PM',
+          location: formatBookingAddress(selectedBookingForDetails),
+          days: selectedBookingForDetails.work_days && selectedBookingForDetails.work_days.length > 0 ? selectedBookingForDetails.work_days : ['Mon'],
+          salary: selectedBookingForDetails.rate_amount || '600',
+          bookingType: selectedBookingForDetails.booking_type,
+          bookingId: selectedBookingForDetails.booking_id,
+          id: selectedBookingForDetails.booking_id,
+        }}
+        token={token}
+      />
+    )}
+  </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  modalOverlay: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    justifyContent: 'flex-end',
   },
-  header: {
-    flexDirection: 'row',
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+  },
+  sheetContainer: {
+    height: '90%',
+    backgroundColor: '#F6F5F2',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    overflow: 'hidden',
+  },
+  sheetHandleWrap: {
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E7EB',
+    paddingTop: 10,
+    paddingBottom: 8,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+  sheetHandle: {
+    width: 42,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
   },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#1A1A1A',
+  sheetHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 6,
+    paddingBottom: 14,
+  },
+  sheetTitle: {
+    fontSize: 24,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: '#0D0D11',
   },
   tabsRow: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    gap: 8,
   },
   tabItem: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingVertical: 9,
+    borderRadius: THEME.roundness.pill,
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    backgroundColor: '#EAEAEA',
   },
   tabItemActive: {
-    backgroundColor: '#FFB43B',
+    backgroundColor: '#FFB380',
   },
   tabText: {
     fontSize: 12.5,
-    fontWeight: '600',
-    color: '#4B5563',
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
+    color: '#0D0D11',
   },
   tabTextActive: {
     color: '#FFFFFF',
-    fontWeight: '700',
+    fontFamily: THEME.typography.fontFamily.secondaryBold,
   },
   scrollBody: {
     flex: 1,
@@ -666,180 +896,150 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 18,
+    marginBottom: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 1,
+    borderWidth: 0,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 14,
   },
-  categoriesPillGroup: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
+  cardAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 12,
+    backgroundColor: '#EAEAEA',
+  },
+  cardHeaderTextCol: {
     flex: 1,
   },
-  categoryPill: {
-    backgroundColor: '#FFF8EC',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#FFE2B8',
+  cardHeaderTopLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 3,
   },
-  categoryPillText: {
-    fontSize: 11,
+  cardPartnerName: {
+    fontSize: 17,
     fontWeight: '700',
-    color: '#D97706',
+    color: '#0D0D11',
+    flex: 1,
+    marginRight: 8,
   },
-  statusPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
+  categoryBadge: {
+    backgroundColor: '#FFB380',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
   },
-  statusPillText: {
-    fontSize: 11,
+  categoryBadgeText: {
+    fontSize: 12,
     fontWeight: '700',
+    color: '#0D0D11',
   },
-  rateRow: {
+  cardSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cardRoleText: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  starIcon: {
+    marginHorizontal: 5,
+  },
+  cardRatingText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0D0D11',
+  },
+  cardMiddleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  rateContainer: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginBottom: 10,
   },
-  rateValue: {
-    fontSize: 20,
+  rateAmount: {
+    fontSize: 24,
     fontWeight: '800',
-    color: '#1A1A1A',
-    marginRight: 4,
+    color: '#0D0D11',
   },
-  rateUnit: {
-    fontSize: 13,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
-  },
-  infoText: {
-    fontSize: 13,
-    color: '#4B5563',
-    flex: 1,
-  },
-  instructionPreview: {
-    fontSize: 12,
-    fontStyle: 'italic',
-    color: '#6B7280',
-    backgroundColor: '#F9FAFB',
-    padding: 8,
-    borderRadius: 8,
-    marginTop: 6,
-    marginBottom: 8,
-  },
-  partnerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    padding: 10,
-    borderRadius: 12,
-    marginTop: 6,
-    marginBottom: 10,
-  },
-  partnerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 10,
-    backgroundColor: '#E5E7EB',
-  },
-  partnerName: {
+  ratePeriod: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#1A1A1A',
-  },
-  partnerRole: {
-    fontSize: 11,
+    fontWeight: '600',
     color: '#6B7280',
+    marginLeft: 3,
   },
-  waitingAssignmentBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#FFFBEB',
-    padding: 8,
-    borderRadius: 10,
-    marginTop: 6,
-    marginBottom: 10,
+  combinedTermsPill: {
+    backgroundColor: '#EAEAEA',
+    borderRadius: 12,
+    paddingHorizontal: 13,
+    paddingVertical: 6,
   },
-  waitingAssignmentText: {
+  combinedTermsPillText: {
     fontSize: 12,
-    color: '#D97706',
-    fontWeight: '500',
+    fontWeight: '700',
+    color: '#0D0D11',
   },
   actionRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    marginTop: 6,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#F3F4F6',
+    marginTop: 2,
   },
-  actionBtnOutline: {
+  detailsBtn: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#0D0D11',
     justifyContent: 'center',
-    height: 38,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-  },
-  actionBtnOutlineText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#4B5563',
-  },
-  actionBtnPrimary: {
-    flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: '#FFB43B',
   },
-  actionBtnPrimaryText: {
-    fontSize: 12,
+  detailsBtnText: {
+    fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  actionBtnDanger: {
-    paddingHorizontal: 12,
-    alignItems: 'center',
+  startJobBtn: {
+    flex: 1,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#FFB380',
     justifyContent: 'center',
-    height: 38,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    backgroundColor: '#FEF2F2',
+    alignItems: 'center',
   },
-  actionBtnDangerText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#DC2626',
+  startJobBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  cancelBtn: {
+    flex: 1,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#FF3E3E',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   cancelRequestBanner: {
     backgroundColor: '#FEF2F2',
@@ -911,20 +1111,24 @@ const styles = StyleSheet.create({
   emptyCard: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    paddingVertical: 70,
+    paddingHorizontal: 24,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#4B5563',
-    marginTop: 10,
+    fontSize: 18,
+    fontFamily: THEME.typography.fontFamily.display,
+    color: '#0D0D11',
+    marginTop: 16,
+    textAlign: 'center',
   },
   emptySubtitle: {
-    fontSize: 13,
-    color: '#9CA3AF',
+    fontSize: 13.5,
+    fontFamily: THEME.typography.fontFamily.body,
+    color: '#6B7280',
     textAlign: 'center',
-    marginTop: 4,
-    maxWidth: 240,
+    marginTop: 6,
+    lineHeight: 19,
+    maxWidth: 280,
   },
   retryBtn: {
     flexDirection: 'row',
@@ -976,5 +1180,44 @@ const styles = StyleSheet.create({
     color: '#B45309',
     marginTop: 2,
     lineHeight: 15,
+  },
+  penaltyBanner: {
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 12,
+    backgroundColor: '#FFF7ED',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  penaltyIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FFEDD5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  penaltyText: {
+    flex: 1,
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: '#0D0D11',
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
+  },
+  penaltyTextBold: {
+    fontWeight: '700',
+    color: '#0D0D11',
+    fontFamily: THEME.typography.fontFamily.secondaryBold,
+  },
+  penaltyCloseBtn: {
+    padding: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
