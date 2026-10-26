@@ -103,7 +103,7 @@ function mount(t) {
 test('LandingScreen: renders "Welcome back, Daven" view when isLoginView is true and remembered account exists', async t => {
   const native = surfaces();
   const storage = new Map([
-    ['serbisure.remembered_account', JSON.stringify({ firstName: 'Daven', identifier: 'daven@serbisure.com' })],
+    ['serbisure.remembered_account', JSON.stringify({ firstName: 'Maria', identifier: 'maria@serbisure.com' })],
   ]);
   const secureStoreMock = {
     getItemAsync: async key => storage.get(key) || null,
@@ -155,11 +155,11 @@ test('LandingScreen: renders "Welcome back, Daven" view when isLoginView is true
 
   await tick();
 
-  // 1. Should display "Welcome back, Daven"
+  // 1. Should display "Welcome back, Maria"
   const allTexts = screen.all('Text').map(screen.textContent);
   assert.ok(
-    allTexts.some(t => t.includes('Welcome back,') && t.includes('Daven')),
-    'Expected "Welcome back, Daven" to be displayed on screen'
+    allTexts.some(t => t.includes('Welcome back,') && t.includes('Maria')),
+    'Expected "Welcome back, Maria" to be displayed on screen'
   );
 
   // 2. In Welcome Back mode, there should only be ONE password TextInput (no email input)
@@ -184,7 +184,7 @@ test('LandingScreen: renders "Welcome back, Daven" view when isLoginView is true
   assert.equal(switchedInputs[0].props.placeholder, 'Email or phone number');
   assert.equal(switchedInputs[1].props.placeholder, 'Password');
 
-  // "Welcome back, Daven" should NOT be displayed in Switch Account mode
+  // "Welcome back, Maria" should NOT be displayed in Switch Account mode
   const switchedTexts = screen.all('Text').map(screen.textContent);
   assert.ok(
     !switchedTexts.some(t => t.includes('Welcome back,')),
@@ -208,7 +208,7 @@ test('LandingScreen: renders "Welcome back, Daven" view when isLoginView is true
 test('LandingScreen: back button on Welcome Back view also goes back to landing page', async t => {
   const native = surfaces();
   const secureStoreMock = {
-    getItemAsync: async () => JSON.stringify({ firstName: 'Daven', identifier: 'daven@serbisure.com' }),
+    getItemAsync: async () => JSON.stringify({ firstName: 'Maria', identifier: 'maria@serbisure.com' }),
     setItemAsync: async () => {},
     deleteItemAsync: async () => {},
   };
