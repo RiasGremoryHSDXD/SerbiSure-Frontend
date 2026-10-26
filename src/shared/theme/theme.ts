@@ -25,11 +25,11 @@ export const THEME = {
     textLight: '#FFFFFF',
 
     // Status Semantic
-    success: '#10B981',
+    success: '#00B13B',
     successLight: '#E8F8EE',
-    error: '#EF4444',
+    error: '#FF3E3E',
     errorLight: '#FEE2E2',
-    warning: '#F59E0B',
+    warning: '#FFB380',
     warningLight: '#FEF3C7',
 
     // Borderless by default (Zero Hairline Borders)
