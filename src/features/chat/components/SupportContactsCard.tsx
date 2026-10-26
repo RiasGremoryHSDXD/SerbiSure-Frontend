@@ -60,7 +60,7 @@ export function SupportContactsCard({ accountId, token, profileKey, refreshKey, 
       disabled={loading}
       onPress={() => onContact(contact)}
       style={({ pressed }) => [styles.contact, local && styles.divider, pressed && styles.pressed]}>
-      <View style={styles.icon}><Ionicons name={local ? 'business-outline' : 'chatbubble-ellipses-outline'} size={20} color="#A44913" /></View>
+      <View style={styles.icon}><Ionicons name={local ? 'business-outline' : 'chatbubble-ellipses-outline'} size={22} color={THEME.colors.ink} /></View>
       <View style={styles.copy}>
         <Text style={styles.label}>{local ? `${data?.barangay.name} Barangay` : uiText("SerbiSure Support")}</Text>
         {(data?.superadmins.length || 0) > 1 && !local && <Text style={styles.description}>{contact.name}</Text>}
@@ -84,7 +84,7 @@ export function SupportContactsCard({ accountId, token, profileKey, refreshKey, 
         {data.superadmins.length === 0 && <Text style={styles.notice}>{uiText("Support is unavailable. Try again later.")}</Text>}
         {data.barangay.available ? data.barangay.contacts.map(contact => contactButton(contact, true)) : (
           <View style={[styles.contact, styles.divider]} accessibilityLiveRegion="polite">
-            <View style={[styles.icon, styles.iconMuted]}><Ionicons name="business-outline" size={20} color="#71717A" /></View>
+            <View style={[styles.icon, styles.iconMuted]}><Ionicons name="business-outline" size={22} color="#71717A" /></View>
             <View style={styles.copy}>
               <Text style={styles.label}>{data.barangay.name ? `${data.barangay.name} Barangay` : uiText("Your Barangay")}</Text>
               <Text style={styles.description}>{data.superadmins.length > 0 ? uiText("Not available yet. Message support.") : uiText("Not available yet.")}</Text>
@@ -101,8 +101,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 14, color: '#52525B', fontFamily: THEME.typography.fontFamily.display, marginBottom: 2 },
   contact: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 60, paddingVertical: 12 },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E4E4E7' },
-  icon: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#FFF0E5', alignItems: 'center', justifyContent: 'center' },
-  iconMuted: { backgroundColor: '#F4F4F5' },
+  icon: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  iconMuted: {},
   copy: { flex: 1 },
   label: { fontSize: 15, lineHeight: 21, color: THEME.colors.ink, fontFamily: THEME.typography.fontFamily.display },
   description: { marginTop: 2, fontSize: 13, lineHeight: 19, color: '#6B7280' },
