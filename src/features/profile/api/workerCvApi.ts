@@ -4,10 +4,10 @@ import { workerPayload, type WorkerDraft } from '../worker/workerCv';
 
 export interface WorkerCv {
   user_id: string; name: string; location: string; languages: string; profile_image_url: string | null;
-  verification_status: string; contact_number: string | null; generated_at: string; notice: string;
+  verification_status: string; contact_number: string | null; email?: string | null; generated_at: string; notice: string;
   details: Record<string, any>;
   presentation?: {
-    name: string; services: string; location: string; phone: string; verified: boolean;
+    name: string; services: string; location: string; phone: string; email?: string; verified: boolean;
     facts: { label: string; value: string }[];
     sections: { title: string; kind: 'text' | 'chips' | 'pairs'; items: any[] }[];
     trust: string[]; notice: string; generated_date: string;
