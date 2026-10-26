@@ -18,24 +18,63 @@ interface ActivityProps {
 
 export function BrowseActivityCard({ post, applied, closed, onProfile, onDetails, onUnsave, onMessage }: ActivityProps) {
   const { tr: uiText } = useUiLanguage();
-  const tags = [post.roleTag, post.termTag].filter((tag): tag is string => !!tag);
+  const badgeText = post.termTag || post.setupTag;
+
+  const formatPrice = (rawPrice?: string) => {
+    if (!rawPrice) return '₱0';
+    const cleaned = rawPrice.replace(/\.00$/, '').trim();
+    if (cleaned.startsWith('₱')) return cleaned;
+    return `₱${cleaned.replace(/^Php\s*/i, '')}`;
+  };
+
+  const rawUnit = post.unit ? post.unit.replace(/^\//, '').trim() : '';
+  const unitText = rawUnit ? `/ ${rawUnit}` : '';
+
   return (
     <View style={styles.card}>
       <View style={styles.identityRow}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`View ${post.employerName}'s profile`} onPress={onProfile}><ProfileAvatar uri={post.avatar} name={post.employerName} size={48} /></Pressable>
-        <Pressable onPress={onProfile} style={styles.identity}><Text style={styles.name} numberOfLines={2}>{post.employerName}</Text><Text style={styles.location} numberOfLines={1}>{post.location || uiText("Location not provided")}</Text></Pressable>
-        {onUnsave && <Pressable accessibilityRole="button" accessibilityLabel={uiText("Unsave post")} onPress={onUnsave} style={styles.bookmark}><Ionicons name="bookmark" size={22} color={THEME.colors.brandDark} /></Pressable>}
+        <Pressable accessibilityRole="button" accessibilityLabel={`View ${post.employerName}'s profile`} onPress={onProfile}>
+          <ProfileAvatar uri={post.avatar} name={post.employerName} size={48} />
+        </Pressable>
+        <Pressable onPress={onProfile} style={styles.identity}>
+          <Text style={styles.name} numberOfLines={1}>{post.employerName}</Text>
+          <Text style={styles.location} numberOfLines={1}>{post.location || uiText("Location not provided")}</Text>
+        </Pressable>
+        {onUnsave && (
+          <Pressable accessibilityRole="button" accessibilityLabel={uiText("Unsave post")} onPress={onUnsave} style={styles.bookmark}>
+            <Ionicons name="bookmark" size={24} color={THEME.colors.brandDark} />
+          </Pressable>
+        )}
       </View>
-      <Pressable onPress={onDetails} accessibilityRole="button">
-        <Text style={styles.subject} numberOfLines={2}>{post.title || post.roleTag || uiText("Household Service")}</Text>
-      </Pressable>
-      <View style={styles.tags}>{tags.map((tag) => <View key={tag} style={styles.tag}><Text style={styles.tagText}>{uiText(tag)}</Text></View>)}</View>
+
+      <View style={styles.titleRow}>
+        <Pressable onPress={onDetails} accessibilityRole="button" style={styles.subjectWrapper}>
+          <Text style={styles.subject} numberOfLines={1}>{post.title || post.roleTag || uiText("Household Service")}</Text>
+        </Pressable>
+        {badgeText ? (
+          <View style={styles.termBadge}>
+            <Ionicons name="briefcase" size={13} color={THEME.colors.ink} style={styles.termBadgeIcon} />
+            <Text style={styles.termBadgeText}>{uiText(badgeText)}</Text>
+          </View>
+        ) : null}
+      </View>
+
       {applied && <Text style={[styles.status, closed && styles.closed]}>{closed ? uiText("Position filled") : uiText("Application sent")}</Text>}
+
       <View style={styles.footer}>
-        <View style={styles.rate}><Text style={styles.price}>{post.price}</Text><Text style={styles.unit}>{uiText(post.unit)}</Text></View>
+        <View style={styles.rate}>
+          <Text style={styles.price} numberOfLines={1}>{formatPrice(post.price)}</Text>
+          {unitText ? <Text style={styles.unit} numberOfLines={1}>{uiText(unitText)}</Text> : null}
+        </View>
         <View style={styles.actions}>
-          {onMessage && <Pressable accessibilityRole="button" accessibilityLabel={`Message ${post.employerName}`} onPress={onMessage} style={styles.message}><Ionicons name="chatbubble-ellipses-outline" size={19} color={THEME.colors.ink} /></Pressable>}
-          <Pressable accessibilityRole="button" onPress={onDetails} style={styles.details}><Text style={styles.detailsLabel}>{uiText("See Details")}</Text></Pressable>
+          {onMessage && (
+            <Pressable accessibilityRole="button" accessibilityLabel={`Message ${post.employerName}`} onPress={onMessage} style={styles.message}>
+              <Ionicons name="chatbubble-ellipses-outline" size={20} color={THEME.colors.ink} />
+            </Pressable>
+          )}
+          <Pressable accessibilityRole="button" onPress={onDetails} style={styles.details}>
+            <Text style={styles.detailsLabel}>{uiText("See Details")}</Text>
+          </Pressable>
         </View>
       </View>
     </View>
@@ -43,24 +82,33 @@ export function BrowseActivityCard({ post, applied, closed, onProfile, onDetails
 }
 
 const styles = StyleSheet.create({
-  card: { padding: 18, backgroundColor: THEME.colors.white, borderRadius: THEME.roundness.card },
+  card: { padding: 18, backgroundColor: THEME.colors.white, borderRadius: 24 },
   identityRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   identity: { flex: 1 },
   name: { color: THEME.colors.ink, fontSize: 16, fontFamily: THEME.typography.fontFamily.display },
-  location: { fontSize: 11, color: THEME.colors.textSecondary, fontFamily: THEME.typography.fontFamily.secondaryRegular, marginTop: 4 },
-  bookmark: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  subject: { fontSize: 17, color: THEME.colors.ink, fontFamily: THEME.typography.fontFamily.display, marginTop: 14 },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
-  tag: { backgroundColor: THEME.colors.brandLight, borderRadius: THEME.roundness.pill, paddingHorizontal: 10, paddingVertical: 5 },
-  tagText: { fontSize: 10, color: THEME.colors.brandDark, fontFamily: THEME.typography.fontFamily.secondaryMedium },
-  status: { marginTop: 12, color: THEME.colors.success, fontSize: 11, fontFamily: THEME.typography.fontFamily.secondarySemiBold },
+  location: { fontSize: 12, color: THEME.colors.textSecondary, fontFamily: THEME.typography.fontFamily.secondaryRegular, marginTop: 3 },
+  bookmark: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14 },
+  subjectWrapper: { flexShrink: 1 },
+  subject: { fontSize: 18, color: THEME.colors.ink, fontFamily: THEME.typography.fontFamily.display },
+  termBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: THEME.colors.brand,
+    borderRadius: THEME.roundness.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  termBadgeIcon: { marginRight: 6 },
+  termBadgeText: { fontSize: 11, color: THEME.colors.ink, fontFamily: THEME.typography.fontFamily.secondarySemiBold },
+  status: { marginTop: 10, color: THEME.colors.success, fontSize: 11, fontFamily: THEME.typography.fontFamily.secondarySemiBold },
   closed: { color: THEME.colors.textSecondary },
-  footer: { flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderTopColor: THEME.colors.divider, marginTop: 14, paddingTop: 14 },
-  rate: { flex: 1 },
-  price: { color: THEME.colors.success, fontSize: 18, fontFamily: THEME.typography.fontFamily.display },
-  unit: { color: THEME.colors.textSecondary, fontSize: 11, fontFamily: THEME.typography.fontFamily.secondaryRegular },
-  actions: { flexDirection: 'row', gap: 8 },
-  message: { width: 44, height: 44, borderRadius: 22, backgroundColor: THEME.colors.brandLight, alignItems: 'center', justifyContent: 'center' },
-  details: { minHeight: 44, paddingHorizontal: 16, borderRadius: THEME.roundness.pill, backgroundColor: THEME.colors.brand, alignItems: 'center', justifyContent: 'center' },
-  detailsLabel: { color: THEME.colors.ink, fontSize: 12, fontFamily: THEME.typography.fontFamily.display },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderTopColor: '#EBEBE6', marginTop: 14, paddingTop: 14 },
+  rate: { flex: 1, justifyContent: 'center' },
+  price: { color: '#00A859', fontSize: 20, fontFamily: THEME.typography.fontFamily.display },
+  unit: { color: THEME.colors.textSecondary, fontSize: 12, fontFamily: THEME.typography.fontFamily.secondaryRegular, marginTop: 2 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  message: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F0F0F2', alignItems: 'center', justifyContent: 'center' },
+  details: { minHeight: 44, paddingHorizontal: 18, borderRadius: THEME.roundness.pill, backgroundColor: THEME.colors.brand, alignItems: 'center', justifyContent: 'center' },
+  detailsLabel: { color: THEME.colors.ink, fontSize: 14, fontFamily: THEME.typography.fontFamily.display },
 });
