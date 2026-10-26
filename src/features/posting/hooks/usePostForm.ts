@@ -1,4 +1,4 @@
-import { toggleService, SERVICE_CHOICES, WORK_SHIFTS, buildEngagementSchedule, type WorkShift } from '../../bookings/engagementForm';
+import { toggleService, SERVICE_CHOICES, WORK_SHIFTS, buildEngagementSchedule, dayForDate, type WorkShift } from '../../bookings/engagementForm';
 import { fetchMinimumWage, type MinimumWageData } from '../../bookings/api/bookingApi';
 import { validatePostingRate } from '../validation';
 import { useState, useRef, useEffect } from 'react';
@@ -28,7 +28,8 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const { tr } = useLanguage();
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
 
   const effectiveToken = token || user?.token || null;
 
@@ -49,7 +50,7 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
 
   const [instructions, setInstructions] = useState('');
   const [wagePolicy, setWagePolicy] = useState<MinimumWageData | null>(null);
-  const [offerAmount, setOfferAmount] = useState<string>(config.dailyDefault);
+  const [offerAmount, setOfferAmount] = useState<string>('');
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [postedSuccess, setPostedSuccess] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
@@ -59,8 +60,30 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
   const requestVersion = useRef(0);
   const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const resetForm = () => {
+    requestVersion.current++;
+    if (successTimer.current) clearTimeout(successTimer.current);
+    setIsPosting(false);
+    setPostedSuccess(false);
+    setShowVerificationRequired(false);
+    setShowBookingRestricted(false);
+    setStep(1);
+    setFieldErrors({});
+    setSelectedServices([]);
+    setEngagementType(null);
+    setSetupPreference(null);
+    setSelectedTime(null);
+    setStartDate(''); setEndDate(''); setOngoing(false); setWorkDays([]); setWorkHours('');
+    address.resetWorkLocation();
+    setInstructions('');
+    setOfferAmount('');
+    setAgreedTerms(false);
+  };
+
   useEffect(() => {
-    if (!visible) {
+    if (visible) {
+      resetForm();
+    } else {
       setIsPosting(false);
       setPostedSuccess(false);
       setShowVerificationRequired(false);
@@ -72,15 +95,7 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
     };
   }, [visible, mode, effectiveToken]);
 
-  const [hasAutoFilled, setHasAutoFilled] = useState(false);
   const applyUserProfileAddress = () => { if (user) address.applyProfileAddress(user); };
-  useEffect(() => {
-    if (visible && !hasAutoFilled && user && (user.barangay || user.city)) {
-      setHasAutoFilled(true);
-      address.applyProfileAddress(user);
-    }
-    if (!visible) setHasAutoFilled(false);
-  }, [user, visible, mode, hasAutoFilled]);
 
   // Animation values for Logo Loader
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -118,27 +133,33 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
 
   const services = SERVICE_CHOICES;
 
-  const handleToggleService = (id: string) => setSelectedServices(current => toggleService(current, id));
-
-  const resetForm = () => {
-    requestVersion.current++;
-    if (successTimer.current) clearTimeout(successTimer.current);
-    setPostedSuccess(false);
-    setIsPosting(false);
-    setShowVerificationRequired(false);
-    setShowBookingRestricted(false);
-    setStep(1);
-    setSelectedServices([]);
-    setEngagementType(null);
-    setSetupPreference(null);
-    setSelectedTime(null);
-    setStartDate(''); setEndDate(''); setOngoing(false); setWorkDays([]); setWorkHours('');
-    address.resetWorkLocation();
-    setInstructions('');
-    setOfferAmount(config.dailyDefault);
-    setAgreedTerms(false);
-    setHasAutoFilled(false);
+  const handleToggleService = (id: string) => {
+    setSelectedServices(current => current.includes(id) ? [] : [id]);
+    setFieldErrors(prev => ({ ...prev, service: false }));
   };
+
+  // Clear field errors reactively
+  useEffect(() => {
+    if (address.selectedRegion) setFieldErrors(prev => ({ ...prev, region: false }));
+  }, [address.selectedRegion]);
+  useEffect(() => {
+    if (address.selectedProvince) setFieldErrors(prev => ({ ...prev, province: false }));
+  }, [address.selectedProvince]);
+  useEffect(() => {
+    if (address.selectedCity) setFieldErrors(prev => ({ ...prev, city: false }));
+  }, [address.selectedCity]);
+  useEffect(() => {
+    if (address.selectedBarangay) setFieldErrors(prev => ({ ...prev, barangay: false }));
+  }, [address.selectedBarangay]);
+  useEffect(() => {
+    if (address.streetAddress.trim()) setFieldErrors(prev => ({ ...prev, street: false }));
+  }, [address.streetAddress]);
+  useEffect(() => {
+    if (address.zipcode.trim()) setFieldErrors(prev => ({ ...prev, zipcode: false }));
+  }, [address.zipcode]);
+  useEffect(() => {
+    if (offerAmount.trim()) setFieldErrors(prev => ({ ...prev, rate: false }));
+  }, [offerAmount]);
 
   const handleClose = () => {
     resetForm();
@@ -159,7 +180,12 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
     }
     setEngagementType(type);
     if (type === 'short') setSetupPreference('stay-out');
-    setOfferAmount(engagementRate(mode, offerAmount, type));
+    setFieldErrors(prev => ({ ...prev, engagement: false }));
+  };
+
+  const handleSetupPreference = (pref: 'stay-out' | 'stay-in') => {
+    setSetupPreference(pref);
+    setFieldErrors(prev => ({ ...prev, setup: false }));
   };
 
   // Construct emphasized auto-message
@@ -179,17 +205,36 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
     return engagementType === 'short' && shift ? `${shift.label.toLowerCase()} (${shift.hours})` : workHours;
   };
 
-  const scheduleTerms = () => buildEngagementSchedule({
-    bookingType: engagementType === 'long' ? 'long_term' : 'short_term',
-    startDate, endDate, workHours, days: workDays, shift: selectedTime, ongoing,
-  });
+  const scheduleTerms = () => {
+    const today = new Date();
+    const tomorrow = new Date(today.getTime() + 86400000);
+    const formattedTomorrow = `${String(tomorrow.getMonth() + 1).padStart(2, '0')}/${String(tomorrow.getDate()).padStart(2, '0')}/${tomorrow.getFullYear()}`;
+    const effectiveStart = startDate || formattedTomorrow;
+    const isShort = engagementType === 'short';
+    const effectiveHours = isShort && selectedTime && selectedTime !== 'custom'
+      ? (WORK_SHIFTS.find(s => s.value === selectedTime)?.hours || '08:00 AM - 12:00 PM')
+      : (workHours || '08:00 AM - 05:00 PM');
+    const effectiveDays = workDays.length > 0
+      ? workDays
+      : (isShort ? [dayForDate(effectiveStart)] : ['M', 'T', 'W', 'Th', 'F', 'S']);
+
+    return buildEngagementSchedule({
+      bookingType: isShort ? 'short_term' : 'long_term',
+      startDate: effectiveStart,
+      endDate: isShort ? effectiveStart : (endDate || ''),
+      workHours: effectiveHours,
+      days: effectiveDays,
+      shift: selectedTime || (isShort ? 'morning' : null),
+      ongoing: isShort ? false : (ongoing || !endDate),
+    });
+  };
 
   const getLocationLabel = () => buildPostLocation({
-    street: streetAddress,
-    floorUnit,
+    street: config.role === 'kasambahay' ? undefined : streetAddress,
+    floorUnit: config.role === 'kasambahay' ? undefined : floorUnit,
     barangay: selectedBarangay?.name,
     city: selectedCity?.name,
-    zipcode,
+    zipcode: config.role === 'kasambahay' ? undefined : zipcode,
   });
 
   const buildAutoMessage = () => {
@@ -219,52 +264,42 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
   const handleNext = async () => {
     if (isPosting) return;
     if (step === 1) {
-      if (selectedServices.length === 0) {
-        Alert.alert('Selection Required', 'Please choose at least one service role to continue.');
+      const errors: Record<string, boolean> = {};
+      if (selectedServices.length === 0) errors.service = true;
+      if (!engagementType) errors.engagement = true;
+      if (!setupPreference) errors.setup = true;
+      if (Object.keys(errors).length > 0) {
+        setFieldErrors(errors);
         return;
       }
+      setFieldErrors({});
       setStep(2);
     } else if (step === 2) {
-      if (!engagementType) {
-        Alert.alert('Selection Required', config.missingEngagement);
+      const errors: Record<string, boolean> = {};
+      if (!selectedRegion) errors.region = true;
+      if (!selectedProvince) errors.province = true;
+      if (!selectedCity) errors.city = true;
+      if (!selectedBarangay) errors.barangay = true;
+      if (config.role !== 'kasambahay') {
+        if (!streetAddress.trim()) errors.street = true;
+        if (!zipcode.trim()) errors.zipcode = true;
+      }
+
+      const num = Number(offerAmount.replace(/[^0-9.]/g, ''));
+      const minRate = wagePolicy ? Number(wagePolicy.minimum_rate) : (engagementType === 'short' ? 350 : 6500);
+      if (!offerAmount.trim() || num < minRate) {
+        errors.rate = true;
+      }
+
+      if (Object.keys(errors).length > 0) {
+        setFieldErrors(errors);
         return;
       }
-      if (engagementType === 'long' && !setupPreference) {
-        Alert.alert('Selection Required', config.missingSetup);
-        return;
-      }
-      if (engagementType === 'short' && !selectedTime) {
-        Alert.alert('Selection Required', config.missingTime);
-        return;
-      }
-      if (engagementType === 'long' && !selectedRegion) {
-        Alert.alert('Work Region Required', 'Select the work region for the applicable monthly wage policy.');
-        return;
-      }
-      try { scheduleTerms(); } catch (error) {
-        Alert.alert(tr('Invalid Schedule'), tr(error instanceof Error ? error.message : 'Select a valid schedule.'));
-        return;
-      }
+      setFieldErrors({});
       setStep(3);
-    } else if (step === 3) {
-      const addressError = workLocationError(address);
-      if (addressError) { Alert.alert('Work Location Required', addressError); return; }
-      const policy = await fetchMinimumWage(effectiveToken || undefined,
-        engagementType === 'long' ? 'long_term' : 'short_term', selectedCity?.name || '',
-        selectedRegion?.displayName || selectedRegion?.name || '');
-      if (!policy) {
-        Alert.alert('Wage Policy Unavailable', 'Reconnect and select a supported work region (Region X or NCR) before continuing.');
-        return;
-      }
-      setWagePolicy(policy);
-      const rateError = validatePostingRate(mode, engagementType, offerAmount, policy);
-      if (rateError) {
-        Alert.alert(rateError.title, rateError.message);
-        return;
-      }
-      setStep(4);
     } else {
       if (!agreedTerms) {
+        setFieldErrors({ terms: true });
         Alert.alert('Terms Required', config.missingTerms);
         return;
       }
@@ -289,9 +324,9 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
           province: selectedProvince?.name,
           city: selectedCity?.name,
           barangay: selectedBarangay?.name,
-          street: streetAddress.trim(),
-          floor_number: floorUnit.trim() || undefined,
-          zip_code: zipcode.trim(),
+          street: config.role === 'kasambahay' ? '' : streetAddress.trim(),
+          floor_number: config.role === 'kasambahay' ? undefined : (floorUnit.trim() || undefined),
+          zip_code: config.role === 'kasambahay' ? '9000' : (zipcode.trim() || '9000'),
           special_instruction: autoMessage,
           rate_amount: offerAmount.trim(),
           rate_period: engagementType === 'long' ? 'month' : 'day',
@@ -357,7 +392,8 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
 
   const handleBack = () => {
     if (step > 1) {
-      setStep((prev) => (prev - 1) as 1 | 2 | 3 | 4);
+      setStep((prev) => (prev - 1) as 1 | 2 | 3);
+      setFieldErrors({});
     } else {
       handleClose();
     }
@@ -372,13 +408,17 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
     insets,
     user,
     step,
+    fieldErrors,
+    setFieldErrors,
     selectedServices,
     engagementType,
     setupPreference,
     setSetupPreference,
+    handleSetupPreference,
     selectedTime,
     setSelectedTime,
     startDate, setStartDate, endDate, setEndDate, ongoing, setOngoing, workDays, setWorkDays, workHours, setWorkHours,
+    address,
     ...address,
     instructions,
     setInstructions,
