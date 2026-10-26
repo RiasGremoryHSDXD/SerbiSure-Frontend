@@ -39,7 +39,7 @@ export async function fetchNotifications(token: string): Promise<NotificationsLi
     const data: NotificationsListResponse = await res.json();
     return data;
   } catch (error: any) {
-    console.warn('[notificationsApi] fetchNotifications error:', error?.message || error);
+    console.log('[notificationsApi] fetchNotifications error:', error?.message || error);
     throw error;
   }
 }
@@ -63,7 +63,7 @@ export async function markNotificationRead(token: string, notificationId: string
       throw new Error(errJson?.detail || `Failed to mark notification as read (${res.status})`);
     }
   } catch (error: any) {
-    console.warn('[notificationsApi] markNotificationRead error:', error?.message || error);
+    console.log('[notificationsApi] markNotificationRead error:', error?.message || error);
     throw error;
   }
 }
@@ -90,7 +90,31 @@ export async function markAllNotificationsRead(token: string): Promise<number> {
     const data = await res.json();
     return data.marked_count ?? 0;
   } catch (error: any) {
-    console.warn('[notificationsApi] markAllNotificationsRead error:', error?.message || error);
+    console.log('[notificationsApi] markAllNotificationsRead error:', error?.message || error);
     throw error;
   }
 }
+
+/**
+ * Delete a single notification.
+ * DELETE /api/v1/notifications/<notificationId>/
+ */
+export async function deleteNotification(token: string, notificationId: string): Promise<void> {
+  try {
+    const res = await requestResponse(`${NOTIFICATIONS_BASE}/${notificationId}/`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!res.ok && res.status !== 404) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson?.detail || `Failed to delete notification (${res.status})`);
+    }
+  } catch (error: any) {
+    console.log('[notificationsApi] deleteNotification error:', error?.message || error);
+  }
+}
+
