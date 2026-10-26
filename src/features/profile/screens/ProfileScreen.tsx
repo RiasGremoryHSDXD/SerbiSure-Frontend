@@ -1,10 +1,8 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
-import React from 'react';
-import { Text, View, Image, ScrollView, Pressable, Alert, Modal, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
+import React, { useState } from 'react';
+import { Text, View, Image, ScrollView, Pressable, Alert, Modal, ActivityIndicator, RefreshControl } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
-
-import { updateUserAbout } from '../api/accountApi';
 
 import { VerificationStatusModal } from '../../verification/components/VerificationStatusModal';
 import { PasswordSecurityModal } from '../components/PasswordSecurityModal';
@@ -14,28 +12,27 @@ import { MyBookingsModal } from '../../bookings/components/MyBookingsModal';
 import { ManageTagsModal } from '../components/ManageTagsModal';
 import { ManageSocialLinksModal } from '../components/ManageSocialLinksModal';
 import { AllReviewsModal } from '../../reviews/components/AllReviewsModal';
-import { NotificationBell } from '../../notifications/NotificationContext';
+import { AppHeader } from '../../../shared/components/AppHeader';
 import { formatRegisteredLocation } from '../../../shared/services/locationService';
 
 import { ROLE_CONFIG } from '../../../app/roleConfig';
 
 import type { ProfileScreenProps } from '../types';
-
-const logoSource = require('../../../../assets/serbisure-logo.png');
+import { setRememberedAccount } from '../../../shared/auth/rememberedAccount';
 
 import { useProfile } from '../hooks/useProfile';
 import { profileStyles as styles } from '../styles';
 import { BioSection } from '../components/BioSection';
-import { ResumeSection } from '../worker/ResumeSection';
 import { ReputationSection } from '../worker/ReputationSection';
 import { AvailabilitySection } from '../worker/AvailabilitySection';
 import { SettingsSection } from '../components/SettingsSection';
-import { PendingPostsSection } from '../components/PendingPostsSection';
 import { ReviewsSection } from '../components/ReviewsSection';
-import { ProfileTabs } from '../components/ProfileTabs';
+import { SocialIconsRow } from '../components/SocialIconsRow';
+import { WorkerCvModal } from '../worker/WorkerCvModal';
 
 export function ProfileScreen(props: ProfileScreenProps) {
   const { tr: uiText } = useUiLanguage();
+  const [showCv, setShowCv] = useState(false);
   const profile = useProfile(props);
   const {
     avatarUri,
@@ -54,14 +51,6 @@ export function ProfileScreen(props: ProfileScreenProps) {
     localAvatar,
     reviews,
     summary,
-    bio,
-    setBio,
-    isEditingBio,
-    setIsEditingBio,
-    editBioText,
-    setEditBioText,
-    isSavingBio,
-    setIsSavingBio,
     isVerificationModalVisible,
     setIsVerificationModalVisible,
     isPasswordModalVisible,
@@ -86,9 +75,6 @@ export function ProfileScreen(props: ProfileScreenProps) {
     showContactNumber,
     isUpdatingPrivacy,
     isRefreshing,
-    pendingPosts,
-    activeProfileTab,
-    setActiveProfileTab,
     bookingsModalInitialTab,
     handleRefresh,
     loadVerificationStatus,
@@ -98,15 +84,16 @@ export function ProfileScreen(props: ProfileScreenProps) {
     handleToggleContactPrivacy,
     positivePercentage,
     handlePickImage,
+    socialLinks,
+    reloadSocialLinks,
+    totalReviews,
   } = profile;
 
   return (
     <View style={styles.container}>
-      {/* Top Status Bar Spacer */}
-      <View style={{ height: insets.top, backgroundColor: '#F6F5F2', zIndex: 10 }} />
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={[styles.scrollContent, { paddingTop: 0 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: 4 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -117,39 +104,52 @@ export function ProfileScreen(props: ProfileScreenProps) {
           />
         }
       >
-        {/* Header Row */}
-        <View style={styles.headerTop}>
-          <View style={styles.headerSide}>
-            {currentView === 'personal_info' ? (
-              <Pressable
-                style={styles.backCircleButton}
-                onPress={() => setCurrentView('main')}
-                hitSlop={8}
-              >
-                <Ionicons name="arrow-back" size={20} color="#0D0D11" />
-              </Pressable>
-            ) : null}
-          </View>
-          <Image source={logoSource} style={styles.logo} resizeMode="contain" />
-          <View style={[styles.headerSide, styles.headerSideRight]}>
-            <NotificationBell />
-          </View>
-        </View>
 
         {currentView === 'personal_info' ? (
           <React.Fragment>
-            {/* Identity Hero Card (Clean Rounded Peach Neo-Pop Card) */}
+            {/* Identity Hero Card (Clean Rounded Peach Neo-Pop Card matching Ryan Gosling design) */}
             <View style={styles.personalHeroCard}>
-              <Pressable style={styles.personalAvatarWrapper} onPress={handlePickImage}>
-                <Image
-                  source={{ uri: localAvatar || avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }}
-                  style={styles.personalAvatar}
-                />
-                <View style={[styles.cameraIconBadge, { backgroundColor: '#10B981' }]}>
-                  <Ionicons name="shield-checkmark" size={13} color="#FFFFFF" />
-                </View>
-              </Pressable>
+              {/* Top row: Avatar on left, Role pill badge + View CV pill on right */}
+              <View style={styles.personalHeroTopRow}>
+                <Pressable style={styles.personalAvatarWrapper} onPress={handlePickImage}>
+                  <Image
+                    source={{ uri: localAvatar || avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }}
+                    style={styles.personalAvatar}
+                  />
+                  {isVerified ? (
+                    <View style={styles.avatarShieldBadgePersonal}>
+                      <Ionicons
+                        name="shield-checkmark"
+                        size={15}
+                        color="#FFFFFF"
+                      />
+                    </View>
+                  ) : null}
+                </Pressable>
 
+                <View style={styles.heroTopActions}>
+                  <View style={styles.roleBadgePill}>
+                    <Text style={styles.roleBadgePillText}>{uiText(copy.name)}</Text>
+                  </View>
+                  {isWorker ? (
+                    <Pressable
+                      style={styles.viewCvTopBtn}
+                      onPress={() => setShowCv(true)}
+                      hitSlop={6}
+                      accessibilityRole="button"
+                      accessibilityLabel={uiText("View CV")}
+                    >
+                      <Text style={styles.viewCvTopBtnText}>{uiText("View CV")}</Text>
+                    </Pressable>
+                  ) : (
+                    <View style={[styles.viewCvTopBtn, { opacity: 0 }]} pointerEvents="none">
+                      <Text style={styles.viewCvTopBtnText}>{uiText("View CV")}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Name Row */}
               <View style={styles.personalNameRow}>
                 <Text style={styles.personalName}>{getFullName()}</Text>
                 {isVerified ? (
@@ -157,85 +157,75 @@ export function ProfileScreen(props: ProfileScreenProps) {
                 ) : null}
               </View>
 
-              <Text style={styles.heroSubRoleText}>
-                {copy.name}
-              </Text>
-
-              <View style={styles.locationRow}>
-                <Ionicons name="location-outline" size={14} color="#6B7280" />
-                <Text style={styles.locationText}>
-                  {formatRegisteredLocation(user.street, user.city, user.province)}
+              {/* Location Row */}
+              <View style={styles.heroInfoRow}>
+                <Ionicons name="location-sharp" size={14} color="#0D0D11" />
+                <Text style={styles.heroInfoText}>
+                  {formatRegisteredLocation(user.street, user.city, user.province) || uiText("Location not provided")}
                 </Text>
               </View>
 
-              {/* Email & Phone Contact Information */}
-              {(user.email || user.contactNumber) ? (
-                <View style={styles.contactDetailsContainer}>
-                  {user.email ? (
-                    <View style={styles.contactItemRow}>
-                      <Ionicons name="mail" size={13} color="#9CA3AF" />
-                      <Text style={styles.contactItemText}>{user.email}</Text>
-                    </View>
-                  ) : null}
-                  {user.contactNumber ? (
-                    <View style={styles.contactItemRow}>
-                      <Ionicons name="call" size={13} color="#9CA3AF" />
-                      <Text style={styles.contactItemText}>{user.contactNumber}</Text>
-                      <Pressable
-                        style={[
-                          styles.privacyPill,
-                          showContactNumber ? styles.privacyPillPublic : styles.privacyPillPrivate,
-                        ]}
-                        onPress={() => handleToggleContactPrivacy(!showContactNumber)}
-                        disabled={isUpdatingPrivacy}
-                      >
-                        <Ionicons
-                          name={showContactNumber ? 'eye' : 'eye-off'}
-                          size={11}
-                          color={showContactNumber ? '#065F46' : '#6B7280'}
-                        />
-                        <Text
-                          style={[
-                            styles.privacyPillText,
-                            showContactNumber ? styles.privacyPillTextPublic : styles.privacyPillTextPrivate,
-                          ]}
-                        >
-                          {showContactNumber ? uiText("Public") : uiText("Private")}
-                        </Text>
-                      </Pressable>
-                    </View>
-                  ) : null}
+              {/* Phone Row */}
+              {user.contactNumber ? (
+                <View style={[styles.heroInfoRow, { marginTop: 6 }]}>
+                  <Ionicons name="call" size={13} color="#0D0D11" />
+                  <Text style={styles.heroInfoText}>{user.contactNumber}</Text>
+                  <Pressable
+                    style={[
+                      styles.privacyPill,
+                      showContactNumber ? styles.privacyPillPublic : styles.privacyPillPrivate,
+                      { marginLeft: 4 },
+                    ]}
+                    onPress={() => handleToggleContactPrivacy(!showContactNumber)}
+                    disabled={isUpdatingPrivacy}
+                  >
+                    <Ionicons
+                      name={showContactNumber ? 'eye' : 'eye-off'}
+                      size={10}
+                      color={showContactNumber ? '#065F46' : '#6B7280'}
+                    />
+                    <Text
+                      style={[
+                        styles.privacyPillText,
+                        showContactNumber ? styles.privacyPillTextPublic : styles.privacyPillTextPrivate,
+                      ]}
+                    >
+                      {showContactNumber ? uiText("Public") : uiText("Private")}
+                    </Text>
+                  </Pressable>
                 </View>
               ) : null}
 
-              {/* Separator Line */}
-              <View style={styles.heroDividerLine} />
 
-              {/* Worker / Client Sentiment Track */}
+              {/* Ticket Notched Divider */}
+              <View style={styles.ticketDividerContainer}>
+                <View style={styles.ticketNotchLeft} />
+                <View style={styles.ticketDividerLine} />
+                <View style={styles.ticketNotchRight} />
+              </View>
+
+              {/* Sentiment Track */}
               <View style={styles.sentimentCard}>
-                <Text style={styles.sentimentCardLabel}>{t[copy.sentimentKey]}</Text>
+                <Text style={styles.sentimentCardLabel}>
+                  {isWorker ? t.clientSentiment : (t.workerSentiment || 'Client Sentiment')}
+                </Text>
                 <View style={styles.sentimentTrack}>
                   <View
                     style={[
                       styles.sentimentFill,
                       {
-                        width: positivePercentage !== null ? `${Math.min(100, Math.max(8, positivePercentage))}%` : '0%',
-                        backgroundColor: positivePercentage !== null ? '#10B981' : '#E5E7EB',
+                        width: `${totalReviews > 0 ? Math.min(100, Math.max(10, positivePercentage ?? 0)) : 0}%`,
+                        backgroundColor: totalReviews > 0 ? '#22C55E' : 'transparent',
                       },
                     ]}
                   />
                 </View>
-                <Text
-                  style={[
-                    styles.sentimentCardScore,
-                    positivePercentage === null && { color: '#9CA3AF' },
-                  ]}
-                >
-                  {positivePercentage !== null ? `${positivePercentage}% ${t.positive}` : t.noReviewsYet}
+                <Text style={[styles.sentimentCardScore, totalReviews === 0 && { color: '#6B7280', fontWeight: '600' }]}>
+                  {totalReviews > 0 ? uiText('{count}% Positive', { count: positivePercentage ?? 0 }) : uiText("No reviews yet")}
                 </Text>
               </View>
 
-              {/* Integrated Profile Tags within the Hero Card */}
+              {/* Integrated Profile Tags */}
               {tags && tags.length > 0 ? (
                 <View style={styles.heroTagsWrap}>
                   {tags.map((tagItem, idx) => (
@@ -243,33 +233,20 @@ export function ProfileScreen(props: ProfileScreenProps) {
                       <Text style={styles.heroTagPillText}>{tagItem}</Text>
                     </View>
                   ))}
-                  <Pressable
-                    style={styles.heroTagEditBtn}
-                    onPress={() => setIsManageTagsModalVisible(true)}
-                    hitSlop={6}
-                  >
-                    <Ionicons name="pencil" size={11} color="#0D0D11" />
-                    <Text style={styles.heroTagEditBtnText}>{uiText("Edit")}</Text>
-                  </Pressable>
                 </View>
-              ) : (
-                <Pressable
-                  style={styles.heroAddTagsRow}
-                  onPress={() => setIsManageTagsModalVisible(true)}
-                >
-                  <Ionicons name="add-circle-outline" size={16} color="#B45309" />
-                  <Text style={styles.heroAddTagsText}>{copy.addTags}</Text>
-                </Pressable>
-              )}
+              ) : null}
+
+              {/* Social Links Row with Real App Icons and Single Unified Edit Button */}
+              <SocialIconsRow
+                links={socialLinks}
+                editable
+                onEdit={() => setIsManageSocialLinksModalVisible(true)}
+              />
             </View>
 
             <BioSection profile={profile} />
-            {isWorker && <ResumeSection profile={profile} />}
             {isWorker && <ReputationSection profile={profile} />}
-            <ProfileTabs activeTab={activeProfileTab} onChange={setActiveProfileTab} postsCount={pendingPosts.length} reviewsCount={reviews.length} own />
-
-            {/* Tab 1: Current Pending Posts */}
-            {activeProfileTab === 'posts' ? <PendingPostsSection profile={profile} /> : <ReviewsSection profile={profile} />}
+            <ReviewsSection profile={profile} showHeader />
 
             {/* Bottom padding */}
             <View style={{ height: 90 }} />
@@ -284,9 +261,15 @@ export function ProfileScreen(props: ProfileScreenProps) {
                     source={{ uri: localAvatar || avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }}
                     style={styles.avatar}
                   />
-                  <View style={[styles.cameraIconBadge, { backgroundColor: '#10B981' }]}>
-                    <Ionicons name="shield-checkmark" size={11} color="#FFF" />
-                  </View>
+                  {isVerified ? (
+                    <View style={styles.avatarShieldBadge}>
+                      <Ionicons
+                        name="shield-checkmark"
+                        size={13}
+                        color="#FFFFFF"
+                      />
+                    </View>
+                  ) : null}
                 </Pressable>
 
                 <View style={styles.heroDetails}>
@@ -299,12 +282,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
                   <View style={styles.heroRolePillBadge}>
                     <Text style={styles.rolePillText}>{uiText(user.accountType || ROLE_CONFIG[role].accountType).toUpperCase()}</Text>
                   </View>
-                  {user.email ? (
-                    <View style={styles.heroContactRow}>
-                      <Ionicons name="mail" size={12} color="#9CA3AF" />
-                      <Text style={styles.heroContactText} numberOfLines={1}>{user.email}</Text>
-                    </View>
-                  ) : null}
+
                   <View style={styles.heroContactRow}>
                     <Ionicons name="call" size={12} color="#9CA3AF" />
                     <Text style={styles.heroContactText}>{user.contactNumber || uiText("No phone registered")}</Text>
@@ -371,9 +349,14 @@ export function ProfileScreen(props: ProfileScreenProps) {
                 styles.logoutButton,
                 pressed && { opacity: 0.8 },
               ]}
-              onPress={onLogout}
+              onPress={async () => {
+                const name = (profile.getFirstNameOnly ? profile.getFirstNameOnly() : profile.user?.firstName || 'Daven').trim().split(' ')[0] || 'Daven';
+                const id = profile.user?.email || profile.user?.contactNumber || '';
+                await setRememberedAccount({ firstName: name, identifier: id });
+                onLogout?.();
+              }}
             >
-              <Ionicons name="log-out-outline" size={18} color="#EF4444" />
+              <Ionicons name="log-out-outline" size={18} color="#FFFFFF" />
               <Text style={styles.logoutButtonText}>{t.logout}</Text>
             </Pressable>
 
@@ -382,88 +365,6 @@ export function ProfileScreen(props: ProfileScreenProps) {
           </React.Fragment>
         )}
       </ScrollView>
-
-      {/* Edit Bio Modal */}
-      <Modal
-        visible={isEditingBio}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          if (!isSavingBio) setIsEditingBio(false);
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{uiText("Edit About Me")}</Text>
-              <Pressable
-                disabled={isSavingBio}
-                onPress={() => setIsEditingBio(false)}
-                hitSlop={8}
-              >
-                <Ionicons name="close" size={22} color="#777" />
-              </Pressable>
-            </View>
-
-            <Text style={styles.modalSubtitle}>
-              {copy.bioHelp}
-            </Text>
-
-            <TextInput
-              style={styles.bioTextInput}
-              multiline
-              maxLength={500}
-              placeholder={copy.bioPlaceholder}
-              placeholderTextColor="#999"
-              value={editBioText}
-              onChangeText={setEditBioText}
-              textAlignVertical="top"
-            />
-
-            <View style={styles.charCountRow}>
-              <Text style={styles.charCountText}>{editBioText.length}/500</Text>
-            </View>
-
-            <View style={styles.modalActionButtons}>
-              <Pressable
-                style={styles.cancelModalBtn}
-                disabled={isSavingBio}
-                onPress={() => setIsEditingBio(false)}
-              >
-                <Text style={styles.cancelModalBtnText}>{uiText("Cancel")}</Text>
-              </Pressable>
-
-              <Pressable
-                style={[styles.saveModalBtn, isSavingBio && { opacity: 0.7 }]}
-                disabled={isSavingBio}
-                onPress={async () => {
-                  if (!user.token) {
-                    Alert.alert('Error', 'You must be logged in to update your bio.');
-                    return;
-                  }
-                  setIsSavingBio(true);
-                  try {
-                    const updated = await updateUserAbout(user.token, editBioText.trim());
-                    setBio(updated);
-                    updateUser({ userAbout: updated });
-                    setIsEditingBio(false);
-                  } catch (err: any) {
-                    Alert.alert('Unable to Save Bio', err.message || 'Failed to update bio.');
-                  } finally {
-                    setIsSavingBio(false);
-                  }
-                }}
-              >
-                {isSavingBio ? (
-                  <ActivityIndicator size="small" color="#FFF" />
-                ) : (
-                  <Text style={styles.saveModalBtnText}>{uiText("Save")}</Text>
-                )}
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* Verification Status Modal */}
       <VerificationStatusModal
@@ -492,6 +393,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
       {/* Privacy Policy Modal */}
       <PrivacyPolicyModal
         visible={isPrivacyPolicyModalVisible}
+        mode="view"
         onClose={() => setIsPrivacyPolicyModalVisible(false)}
       />
 
@@ -499,6 +401,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
       <PrivacyPolicyModal
         visible={isTermsModalVisible}
         document="terms"
+        mode="view"
         onClose={() => setIsTermsModalVisible(false)}
       />
 
@@ -521,12 +424,33 @@ export function ProfileScreen(props: ProfileScreenProps) {
         accountType={user.accountType}
       />
 
-      {/* Manage Social Links Modal */}
+      {/* Manage Social Links & Tags Modal */}
       <ManageSocialLinksModal
         visible={isManageSocialLinksModalVisible}
         onClose={() => setIsManageSocialLinksModalVisible(false)}
         token={user.token}
+        currentTags={tags}
+        onSaveTags={handleSaveTags}
+        onSaved={() => {
+          reloadSocialLinks();
+          void handleRefresh();
+        }}
+        accountType={user.accountType}
       />
+
+      {/* Worker CV Modal */}
+      {isWorker && user.id && user.token && (
+        <WorkerCvModal
+          visible={showCv}
+          onClose={() => setShowCv(false)}
+          userId={user.id}
+          token={user.token}
+          avatarUrl={user.profileLink}
+          email={user.email}
+          editable
+          onSaved={() => void handleRefresh()}
+        />
+      )}
 
       {/* All Reviews Modal */}
       <AllReviewsModal
