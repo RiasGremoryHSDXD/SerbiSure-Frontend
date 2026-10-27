@@ -127,7 +127,7 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
         fps={format ? Math.max(format.minFps, Math.min(30, format.maxFps)) : undefined}
         photoQualityBalance="speed"
         isActive
-        pixelFormat="rgb"
+        pixelFormat="yuv"
         photo
         // Keep outputs bound until capture finishes. Removing the processor
         // here rebuilds Android's ImageCapture and can race with takePhoto().

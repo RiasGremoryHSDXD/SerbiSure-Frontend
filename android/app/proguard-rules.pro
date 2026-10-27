@@ -19,7 +19,7 @@
 # VisionCamera & Worklets & Frame Processor Plugins
 -keep class com.mrousavy.camera.** { *; }
 -keep class com.mrousavy.camera.frameprocessors.** { *; }
--keepclassmembers class * extends com.mrousavy.camera.frameprocessors.FrameProcessorPlugin { *; }
+-keep class * extends com.mrousavy.camera.frameprocessors.FrameProcessorPlugin { *; }
 -keep class com.worklets.** { *; }
 
 # MediaPipe & TensorFlow Lite & React Native Bridge
