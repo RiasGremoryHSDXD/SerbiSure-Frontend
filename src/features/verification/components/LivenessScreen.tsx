@@ -14,7 +14,7 @@ import THEME from '../../../shared/theme/theme';
 import { RegistrationStepper } from '../../auth/components/RegistrationStepper';
 import { APP_HEADER_BACK_ICON_COLOR, APP_HEADER_BACK_ICON_SIZE, APP_HEADER_LOGO_SIZE, APP_HEADER_SIDE_WIDTH } from '../../../shared/components/AppHeader';
 
-const logoSource = require('../../../../assets/serbisure_new_clean.png');
+const logoSource = require('../../../../assets/serbisure-icon.png');
 const faceSource = require('../../../../assets/face-placeholder.png');
 
 function discardSelfie(path: string) {
@@ -37,10 +37,10 @@ type LivenessScreenProps = {
 type LivenessRingProps = {
   progress: number;
   showFaceIcon: boolean;
-  showCheck: boolean;
+  showCheck?: boolean;
 };
 
-function LivenessRing({ progress, showFaceIcon, showCheck }: LivenessRingProps) {
+function LivenessRing({ progress, showFaceIcon, showCheck = false }: LivenessRingProps) {
   const size = 226;
   const strokeWidth = 7;
   const radius = (size - strokeWidth) / 2;
@@ -72,8 +72,7 @@ function LivenessRing({ progress, showFaceIcon, showCheck }: LivenessRingProps) 
       )}
       {showCheck ? (
         <View style={styles.checkCircle}>
-          <View style={styles.checkShort} />
-          <View style={styles.checkLong} />
+          <Ionicons name="checkmark" size={42} color="#FFFFFF" />
         </View>
       ) : null}
     </View>
@@ -89,11 +88,11 @@ function getRingProgress(state: LivenessState) {
     return 0.75 + state.stillnessProgress * 0.25;
   }
 
-  if (state.step === 'turnRight') {
+  if (state.step === 'turnLeft') {
     return 0.5;
   }
 
-  if (state.step === 'turnLeft') {
+  if (state.step === 'turnRight') {
     return 0.25;
   }
 
@@ -166,12 +165,17 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
     return () => clearTimeout(timer);
   }, [started]);
 
+  const prevCompletedCount = useRef(0);
   useEffect(() => {
-    if (!state.completedSteps.length || state.step === 'still') { setShowCenterCheck(false); return; }
-    setShowCenterCheck(true);
-    const timer = setTimeout(() => setShowCenterCheck(false), 650);
-    return () => clearTimeout(timer);
-  }, [state.completedSteps.length, state.step]);
+    if (state.completedSteps.length > prevCompletedCount.current) {
+      prevCompletedCount.current = state.completedSteps.length;
+      setShowCenterCheck(true);
+      const timer = setTimeout(() => {
+        setShowCenterCheck(false);
+      }, 850);
+      return () => clearTimeout(timer);
+    }
+  }, [state.completedSteps.length]);
 
   const handleLandmarks = useCallback((frame: LandmarkFrame) => {
     if (captureStartedRef.current || !mounted.current) return;
@@ -189,9 +193,6 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
     stateRef.current = next;
     setState(next);
   }, []);
-
-  const [canManualCapture, setCanManualCapture] = useState(false);
-  const [isManualCapturing, setIsManualCapturing] = useState(false);
 
   const performCapture = useCallback(async () => {
     if (captureStartedRef.current) return;
@@ -222,19 +223,6 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
   }, []);
 
   useEffect(() => {
-    if (!started || selfie) {
-      setCanManualCapture(false);
-      return undefined;
-    }
-
-    const timer = setTimeout(() => {
-      setCanManualCapture(true);
-    }, 2500);
-
-    return () => clearTimeout(timer);
-  }, [started, selfie]);
-
-  useEffect(() => {
     if (!started || !state.verified || captureStartedRef.current) {
       return;
     }
@@ -258,13 +246,12 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
     setPreviewError(false);
     setPhotoAccepted(false);
     setStarted(true);
-    setCanManualCapture(false);
-    setIsManualCapturing(false);
     startedAt.current = Date.now();
     stateRef.current = initialLivenessState;
     setState(initialLivenessState);
     setShowTrackerNotice(false);
     setShowCenterCheck(false);
+    prevCompletedCount.current = 0;
     lastLandmarkAt.current = null;
     setCaptureError(null);
     captureStartedRef.current = false;
@@ -289,6 +276,7 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
     stateRef.current = retryCurrentStep(stateRef.current);
     setState(stateRef.current);
     setShowCenterCheck(false);
+    prevCompletedCount.current = stateRef.current.completedSteps.length;
     setCaptureError(null);
     captureStartedRef.current = false;
     setCaptureAttempt(value => value + 1);
@@ -347,6 +335,13 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
                 </View>
               ) : null}
               <LivenessRing progress={ringProgress} showFaceIcon={showFaceIcon} showCheck={!selfie && started && showCenterCheck} />
+              {!selfie && started && showCenterCheck ? (
+                <View style={styles.checkCircleOverlay} pointerEvents="none">
+                  <View style={styles.checkCircle}>
+                    <Ionicons name="checkmark" size={32} color="#FFFFFF" />
+                  </View>
+                </View>
+              ) : null}
             </View>
 
             {captureError ? (
@@ -382,14 +377,14 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
                     disabled={photoAccepted}
                     onPress={handleRetakePhoto}
                   >
-                    <Text style={[styles.primaryButtonText, styles.reviewButtonText, styles.retakeButtonText]}>{uiText('Retake')}</Text>
+                    <Text style={[styles.primaryButtonText, styles.reviewButtonText, styles.retakeButtonText]}>{uiText('Retake Photo')}</Text>
                   </Pressable>
                   <Pressable
                     style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, (!photoReady || previewError || photoAccepted) && { opacity: 0.6 }]}
                     disabled={!photoReady || previewError || photoAccepted}
                     onPress={handleUsePhoto}
                   >
-                    <Text style={[styles.primaryButtonText, styles.reviewButtonText]}>{uiText('Next')}</Text>
+                    <Text style={[styles.primaryButtonText, styles.reviewButtonText]}>{uiText('Use This Photo')}</Text>
                   </Pressable>
                 </>
               ) : !started ? (
@@ -399,19 +394,6 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
               ) : state.retryMessage || captureError ? (
                 <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={handleRetry}>
                   <Text style={styles.primaryButtonText}>{uiText("Retry")}</Text>
-                </Pressable>
-              ) : canManualCapture ? (
-                <Pressable
-                  style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, isManualCapturing && { opacity: 0.6 }]}
-                  disabled={isManualCapturing}
-                  onPress={async () => {
-                    if (isManualCapturing || captureStartedRef.current) return;
-                    setIsManualCapturing(true);
-                    await performCapture();
-                    if (mounted.current) setIsManualCapturing(false);
-                  }}
-                >
-                  <Text style={styles.primaryButtonText}>{isManualCapturing ? uiText("Capturing…") : uiText("Take Photo")}</Text>
                 </Pressable>
               ) : (
                 <View style={[styles.primaryButton, { opacity: 0.6 }]}>
@@ -477,34 +459,26 @@ const styles = StyleSheet.create({
   retakeButton: { backgroundColor: '#ECECEC' },
   retakeButtonText: { color: THEME.colors.ink },
   reviewButtonText: { fontSize: 13, textAlign: 'center', paddingHorizontal: 6 },
+  checkCircleOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+    elevation: 25,
+  },
   checkCircle: {
     alignItems: 'center',
     backgroundColor: '#14A11C',
     borderRadius: 25,
     height: 50,
     justifyContent: 'center',
-    position: 'absolute',
     width: 50,
-  },
-  checkLong: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 2,
-    height: 26,
-    left: 27,
-    position: 'absolute',
-    top: 11,
-    transform: [{ rotate: '42deg' }],
-    width: 5,
-  },
-  checkShort: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 2,
-    height: 14,
-    left: 17,
-    position: 'absolute',
-    top: 22,
-    transform: [{ rotate: '-45deg' }],
-    width: 5,
+    zIndex: 9999,
+    elevation: 25,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
   },
   faceIcon: {
     height: 128,
@@ -626,5 +600,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 24,
     width: 226,
+    position: 'relative',
+    zIndex: 10,
+    elevation: 10,
   },
 });

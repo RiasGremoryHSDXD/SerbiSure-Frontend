@@ -28,7 +28,7 @@ import {
 } from '../../../shared/auth/rememberedAccount';
 import { useUser } from '../../auth/session/UserContext';
 
-const logoSource = require('../../../../assets/serbisure_new_clean.png');
+const logoSource = require('../../../../assets/serbisure-icon.png');
 const heroSource = require('../../../../assets/landingpage1-transparent.png');
 
 function parseJwtPayload(token: string): any {

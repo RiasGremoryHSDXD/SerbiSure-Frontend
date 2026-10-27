@@ -1,8 +1,10 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, Pressable, Modal, ActivityIndicator, Linking, Alert, RefreshControl } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Pressable, Modal, ActivityIndicator, Linking, Alert, RefreshControl, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+
+const serbisureIcon = require('../../../../assets/serbisure-icon.png');
 import { usePublicProfile } from '../hooks/usePublicProfile';
 import { profileStyles } from '../styles';
 import { ProfileTabs } from './ProfileTabs';
@@ -203,15 +205,15 @@ export function UserProfileView({
   };
 
   return (
-    <Modal visible={visible} animationType="none" transparent={false} onRequestClose={onClose}>
-      <View style={styles.container}>
-        <AppHeader
-          left={
-            <Pressable accessibilityRole="button" accessibilityLabel={uiText("Back")} onPress={onClose} style={styles.backButton} hitSlop={12}>
-              <Ionicons name="arrow-back" size={APP_HEADER_BACK_ICON_SIZE} color={APP_HEADER_BACK_ICON_COLOR} />
-            </Pressable>
-          }
-        />
+    <Modal visible={visible} animationType="none" transparent={false} statusBarTranslucent onRequestClose={onClose}>
+      <View style={[styles.container, { paddingTop: Math.max(insets.top, 14) }]}>
+        <View style={styles.header}>
+          <Pressable accessibilityRole="button" accessibilityLabel={uiText("Back")} onPress={onClose} style={styles.backBtn} hitSlop={12}>
+            <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
+          </Pressable>
+          <Image source={serbisureIcon} style={styles.headerLogo} resizeMode="contain" />
+          <View style={styles.headerRightSpacer} />
+        </View>
 
         <ScrollView
           style={styles.scrollBody}
@@ -494,11 +496,27 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F6F5F2',
   },
-  backButton: {
-    width: 32,
-    height: 32,
+  header: {
+    backgroundColor: '#F6F5F2',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerLogo: {
+    width: 40,
+    height: 40,
+  },
+  headerRightSpacer: {
+    width: 40,
+    height: 40,
   },
   scrollBody: {
     flex: 1,

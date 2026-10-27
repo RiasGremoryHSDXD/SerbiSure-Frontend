@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import THEME from '../../../shared/theme/theme';
 import { changePassword } from '../api/accountApi';
 
-const logoSource = require('../../../../assets/serbisure-logo.png');
+const logoSource = require('../../../../assets/serbisure-icon.png');
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
 interface PasswordSecurityModalProps {

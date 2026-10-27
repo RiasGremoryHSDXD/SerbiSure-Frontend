@@ -47,3 +47,32 @@ class FaceLandmarkDetectionFrameProcessorPlugin() : FrameProcessorPlugin() {
   fs.writeFileSync(pluginPath, replacement, 'utf8');
   console.log('Patched FaceLandmarkDetectionFrameProcessorPlugin.kt (using MediaImageBuilder)');
 }
+
+// 3. Patch FaceLandmarkDetectorHelper.kt to enable outputFacialTransformationMatrixes
+const helperPath = path.join(__dirname, '..', 'node_modules', 'react-native-mediapipe', 'android', 'src', 'main', 'java', 'com', 'reactnativemediapipe', 'facelandmarkdetection', 'FaceLandmarkDetectorHelper.kt');
+if (fs.existsSync(helperPath)) {
+  let content = fs.readFileSync(helperPath, 'utf8');
+  if (content.includes('.setOutputFaceBlendshapes(true)') && !content.includes('.setOutputFacialTransformationMatrixes(true)')) {
+    content = content.replace(
+      '.setOutputFaceBlendshapes(true)',
+      '.setOutputFaceBlendshapes(true)\n          .setOutputFacialTransformationMatrixes(true)'
+    );
+    fs.writeFileSync(helperPath, content, 'utf8');
+    console.log('Patched FaceLandmarkDetectorHelper.kt (setOutputFacialTransformationMatrixes = true)');
+  }
+}
+
+// 4. Patch FaceLandmarkDetectorHelper.swift to enable outputFacialTransformationMatrixes
+const swiftHelperPath = path.join(__dirname, '..', 'node_modules', 'react-native-mediapipe', 'ios', 'facelandmarkdetection', 'FaceLandmarkDetectorHelper.swift');
+if (fs.existsSync(swiftHelperPath)) {
+  let content = fs.readFileSync(swiftHelperPath, 'utf8');
+  if (content.includes('faceLandmarkerOptions.baseOptions.delegate = self.optionsDelegate') && !content.includes('outputFacialTransformationMatrixes')) {
+    content = content.replace(
+      'faceLandmarkerOptions.baseOptions.delegate = self.optionsDelegate',
+      'faceLandmarkerOptions.baseOptions.delegate = self.optionsDelegate\n    faceLandmarkerOptions.outputFacialTransformationMatrixes = true'
+    );
+    fs.writeFileSync(swiftHelperPath, content, 'utf8');
+    console.log('Patched FaceLandmarkDetectorHelper.swift (outputFacialTransformationMatrixes = true)');
+  }
+}
+

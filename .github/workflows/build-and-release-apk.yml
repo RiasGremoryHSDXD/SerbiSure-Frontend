@@ -127,10 +127,19 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: SerbiSure ${{ env.RELEASE_TAG }}
           body: |
-            ### 📱 Which APK should I install?
-            * **`SerbiSure-v${{ env.APP_VERSION }}.apk`** *(Recommended)* — Universal build. Works on **all Android devices**.
-            * **`SerbiSure-v${{ env.APP_VERSION }}-arm64.apk`** — Lightweight (~37 MB) build for modern 64-bit Android smartphones.
-            * **`SerbiSure-v${{ env.APP_VERSION }}-arm32.apk`** — Legacy build for older 32-bit devices.
+            ## SerbiSure ${{ env.RELEASE_TAG }} Release Notes
+
+            ### MediaPipe Automated Liveness and Face Verification
+            - Automated Face Landmarker Pipeline: Fully integrated Google MediaPipe face landmark detection with native hardware-accelerated pipeline and automated verification flow.
+            - Sensor Coordinate Calibration: Resolved Android front camera sensor 90-degree coordinate rotation by calculating head pose yaw through eye-axis vector projection in camera pixel aspect ratio (landmarks 33 to 263).
+            - Calibrated Turn Sensitivity: Calibrated yaw threshold to 0.22 with relaxed turning center tolerance of 0.40, cleanly differentiating natural baseline resting angles from intentional head turns.
+            - Verified Step Sequence: Set detection sequence to Look Right first, followed by Look Left, and concluding with Stay Still.
+            - Real-Time UI Progress: Synchronized circular progress rings and dual-language (Tagalog/English) prompt transitions to active landmark tracking.
+
+            ### Which APK should I install?
+            * **`SerbiSure-v${{ env.APP_VERSION }}.apk`** *(Recommended)* - Universal build. Works on **all Android devices**.
+            * **`SerbiSure-v${{ env.APP_VERSION }}-arm64.apk`** - Lightweight (~37 MB) build for modern 64-bit Android smartphones.
+            * **`SerbiSure-v${{ env.APP_VERSION }}-arm32.apk`** - Legacy build for older 32-bit devices.
           generate_release_notes: true
           draft: false
           prerelease: ${{ github.event.inputs.prerelease == 'true' }}

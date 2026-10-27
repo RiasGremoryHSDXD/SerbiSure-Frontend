@@ -41,8 +41,8 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
     (resultBundle: FaceLandmarkDetectionResultBundle, viewSize: Dims, mirrored: boolean) => {
       if (!detecting) return;
       const now = Date.now();
-      // Allow responsive tracking at ~25 FPS without dropping head turns.
-      if (now - lastResultAt.current < 40) return;
+      // Drop excess JS callbacks before mapping hundreds of landmark points.
+      if (now - lastResultAt.current < 100) return;
       lastResultAt.current = now;
       setDetectorError(null);
       onLandmarks(
@@ -127,7 +127,7 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
         fps={format ? Math.max(format.minFps, Math.min(30, format.maxFps)) : undefined}
         photoQualityBalance="speed"
         isActive
-        pixelFormat="yuv"
+        pixelFormat="rgb"
         photo
         // Keep outputs bound until capture finishes. Removing the processor
         // here rebuilds Android's ImageCapture and can race with takePhoto().

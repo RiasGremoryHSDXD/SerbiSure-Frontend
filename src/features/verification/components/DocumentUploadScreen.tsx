@@ -14,7 +14,7 @@ import { APP_HEADER_BACK_ICON_COLOR, APP_HEADER_BACK_ICON_SIZE, APP_HEADER_LOGO_
 const noSubscription = () => () => {};
 const noSelfieUpload = () => null;
 
-const logoSource = require('../../../../assets/serbisure_new_clean.png');
+const logoSource = require('../../../../assets/serbisure-icon.png');
 
 function getFileName(uri: string | null, defaultName: string) {
   if (!uri) return defaultName;

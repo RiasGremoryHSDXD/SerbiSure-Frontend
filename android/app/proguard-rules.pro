@@ -38,3 +38,12 @@
 -dontwarn javax.lang.model.**
 -dontwarn autovalue.shaded.**
 -dontwarn com.google.auto.value.**
+
+# Keep native methods JSI bindings
+-keepclassmembers class * {
+    native <methods>;
+}
+
+# Keep generic/reflection-based classes used in frame processors
+-keepattributes Signature
+-keepattributes *Annotation*,InnerClasses,EnclosingMethod

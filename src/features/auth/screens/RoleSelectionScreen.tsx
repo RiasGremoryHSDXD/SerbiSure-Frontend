@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import THEME from '../../../shared/theme/theme';
 import { APP_HEADER_BACK_ICON_COLOR, APP_HEADER_BACK_ICON_SIZE, APP_HEADER_LOGO_SIZE, APP_HEADER_SIDE_WIDTH } from '../../../shared/components/AppHeader';
 
-const logoSource = require('../../../../assets/serbisure_new_clean.png');
+const logoSource = require('../../../../assets/serbisure-icon.png');
 const homeownerSource = require('../../../../assets/homeowner1.png');
 const kasambahaySource = require('../../../../assets/kasambahay1.png');
 

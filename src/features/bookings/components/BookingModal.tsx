@@ -19,7 +19,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { fetchMinimumWage, MinimumWageData } from '../api/bookingApi';
 import THEME from '../../../shared/theme/theme';
 
-const logoSource = require('../../../../assets/serbisure-logo.png');
+const logoSource = require('../../../../assets/serbisure-icon.png');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ACCENT_PEACH = '#FFAB73';
 

@@ -43,8 +43,8 @@ export const initialLivenessState: LivenessState = {
 
 const stepInstructions: Record<LivenessStep, string> = {
   face: 'Position your face inside the frame',
-  turnLeft: 'Look Left',
   turnRight: 'Look Right',
+  turnLeft: 'Look Left',
   still: 'Face forward and hold for a moment',
   verified: 'Face verification complete',
 };
@@ -92,11 +92,14 @@ export function advanceLiveness(state: LivenessState, frame: LandmarkFrame): Liv
     state = retryCurrentStep(state);
   }
   state = { ...state, lastFrameAt: frame.timestamp, stepStartedAt: state.stepStartedAt ?? frame.timestamp };
-  const alignment = getFaceAlignment(frame);
+  const isTurningStep = state.step === 'turnRight' || state.step === 'turnLeft';
+  const alignment = getFaceAlignment(frame, isTurningStep);
   const face = frame.face;
 
   if (state.step === 'still') {
-    const ready = face && alignment.centered && getHeadPoseDirection(face) === 'center';
+    const isMock = !face?.points || face.points.length === 0;
+    const isMockTurn = isMock && typeof face?.signals?.yawAngle === 'number' && Math.abs(face.signals.yawAngle) >= 15;
+    const ready = Boolean(face && alignment.centered && !isMockTurn);
     const stillness = getStillnessProgress(ready ? face : null, {
       stableFace: state.stableFace,
       progress: state.stillnessProgress,
@@ -129,17 +132,25 @@ export function advanceLiveness(state: LivenessState, frame: LandmarkFrame): Liv
   }
 
   if (state.step === 'face') {
-    return completeStep(state, 'face', 'turnLeft', frame.timestamp);
+    return completeStep(state, 'face', 'turnRight', frame.timestamp);
   }
 
   const headPose = getHeadPoseDirection(face);
 
-  if (state.step === 'turnLeft' || state.step === 'turnRight') {
-    const expected = state.step === 'turnLeft' ? 'left' : 'right';
+  if (state.step === 'turnRight' || state.step === 'turnLeft') {
+    const expected = state.step === 'turnRight' ? 'right' : 'left';
     const prompted = frame.timestamp - state.stepStartedAt! >= PROMPT_DURATION_MS;
-    const actionSince = prompted && headPose === expected ? state.actionSince ?? frame.timestamp : null;
+    const isMatching = prompted && headPose === expected;
+    let actionSince = state.actionSince;
+    if (isMatching) {
+      actionSince = state.actionSince ?? frame.timestamp;
+    } else if (state.actionSince !== null && (!face || headPose === 'unknown') && previousFrameAt !== null && frame.timestamp - previousFrameAt <= 300) {
+      actionSince = state.actionSince;
+    } else {
+      actionSince = null;
+    }
     if (actionSince !== null && frame.timestamp - actionSince >= TURN_HOLD_MS) {
-      return completeStep(state, state.step, state.step === 'turnLeft' ? 'turnRight' : 'still', frame.timestamp);
+      return completeStep(state, state.step, state.step === 'turnRight' ? 'turnLeft' : 'still', frame.timestamp);
     }
     return { ...state, actionSince, instruction: stepInstructions[state.step], retryMessage: null };
   }

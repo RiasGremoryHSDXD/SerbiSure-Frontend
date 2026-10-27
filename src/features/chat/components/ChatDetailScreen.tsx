@@ -29,6 +29,8 @@ import { savedJobsStore } from '../../bookings/store/savedJobsStore';
 import { API_BASE_URL } from '../../../shared/api/config';
 import { fetchWithTimeout } from '../../../shared/api/httpClient';
 
+const serbisureIcon = require('../../../../assets/serbisure-icon.png');
+
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export const formatBookingStartDate = (dateStr?: string) => {
@@ -317,7 +319,7 @@ function isEmojiOnly(str?: string): boolean {
   }
 }
 
-function TypingDotsIndicator({ avatarUri }: { avatarUri: string }) {
+function TypingDotsIndicator({ avatarUri, useOfficialLogo }: { avatarUri: string; useOfficialLogo?: boolean }) {
   const dot1 = useRef(new Animated.Value(0)).current;
   const dot2 = useRef(new Animated.Value(0)).current;
   const dot3 = useRef(new Animated.Value(0)).current;
@@ -361,7 +363,13 @@ function TypingDotsIndicator({ avatarUri }: { avatarUri: string }) {
 
   return (
     <View style={styles.typingRow}>
-      <Image source={{ uri: avatarUri }} style={styles.msgAvatar} />
+      {useOfficialLogo ? (
+        <View style={[styles.msgAvatar, styles.officialMsgAvatarContainer]}>
+          <Image source={serbisureIcon} style={styles.officialMsgAvatarLogo} resizeMode="contain" />
+        </View>
+      ) : (
+        <Image source={{ uri: avatarUri }} style={styles.msgAvatar} />
+      )}
       <View style={styles.typingDotsBubble}>
         <Animated.View style={[styles.typingDot, { transform: [{ translateY: dot1 }] }]} />
         <Animated.View style={[styles.typingDot, { transform: [{ translateY: dot2 }] }]} />
@@ -455,6 +463,22 @@ function ChatDetailSession({
       Alert.alert('Copied', 'Message copied to clipboard');
     }
   };
+
+  const isSupportPartner =
+    isSupportConversation ||
+    contactName?.toLowerCase().includes('support') ||
+    contactName?.toLowerCase().includes('superadmin') ||
+    contactName?.toLowerCase().includes('admin') ||
+    contactRole?.toLowerCase().includes('support') ||
+    contactRole?.toLowerCase().includes('admin');
+
+  const hasCustomAvatar = Boolean(
+    contactAvatar &&
+    !contactAvatar.includes('ui-avatars.com') &&
+    !contactAvatar.includes('placeholder') &&
+    !contactAvatar.includes('pravatar')
+  );
+  const useOfficialLogo = isSupportPartner && !hasCustomAvatar;
 
   const resolvedAvatar =
     contactAvatar ||
@@ -1454,7 +1478,13 @@ function ChatDetailSession({
               hitSlop={8}
             >
               <View style={styles.avatarWrapper}>
-                <Image source={{ uri: resolvedAvatar }} style={styles.headerAvatar} />
+                {useOfficialLogo ? (
+                  <View style={[styles.headerAvatar, styles.officialHeaderAvatarContainer]}>
+                    <Image source={serbisureIcon} style={styles.officialHeaderAvatarLogo} resizeMode="contain" />
+                  </View>
+                ) : (
+                  <Image source={{ uri: resolvedAvatar }} style={styles.headerAvatar} />
+                )}
                 {partnerOnline === true ? <View testID="chat-presence-online" style={styles.onlineDot} /> : null}
               </View>
               <View style={styles.headerTextCol}>
@@ -1511,7 +1541,7 @@ function ChatDetailSession({
                   if (sessionActive.current && target >= 0) scrollViewRef.current?.scrollToIndex({ index: target, viewPosition: 0.5, animated: true });
                 }, 120);
               }}
-              ListHeaderComponent={isOtherTyping ? <TypingDotsIndicator avatarUri={resolvedAvatar} /> : null}
+              ListHeaderComponent={isOtherTyping ? <TypingDotsIndicator avatarUri={resolvedAvatar} useOfficialLogo={useOfficialLogo} /> : null}
               ListFooterComponent={<>
               {/* Show initial Date Separator if empty thread */}
               {messages.length === 0 && !threadLoading && !threadError ? (
@@ -1570,7 +1600,13 @@ function ChatDetailSession({
                     <View style={[styles.leftMessageRow, rowSpacingStyle]}>
                       <Pressable onPress={() => { if (partnerId) setProfileModalVisible(true); }} hitSlop={6}>
                         {!isSameGroupAsNext ? (
-                          <Image source={{ uri: item.avatar || contactAvatar || resolvedAvatar }} style={styles.msgAvatar} />
+                          useOfficialLogo ? (
+                            <View style={[styles.msgAvatar, styles.officialMsgAvatarContainer]}>
+                              <Image source={serbisureIcon} style={styles.officialMsgAvatarLogo} resizeMode="contain" />
+                            </View>
+                          ) : (
+                            <Image source={{ uri: item.avatar || contactAvatar || resolvedAvatar }} style={styles.msgAvatar} />
+                          )
                         ) : (
                           <View style={styles.msgAvatarPlaceholder} />
                         )}
@@ -1771,7 +1807,13 @@ function ChatDetailSession({
                             hitSlop={6}
                           >
                             {!isSameGroupAsNext ? (
-                              <Image source={{ uri: item.avatar || contactAvatar || resolvedAvatar }} style={styles.msgAvatar} />
+                              useOfficialLogo ? (
+                                <View style={[styles.msgAvatar, styles.officialMsgAvatarContainer]}>
+                                  <Image source={serbisureIcon} style={styles.officialMsgAvatarLogo} resizeMode="contain" />
+                                </View>
+                              ) : (
+                                <Image source={{ uri: item.avatar || contactAvatar || resolvedAvatar }} style={styles.msgAvatar} />
+                              )
                             ) : (
                               <View style={styles.msgAvatarPlaceholder} />
                             )}
@@ -2417,6 +2459,30 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+  },
+  officialHeaderAvatarContainer: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#FFCCAA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  officialHeaderAvatarLogo: {
+    width: 24,
+    height: 24,
+  },
+  officialMsgAvatarContainer: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FFCCAA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  officialMsgAvatarLogo: {
+    width: 18,
+    height: 18,
   },
   onlineDot: {
     width: 10,

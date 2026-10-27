@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { VerificationRequiredModal } from '../../verification/components/VerificationRequiredModal';
 import { BookingRestrictionModal } from '../../bookings/components/BookingRestrictionModal';
 
-const logoSource = require('../../../../assets/serbisure-logo.png');
+const logoSource = require('../../../../assets/serbisure-icon.png');
 
 import type { PostScreenProps } from '../types';
 
