@@ -190,37 +190,56 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
     setState(next);
   }, []);
 
-  useEffect(() => {
-    if (!started || !state.verified || captureStartedRef.current) {
-      return;
-    }
+  const [canManualCapture, setCanManualCapture] = useState(false);
+  const [isManualCapturing, setIsManualCapturing] = useState(false);
 
+  const performCapture = useCallback(async () => {
+    if (captureStartedRef.current) return;
     captureStartedRef.current = true;
     setShowCenterCheck(true);
 
     const captureStartedAt = Date.now();
-    void (async () => {
-      try {
-        const selfiePath = await cameraRef.current?.captureSelfie();
-        if (!selfiePath) throw new Error('The camera could not capture your selfie. Please retry.');
-        if (!mounted.current) { discardSelfie(selfiePath); return; }
-        console.info('[Liveness timing]', {
-          stage: 'selfie_review', captureMs: Date.now() - captureStartedAt,
-          durationMs: Date.now() - startedAt.current,
-        });
-        const captured: LivenessResult = { verified: true, completedAt: Date.now(), selfiePath };
-        pendingSelfie.current = captured;
-        setPhotoReady(false);
-        setPreviewError(false);
-        setSelfie(captured);
-        setShowCenterCheck(false);
-      } catch (error) {
-        const code = error && typeof error === 'object' && 'code' in error ? error.code : 'capture-failed';
-        console.warn('[Liveness] Selfie capture failed', { code });
-        if (mounted.current) setCaptureError('We couldn’t take your selfie.');
-      }
-    })();
-  }, [started, state.verified, captureAttempt]);
+    try {
+      const selfiePath = await cameraRef.current?.captureSelfie();
+      if (!selfiePath) throw new Error("The camera could not capture your selfie. Please retry.");
+      if (!mounted.current) { discardSelfie(selfiePath); return; }
+      console.info("[Liveness timing]", {
+        stage: "selfie_review", captureMs: Date.now() - captureStartedAt,
+        durationMs: Date.now() - startedAt.current,
+      });
+      const captured: LivenessResult = { verified: true, completedAt: Date.now(), selfiePath };
+      pendingSelfie.current = captured;
+      setPhotoReady(false);
+      setPreviewError(false);
+      setSelfie(captured);
+      setShowCenterCheck(false);
+    } catch (error) {
+      captureStartedRef.current = false;
+      const code = error && typeof error === "object" && "code" in error ? error.code : "capture-failed";
+      console.warn("[Liveness] Selfie capture failed", { code });
+      if (mounted.current) setCaptureError("We couldn’t take your selfie.");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!started || selfie) {
+      setCanManualCapture(false);
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      setCanManualCapture(true);
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, [started, selfie]);
+
+  useEffect(() => {
+    if (!started || !state.verified || captureStartedRef.current) {
+      return;
+    }
+    void performCapture();
+  }, [started, state.verified, captureAttempt, performCapture]);
 
   const instruction = submitting ? 'Face check passed. Creating your account…' : submissionFailed
     ? 'Your selfie is ready. Retry or go back to edit your details.' : selfie
@@ -239,6 +258,8 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
     setPreviewError(false);
     setPhotoAccepted(false);
     setStarted(true);
+    setCanManualCapture(false);
+    setIsManualCapturing(false);
     startedAt.current = Date.now();
     stateRef.current = initialLivenessState;
     setState(initialLivenessState);
@@ -379,9 +400,22 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
                 <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={handleRetry}>
                   <Text style={styles.primaryButtonText}>{uiText("Retry")}</Text>
                 </Pressable>
+              ) : canManualCapture ? (
+                <Pressable
+                  style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, isManualCapturing && { opacity: 0.6 }]}
+                  disabled={isManualCapturing}
+                  onPress={async () => {
+                    if (isManualCapturing || captureStartedRef.current) return;
+                    setIsManualCapturing(true);
+                    await performCapture();
+                    if (mounted.current) setIsManualCapturing(false);
+                  }}
+                >
+                  <Text style={styles.primaryButtonText}>{isManualCapturing ? uiText("Capturing…") : uiText("Take Photo")}</Text>
+                </Pressable>
               ) : (
                 <View style={[styles.primaryButton, { opacity: 0.6 }]}>
-                  <Text style={styles.primaryButtonText}>{state.verified ? uiText('Capturing…') : uiText("Scanning…")}</Text>
+                  <Text style={styles.primaryButtonText}>{state.verified ? uiText("Capturing…") : uiText("Scanning…")}</Text>
                 </View>
               )}
             </View>
