@@ -2,16 +2,13 @@ import { FACE_LANDMARKS } from '../face/landmarkIndexes';
 import { landmark } from '../face/geometry';
 import type { FaceAlignment, FaceLandmarks, HeadPoseDirection, LandmarkFrame } from '../face/types';
 
-const CENTER_TOLERANCE = 0.26;
-const TURNING_CENTER_TOLERANCE = 0.40;
-const MIN_FACE_SIZE = 0.15;
-const MAX_FACE_SIZE = 0.85;
-// About a 20 degree head turn when measured with the eye-axis yawOffset.
-const YAW_OFFSET_THRESHOLD = 0.22;
-const HEAD_TURN_THRESHOLD = 0.030;
-const FORWARD_FACING_THRESHOLD = 0.14;
+const CENTER_TOLERANCE = 0.16;
+const TURNING_CENTER_TOLERANCE = 0.28;
+const MIN_FACE_SIZE = 0.2;
+const MAX_FACE_SIZE = 0.72;
+const HEAD_TURN_THRESHOLD = 0.10;
 const STILLNESS_DURATION_MS = 1000;
-const MOVEMENT_TOLERANCE = 0.17;
+const MOVEMENT_TOLERANCE = 0.15;
 const STILLNESS_GRACE_MS = 600;
 const MAX_STILL_FRAME_GAP_MS = 500;
 
@@ -50,48 +47,38 @@ export function getHeadPoseDirection(face: FaceLandmarks): HeadPoseDirection {
   const yawAngle = face.signals?.yawAngle;
 
   if (typeof yawAngle === 'number' && Number.isFinite(yawAngle)) {
-    if (yawAngle > 8) {
-      return 'left';
-    }
-
-    if (yawAngle < -8) {
+    if (yawAngle > 10) {
       return 'right';
     }
 
+    if (yawAngle < -10) {
+      return 'left';
+    }
+
     return 'center';
   }
 
-  
-  const yawOffset = face.signals?.yawOffset;
-  if (typeof yawOffset === 'number' && Number.isFinite(yawOffset)) {
-    if (yawOffset > YAW_OFFSET_THRESHOLD) return 'right';
-    if (yawOffset < -YAW_OFFSET_THRESHOLD) return 'left';
-    return 'center';
-  }
-const nose = landmark(face, FACE_LANDMARKS.noseTip);
+  const nose = landmark(face, FACE_LANDMARKS.noseTip);
   const leftCheek = landmark(face, FACE_LANDMARKS.leftCheek);
   const rightCheek = landmark(face, FACE_LANDMARKS.rightCheek);
-  if (!nose) return 'unknown';
-  let faceMidline: number | null = null;
-  let faceWidth: number | null = null;
-  if (leftCheek && rightCheek) {
-    faceMidline = (leftCheek.x + rightCheek.x) / 2;
-    faceWidth = Math.max(Math.abs(rightCheek.x - leftCheek.x), 1);
-  } else {
-    const leftEye = landmark(face, FACE_LANDMARKS.leftEye.outer);
-    const rightEye = landmark(face, FACE_LANDMARKS.rightEye.outer);
-    if (leftEye && rightEye) {
-      faceMidline = (leftEye.x + rightEye.x) / 2;
-      faceWidth = Math.max(Math.abs(rightEye.x - leftEye.x) * 1.5, 1);
-    } else if (face.bounds) {
-      faceMidline = face.bounds.x + face.bounds.width / 2;
-      faceWidth = Math.max(face.bounds.width, 1);
-    }
+
+  if (!nose || !leftCheek || !rightCheek) {
+    return 'unknown';
   }
-  if (faceMidline === null || faceWidth === null) return 'unknown';
-  // Convert mirrored preview coordinates back to the applicant's physical
-  // left/right before interpreting the nose offset.
-  const rawOffset = (nose.x - faceMidline) / faceWidth * (face.signals?.mirrored ? -1 : 1);
+
+  const dx = rightCheek.x - leftCheek.x;
+  const dy = rightCheek.y - leftCheek.y;
+  const isRotatedSensor = Math.abs(dy) > Math.abs(dx);
+
+  const faceMidline = isRotatedSensor
+    ? (leftCheek.y + rightCheek.y) / 2
+    : (leftCheek.x + rightCheek.x) / 2;
+
+  const faceWidth = Math.max(isRotatedSensor ? Math.abs(dy) : Math.abs(dx), 1);
+  const rawDelta = isRotatedSensor ? (nose.y - faceMidline) : (nose.x - faceMidline);
+  const span = isRotatedSensor ? dy : dx;
+  const rawOffset = (rawDelta / faceWidth) * (span > 0 ? 1 : -1);
+
   if (!Number.isFinite(rawOffset)) return 'unknown';
 
   if (rawOffset > HEAD_TURN_THRESHOLD) {
@@ -105,27 +92,39 @@ const nose = landmark(face, FACE_LANDMARKS.noseTip);
   return 'center';
 }
 
-export function isFaceForward(face: FaceLandmarks): boolean {
-  const yawAngle = face.signals?.yawAngle;
-
-  if (typeof yawAngle === 'number' && Number.isFinite(yawAngle)) {
-    return Math.abs(yawAngle) <= 12;
+export function getHeadPoseDetails(face: FaceLandmarks | null): {
+  direction: HeadPoseDirection;
+  offset: number;
+} {
+  if (!face) return { direction: 'unknown', offset: 0 };
+  if (typeof face.signals?.yawAngle === 'number' && Number.isFinite(face.signals.yawAngle)) {
+    return {
+      direction: getHeadPoseDirection(face),
+      offset: face.signals.yawAngle,
+    };
   }
-
-  
-  const yawOffset = face.signals?.yawOffset;
-  if (typeof yawOffset === 'number' && Number.isFinite(yawOffset)) {
-    return Math.abs(yawOffset) <= YAW_OFFSET_THRESHOLD;
-  }
-const nose = landmark(face, FACE_LANDMARKS.noseTip);
+  const nose = landmark(face, FACE_LANDMARKS.noseTip);
   const leftCheek = landmark(face, FACE_LANDMARKS.leftCheek);
   const rightCheek = landmark(face, FACE_LANDMARKS.rightCheek);
-  if (!nose || !leftCheek || !rightCheek) return false;
+  if (!nose || !leftCheek || !rightCheek) return { direction: 'unknown', offset: 0 };
 
-  const faceMidline = (leftCheek.x + rightCheek.x) / 2;
-  const faceWidth = Math.max(Math.abs(rightCheek.x - leftCheek.x), 1);
-  const offset = (nose.x - faceMidline) / faceWidth;
-  return Number.isFinite(offset) && Math.abs(offset) <= FORWARD_FACING_THRESHOLD;
+  const dx = rightCheek.x - leftCheek.x;
+  const dy = rightCheek.y - leftCheek.y;
+  const isRotatedSensor = Math.abs(dy) > Math.abs(dx);
+  const faceMidline = isRotatedSensor
+    ? (leftCheek.y + rightCheek.y) / 2
+    : (leftCheek.x + rightCheek.x) / 2;
+  const faceWidth = Math.max(isRotatedSensor ? Math.abs(dy) : Math.abs(dx), 1);
+  const rawDelta = isRotatedSensor ? (nose.y - faceMidline) : (nose.x - faceMidline);
+  const span = isRotatedSensor ? dy : dx;
+  const rawOffset = (rawDelta / faceWidth) * (span > 0 ? 1 : -1);
+
+  if (!Number.isFinite(rawOffset)) return { direction: 'unknown', offset: 0 };
+
+  return {
+    direction: getHeadPoseDirection(face),
+    offset: rawOffset,
+  };
 }
 
 export function getStillnessProgress(

@@ -134,20 +134,20 @@ test('liveness succeeds without blink or eye tracking data but still requires bo
   assert.equal(runFrames(closed).verified, true);
   const noTurns = successfulFrames().map(frame => faceFrame(0, frame.timestamp));
   assert.equal(runFrames(noTurns).step, 'turnRight');
-  const onlyLeft = successfulFrames().map(frame => faceFrame(15, frame.timestamp));
+  const onlyLeft = successfulFrames().map(frame => faceFrame(-15, frame.timestamp));
   assert.equal(runFrames(onlyLeft).step, 'turnRight');
 });
 
 test('single-frame turns and interrupted tracking cannot complete an action', () => {
   let state = advanceLiveness(initialLivenessState, faceFrame(0, 800));
   for (let time = 900; time <= 2500; time += 100) {
-    state = advanceLiveness(state, faceFrame(time === 1500 ? -15 : 0, time));
+    state = advanceLiveness(state, faceFrame(time === 1500 ? 15 : 0, time));
   }
   assert.equal(state.step, 'turnRight');
-  state = advanceLiveness(state, faceFrame(-15, 2600));
+  state = advanceLiveness(state, faceFrame(15, 2600));
   const old = state;
-  assert.equal(advanceLiveness(state, faceFrame(-15, 2500)), old);
-  state = advanceLiveness(state, faceFrame(-15, 5000));
+  assert.equal(advanceLiveness(state, faceFrame(15, 2500)), old);
+  state = advanceLiveness(state, faceFrame(15, 5000));
   assert.equal(state.step, 'turnRight');
   assert.equal(state.actionSince, null);
   assert.equal(retryCurrentStep(state).actionSince, null);
@@ -178,7 +178,7 @@ test('a brief wobble, lost face, or head turn pauses progress and resumes withou
   const missing = { ...faceFrame(0, 2600), face: null };
   const offCenter = faceFrame(0, 2600);
   offCenter.face.bounds.x = 60;
-  for (const frame of [faceFrame(-15, 2600), moved, missing, offCenter]) {
+  for (const frame of [faceFrame(15, 2600), moved, missing, offCenter]) {
     let state = advanceLiveness(ready, frame);
     assert.equal(state.verified, false);
     assert.equal(state.stillnessProgress, ready.stillnessProgress);
@@ -198,7 +198,7 @@ test('long tracking interruptions restart only the final hold and never count th
   for (const kind of ['missing', 'turned', 'moved']) {
     let state = ready;
     for (let time = 2600; time <= 3200; time += 100) {
-      const frame = faceFrame(kind === 'turned' ? -15 : 0, time);
+      const frame = faceFrame(kind === 'turned' ? 15 : 0, time);
       if (kind === 'missing') frame.face = null;
       if (kind === 'moved') frame.face.bounds.x += 8;
       state = advanceLiveness(state, frame);
@@ -221,7 +221,7 @@ test('mirrored MediaPipe coordinates preserve turn direction', () => {
   const { FACE_LANDMARKS: idx } = indexes;
   face.points[idx.leftCheek] = { x: 30, y: 50 };
   face.points[idx.rightCheek] = { x: 70, y: 50 };
-  for (const [nose, expected] of [[45, 'left'], [55, 'right'], [50, 'center']]) {
+  for (const [nose, expected] of [[55, 'right'], [45, 'left'], [50, 'center']]) {
     face.points[idx.noseTip] = { x: nose, y: 50 };
     face.signals.mirrored = false;
     assert.equal(rules.getHeadPoseDirection(face), expected);

@@ -17,7 +17,7 @@ import { generateWorkerCvPdf, GenerateCvPdfOptions } from './generateWorkerCvPdf
 import { useUser } from '../../auth/session/UserContext';
 import THEME from '../../../shared/theme/theme';
 
-const logoSource = require('../../../../assets/serbisure_new_clean.png');
+const logoSource = require('../../../../assets/serbisure-icon.png');
 
 interface Props {
   visible: boolean;

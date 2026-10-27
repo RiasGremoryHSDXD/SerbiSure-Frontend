@@ -9,7 +9,7 @@ import { IDPhotoModal } from './IDPhotoModal';
 import { API_BASE_URL } from '../../../shared/api/config';
 import { fetchWithTimeout } from '../../../shared/api/httpClient';
 
-const logoSource = require('../../../../assets/serbisure-logo.png');
+const logoSource = require('../../../../assets/serbisure-icon.png');
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
 interface VerificationStatusModalProps {

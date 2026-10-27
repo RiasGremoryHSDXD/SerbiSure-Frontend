@@ -41,8 +41,8 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
     (resultBundle: FaceLandmarkDetectionResultBundle, viewSize: Dims, mirrored: boolean) => {
       if (!detecting) return;
       const now = Date.now();
-      // Allow responsive tracking at ~25 FPS without dropping head turns.
-      if (now - lastResultAt.current < 40) return;
+      // Drop excess JS callbacks before mapping hundreds of landmark points.
+      if (now - lastResultAt.current < 100) return;
       lastResultAt.current = now;
       setDetectorError(null);
       onLandmarks(
@@ -72,7 +72,7 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
       minFaceDetectionConfidence: 0.5,
       minFacePresenceConfidence: 0.5,
       minTrackingConfidence: 0.5,
-      mirrorMode: 'mirror',
+      mirrorMode: 'mirror-front-only',
       numFaces: 1,
     },
   );
@@ -127,8 +127,6 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
         fps={format ? Math.max(format.minFps, Math.min(30, format.maxFps)) : undefined}
         photoQualityBalance="speed"
         isActive
-        // The Android MediaPipe bridge wraps CameraX's Image directly and
-        // requires RGBA_8888. YUV frames fail before landmark detection.
         pixelFormat="rgb"
         photo
         // Keep outputs bound until capture finishes. Removing the processor

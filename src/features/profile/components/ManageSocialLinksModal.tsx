@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchUserSocialLinks, updateUserSocialLinks, SocialLinkItem } from '../api/accountApi';
 
-const logoSource = require('../../../../assets/serbisure-logo.png');
+const logoSource = require('../../../../assets/serbisure-icon.png');
 
 export interface ManageSocialLinksModalProps {
   visible: boolean;

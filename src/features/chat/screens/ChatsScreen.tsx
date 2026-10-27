@@ -15,6 +15,20 @@ import { chatStore, ChatConversation, cleanMessagePreview } from '../store/chatS
 import { useRealtimeStatus } from '../../../shared/realtime/useRealtimeStatus';
 import { useChatPresence } from '../../../shared/realtime/useChatPresence';
 
+const serbisureIcon = require('../../../../assets/serbisure-icon.png');
+
+const isOfficialSupportChat = (chat: ChatConversation) => {
+  const name = chat.name?.toLowerCase() || '';
+  const badge = chat.badge?.toLowerCase() || '';
+  const hasCustom = Boolean(
+    chat.avatar &&
+    !chat.avatar.includes('ui-avatars.com') &&
+    !chat.avatar.includes('placeholder') &&
+    !chat.avatar.includes('pravatar')
+  );
+  return (name.includes('support') || name.includes('admin') || badge.includes('support') || badge.includes('admin')) && !hasCustom;
+};
+
 export function ChatsScreen({ role: requestedRole, onBookingsPress }: { role?: Role; onBookingsPress?: () => void } = {}) {
   const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
@@ -212,7 +226,13 @@ export function ChatsScreen({ role: requestedRole, onBookingsPress }: { role?: R
                     <View style={styles.avatarPlaceholder}>
                       <Ionicons name="person" size={22} color="#9CA3AF" />
                     </View>
-                    <Image source={{ uri: chat.avatar }} style={styles.avatar} fadeDuration={0} />
+                    {isOfficialSupportChat(chat) ? (
+                      <View style={[styles.avatar, styles.officialAvatarContainer]}>
+                        <Image source={serbisureIcon} style={styles.officialAvatarImage} resizeMode="contain" />
+                      </View>
+                    ) : (
+                      <Image source={{ uri: chat.avatar }} style={styles.avatar} fadeDuration={0} />
+                    )}
                     {online !== undefined && (
                       <View
                         accessible
@@ -380,6 +400,18 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
+  },
+  officialAvatarContainer: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#FFCCAA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  officialAvatarImage: {
+    width: 32,
+    height: 32,
   },
   onlineDot: {
     position: 'absolute',

@@ -2,6 +2,7 @@ import { useLanguage as useUiLanguage } from '../../../shared/localization/Langu
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Linking,
   Modal,
   Pressable,
@@ -13,9 +14,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchPublicProfile, type PublicProfile } from '../api/accountApi';
-import { ProfileAvatar } from '../../../shared/ui/ProfileAvatar';
 import { formatRegisteredLocation } from '../../../shared/services/locationService';
 import THEME from '../../../shared/theme/theme';
+import { AppHeader, APP_HEADER_BACK_ICON_COLOR, APP_HEADER_BACK_ICON_SIZE } from '../../../shared/components/AppHeader';
+
+const serbisureIcon = require('../../../../assets/serbisure-icon.png');
 
 export interface OfficialProfileModalProps {
   visible: boolean;
@@ -90,7 +93,16 @@ export function OfficialProfileModal({
   const roleSource = `${profile?.account_type || prefilledRole} ${prefilledRole}`.toLowerCase();
   const isBarangay = roleSource.includes('barangay') || roleSource.includes('desk');
   const roleLabel = uiText(isBarangay ? 'Barangay desk' : 'SerbiSure Support');
-  const avatarUri = profile?.profile_link || prefilledAvatar;
+  const isSuperAdminOrSupport = !isBarangay || roleSource.includes('superadmin') || roleSource.includes('support') || roleSource.includes('ustp');
+  const rawAvatarUri = profile?.profile_link || prefilledAvatar;
+  const hasValidCustomPhoto = Boolean(
+    rawAvatarUri &&
+    !rawAvatarUri.includes('ui-avatars.com') &&
+    !rawAvatarUri.includes('placeholder') &&
+    !rawAvatarUri.includes('pravatar')
+  );
+  // Official support desk should always show the SerbiSure logo unless an explicit custom photo is set
+  const showSerbiSureLogo = isSuperAdminOrSupport || !hasValidCustomPhoto;
 
   const locationParts = [profile?.street, profile?.barangay, profile?.city, profile?.province]
     .map((part) => part?.trim())
@@ -123,30 +135,83 @@ export function OfficialProfileModal({
       ];
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
-      <View style={styles.container}>
-        <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Back to chat" onPress={onClose} style={styles.backButton} hitSlop={12}>
-            <Ionicons name="arrow-back" size={21} color={THEME.colors.ink} />
+    <Modal visible={visible} animationType="none" transparent={false} statusBarTranslucent onRequestClose={onClose}>
+      <View style={[styles.container, { paddingTop: Math.max(insets.top, 14) }]}>
+        <View style={styles.header}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={uiText("Back to chat")}
+            onPress={onClose}
+            style={styles.backBtn}
+            hitSlop={12}
+          >
+            <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
           </Pressable>
-          <Text style={styles.topBarTitle}>{uiText("Official profile")}</Text>
-          <View style={styles.topBarSpacer} />
+
+          <Image source={serbisureIcon} style={styles.headerLogo} resizeMode="contain" />
+
+          <View style={styles.headerRightSpacer} />
         </View>
 
         <ScrollView
+          style={styles.scrollBody}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 18) + 24 }]}
+          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 24 }}
         >
+          {/* Identity Hero Card matching Personal Info and UserProfileView design */}
           <View style={styles.heroCard}>
-            <ProfileAvatar uri={avatarUri} name={displayName} size={84} />
-            <Text style={styles.name}>{displayName}</Text>
-            <View style={styles.rolePill}>
-              <Ionicons name={isBarangay ? 'business-outline' : 'shield-checkmark-outline'} size={14} color="#8A4A20" />
-              <Text style={styles.rolePillText}>{roleLabel}</Text>
+            {/* Top row: Avatar on left, Role pill badge on right */}
+            <View style={styles.heroTopRow}>
+              <View style={styles.heroAvatarWrapper}>
+                {showSerbiSureLogo ? (
+                  <Image
+                    source={serbisureIcon}
+                    style={styles.heroLogoImage}
+                    resizeMode="contain"
+                    accessibilityLabel="SerbiSure"
+                  />
+                ) : (
+                  <Image
+                    source={{ uri: rawAvatarUri }}
+                    style={styles.heroAvatarImage}
+                    resizeMode="cover"
+                    accessibilityLabel={`${displayName}'s photo`}
+                  />
+                )}
+              </View>
+
+              <View style={styles.heroTopActions}>
+                <View style={styles.roleBadgePill}>
+                  <Ionicons
+                    name={isBarangay ? 'business-outline' : 'shield-checkmark-outline'}
+                    size={13}
+                    color="#0D0D11"
+                  />
+                  <Text style={styles.roleBadgePillText}>{roleLabel}</Text>
+                </View>
+                <View style={[styles.viewCvTopBtn, { opacity: 0 }]} pointerEvents="none">
+                  <Text style={styles.viewCvTopBtnText}>{uiText("View CV")}</Text>
+                </View>
+              </View>
             </View>
-            <Text style={styles.heroHint}>
-              {uiText(isBarangay ? 'Your local government contact on SerbiSure' : 'Official platform support contact')}
-            </Text>
+
+            {/* Name Row + Verified checkmark */}
+            <View style={styles.nameRow}>
+              <Text style={styles.name}>{displayName}</Text>
+              <Ionicons name="checkmark-circle" size={20} color="#10B981" style={{ marginLeft: 6 }} />
+            </View>
+
+            {/* Subtitle / hint row */}
+            <View style={styles.heroInfoRow}>
+              <Ionicons
+                name={isBarangay ? 'location-sharp' : 'shield-checkmark-sharp'}
+                size={14}
+                color="#0D0D11"
+              />
+              <Text style={styles.heroInfoText}>
+                {uiText(isBarangay ? location : 'Official platform support contact')}
+              </Text>
+            </View>
           </View>
 
           {loading && !profile ? (
@@ -167,9 +232,7 @@ export function OfficialProfileModal({
             <Text style={styles.sectionTitle}>{uiText("Contact information")}</Text>
             {details.map((item) => (
               <View key={item.label} style={styles.detailRow}>
-                <View style={styles.iconCircle}>
-                  <Ionicons name={item.icon} size={17} color={THEME.colors.brandDark} />
-                </View>
+                <Ionicons name={item.icon} size={18} color="#0D0D11" style={styles.detailIcon} />
                 <View style={styles.detailCopy}>
                   <Text style={styles.detailLabel}>{uiText(item.label)}</Text>
                   {item.phone ? (
@@ -185,9 +248,7 @@ export function OfficialProfileModal({
           </View>
 
           <View style={styles.chatHintCard}>
-            <View style={styles.chatHintIcon}>
-              <Ionicons name="chatbubble-ellipses-outline" size={19} color="#8A4A20" />
-            </View>
+            <Ionicons name="chatbubble-ellipses-outline" size={20} color="#8A4A20" style={styles.chatHintIcon} />
             <View style={styles.chatHintCopy}>
               <Text style={styles.chatHintTitle}>{uiText("Need help?")}</Text>
               <Text style={styles.chatHintText}>
@@ -202,66 +263,123 @@ export function OfficialProfileModal({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: THEME.colors.canvas },
-  topBar: {
-    paddingHorizontal: 18,
-    paddingBottom: 12,
+  container: { flex: 1, backgroundColor: '#F6F5F2' },
+  header: {
+    backgroundColor: '#F6F5F2',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: THEME.colors.canvas,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
   },
-  backButton: {
+  backBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: THEME.colors.white,
   },
-  topBarTitle: {
-    fontFamily: THEME.typography.fontFamily.mainBold,
-    fontSize: 17,
-    color: THEME.colors.ink,
+  headerLogo: {
+    width: 40,
+    height: 40,
   },
-  topBarSpacer: { width: 40 },
-  content: { paddingTop: 10 },
+  headerRightSpacer: {
+    width: 40,
+    height: 40,
+  },
+  scrollBody: { flex: 1 },
   heroCard: {
-    marginHorizontal: 16,
-    marginBottom: 14,
-    borderRadius: 28,
-    padding: 22,
-    alignItems: 'center',
     backgroundColor: '#FFCCAA',
+    borderRadius: 32,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 20,
+    marginHorizontal: 16,
+    marginTop: 38,
+    marginBottom: 16,
   },
-  name: {
-    marginTop: 12,
-    fontFamily: THEME.typography.fontFamily.mainExtraBold,
-    fontSize: 22,
-    color: THEME.colors.ink,
-    textAlign: 'center',
+  heroTopRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  rolePill: {
-    marginTop: 8,
+  heroAvatarWrapper: {
+    marginTop: -42,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 3.5,
+    borderColor: '#FFCCAA',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  heroLogoImage: {
+    width: 52,
+    height: 52,
+  },
+  heroTopActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: THEME.roundness.pill,
-    backgroundColor: '#FFB380',
+    gap: 8,
+    marginTop: 2,
   },
-  rolePillText: {
+  roleBadgePill: {
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 9999,
+  },
+  roleBadgePillText: {
     fontFamily: THEME.typography.fontFamily.mainBold,
-    fontSize: 11,
-    color: '#8A4A20',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0D0D11',
   },
-  heroHint: {
-    marginTop: 10,
-    fontFamily: THEME.typography.fontFamily.secondary,
-    fontSize: 12,
-    color: '#6B7280',
-    textAlign: 'center',
+  viewCvTopBtn: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 9999,
+  },
+  viewCvTopBtnText: {
+    fontFamily: THEME.typography.fontFamily.mainBold,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#4B5563',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    marginTop: 4,
+  },
+  name: {
+    fontFamily: THEME.typography.fontFamily.mainExtraBold,
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0D0D11',
+  },
+  heroInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+    gap: 6,
+  },
+  heroInfoText: {
+    fontFamily: THEME.typography.fontFamily.secondaryMedium,
+    fontSize: 13,
+    color: '#0D0D11',
+    fontWeight: '600',
   },
   loadingCard: {
     marginHorizontal: 16,
@@ -316,15 +434,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: THEME.colors.divider,
   },
-  iconCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: THEME.colors.brandLight,
+  detailIcon: {
+    width: 22,
+    marginTop: 2,
+    marginRight: 12,
   },
-  detailCopy: { flex: 1, marginLeft: 11 },
+  detailCopy: { flex: 1 },
   detailLabel: {
     fontFamily: THEME.typography.fontFamily.secondaryMedium,
     fontSize: 11,
@@ -345,18 +460,14 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 22,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: '#FFF4ED',
   },
   chatHintIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFB380',
+    marginTop: 2,
+    marginRight: 12,
   },
-  chatHintCopy: { flex: 1, marginLeft: 11 },
+  chatHintCopy: { flex: 1 },
   chatHintTitle: {
     fontFamily: THEME.typography.fontFamily.mainBold,
     fontSize: 14,

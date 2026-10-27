@@ -4,12 +4,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLanguage as useUiLanguage } from '../localization/LanguageContext';
 import THEME from '../theme/theme';
 
-const logo = require('../../../assets/serbisure_new_clean.png');
+const logo = require('../../../assets/serbisure-icon.png');
 
 export const APP_HEADER_SIDE_WIDTH = 44;
 export const APP_HEADER_LOGO_SIZE = 44;
-export const APP_HEADER_BACK_ICON_SIZE = 26;
-export const APP_HEADER_BACK_ICON_COLOR = '#2A2925';
+export const APP_HEADER_BACK_ICON_SIZE = 24;
+export const APP_HEADER_BACK_ICON_COLOR = '#1A1A1A';
 
 export interface AppHeaderProps {
   readonly onBookingsPress?: () => void;
