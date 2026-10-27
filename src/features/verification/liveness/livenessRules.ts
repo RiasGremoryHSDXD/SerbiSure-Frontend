@@ -3,15 +3,17 @@ import { landmark } from '../face/geometry';
 import type { FaceAlignment, FaceLandmarks, HeadPoseDirection, LandmarkFrame } from '../face/types';
 
 const CENTER_TOLERANCE = 0.26;
+const TURNING_CENTER_TOLERANCE = 0.40;
 const MIN_FACE_SIZE = 0.15;
 const MAX_FACE_SIZE = 0.85;
-const HEAD_TURN_THRESHOLD = 0.045;
+const HEAD_TURN_THRESHOLD = 0.030;
+const FORWARD_FACING_THRESHOLD = 0.14;
 const STILLNESS_DURATION_MS = 1000;
 const MOVEMENT_TOLERANCE = 0.17;
 const STILLNESS_GRACE_MS = 600;
 const MAX_STILL_FRAME_GAP_MS = 500;
 
-export function getFaceAlignment(frame: LandmarkFrame): FaceAlignment {
+export function getFaceAlignment(frame: LandmarkFrame, isTurning = false): FaceAlignment {
   if (!frame.face) {
     return {
       centered: false,
@@ -59,14 +61,26 @@ export function getHeadPoseDirection(face: FaceLandmarks): HeadPoseDirection {
   const nose = landmark(face, FACE_LANDMARKS.noseTip);
   const leftCheek = landmark(face, FACE_LANDMARKS.leftCheek);
   const rightCheek = landmark(face, FACE_LANDMARKS.rightCheek);
-
-  if (!nose || !leftCheek || !rightCheek) {
-    return 'unknown';
+  if (!nose) return 'unknown';
+  let faceMidline: number | null = null;
+  let faceWidth: number | null = null;
+  if (leftCheek && rightCheek) {
+    faceMidline = (leftCheek.x + rightCheek.x) / 2;
+    faceWidth = Math.max(Math.abs(rightCheek.x - leftCheek.x), 1);
+  } else {
+    const leftEye = landmark(face, FACE_LANDMARKS.leftEye.outer);
+    const rightEye = landmark(face, FACE_LANDMARKS.rightEye.outer);
+    if (leftEye && rightEye) {
+      faceMidline = (leftEye.x + rightEye.x) / 2;
+      faceWidth = Math.max(Math.abs(rightEye.x - leftEye.x) * 1.5, 1);
+    } else if (face.bounds) {
+      faceMidline = face.bounds.x + face.bounds.width / 2;
+      faceWidth = Math.max(face.bounds.width, 1);
+    }
   }
-
-  const faceMidline = (leftCheek.x + rightCheek.x) / 2;
-  const faceWidth = Math.max(Math.abs(rightCheek.x - leftCheek.x), 1);
-  // Mirroring changes screen coordinates, matching the applicant's selfie view.
+  if (faceMidline === null || faceWidth === null) return 'unknown';
+  // Convert mirrored preview coordinates back to the applicant's physical
+  // left/right before interpreting the nose offset.
   const rawOffset = (nose.x - faceMidline) / faceWidth * (face.signals?.mirrored ? -1 : 1);
   if (!Number.isFinite(rawOffset)) return 'unknown';
 
@@ -79,6 +93,24 @@ export function getHeadPoseDirection(face: FaceLandmarks): HeadPoseDirection {
   }
 
   return 'center';
+}
+
+export function isFaceForward(face: FaceLandmarks): boolean {
+  const yawAngle = face.signals?.yawAngle;
+
+  if (typeof yawAngle === 'number' && Number.isFinite(yawAngle)) {
+    return Math.abs(yawAngle) <= 12;
+  }
+
+  const nose = landmark(face, FACE_LANDMARKS.noseTip);
+  const leftCheek = landmark(face, FACE_LANDMARKS.leftCheek);
+  const rightCheek = landmark(face, FACE_LANDMARKS.rightCheek);
+  if (!nose || !leftCheek || !rightCheek) return false;
+
+  const faceMidline = (leftCheek.x + rightCheek.x) / 2;
+  const faceWidth = Math.max(Math.abs(rightCheek.x - leftCheek.x), 1);
+  const offset = (nose.x - faceMidline) / faceWidth;
+  return Number.isFinite(offset) && Math.abs(offset) <= FORWARD_FACING_THRESHOLD;
 }
 
 export function getStillnessProgress(

@@ -72,7 +72,7 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
       minFaceDetectionConfidence: 0.5,
       minFacePresenceConfidence: 0.5,
       minTrackingConfidence: 0.5,
-      mirrorMode: 'mirror-front-only',
+      mirrorMode: 'mirror',
       numFaces: 1,
     },
   );
@@ -127,7 +127,9 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
         fps={format ? Math.max(format.minFps, Math.min(30, format.maxFps)) : undefined}
         photoQualityBalance="speed"
         isActive
-        pixelFormat="yuv"
+        // The Android MediaPipe bridge wraps CameraX's Image directly and
+        // requires RGBA_8888. YUV frames fail before landmark detection.
+        pixelFormat="rgb"
         photo
         // Keep outputs bound until capture finishes. Removing the processor
         // here rebuilds Android's ImageCapture and can race with takePhoto().

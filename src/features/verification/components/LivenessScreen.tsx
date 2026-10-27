@@ -190,9 +190,6 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
     setState(next);
   }, []);
 
-  const [canManualCapture, setCanManualCapture] = useState(false);
-  const [isManualCapturing, setIsManualCapturing] = useState(false);
-
   const performCapture = useCallback(async () => {
     if (captureStartedRef.current) return;
     captureStartedRef.current = true;
@@ -222,19 +219,6 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
   }, []);
 
   useEffect(() => {
-    if (!started || selfie) {
-      setCanManualCapture(false);
-      return undefined;
-    }
-
-    const timer = setTimeout(() => {
-      setCanManualCapture(true);
-    }, 2500);
-
-    return () => clearTimeout(timer);
-  }, [started, selfie]);
-
-  useEffect(() => {
     if (!started || !state.verified || captureStartedRef.current) {
       return;
     }
@@ -258,8 +242,6 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
     setPreviewError(false);
     setPhotoAccepted(false);
     setStarted(true);
-    setCanManualCapture(false);
-    setIsManualCapturing(false);
     startedAt.current = Date.now();
     stateRef.current = initialLivenessState;
     setState(initialLivenessState);
@@ -399,19 +381,6 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
               ) : state.retryMessage || captureError ? (
                 <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]} onPress={handleRetry}>
                   <Text style={styles.primaryButtonText}>{uiText("Retry")}</Text>
-                </Pressable>
-              ) : canManualCapture ? (
-                <Pressable
-                  style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, isManualCapturing && { opacity: 0.6 }]}
-                  disabled={isManualCapturing}
-                  onPress={async () => {
-                    if (isManualCapturing || captureStartedRef.current) return;
-                    setIsManualCapturing(true);
-                    await performCapture();
-                    if (mounted.current) setIsManualCapturing(false);
-                  }}
-                >
-                  <Text style={styles.primaryButtonText}>{isManualCapturing ? uiText("Capturing…") : uiText("Take Photo")}</Text>
                 </Pressable>
               ) : (
                 <View style={[styles.primaryButton, { opacity: 0.6 }]}>
