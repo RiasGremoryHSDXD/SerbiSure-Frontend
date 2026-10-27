@@ -18,6 +18,9 @@ export type FaceLandmarks = {
     mirrored?: boolean;
     rightEyeOpenProbability?: number;
     yawAngle?: number;
+    // Nose offset along the eye axis (33 -> 263), in inter-eye units.
+    // Positive = applicant turned to their own left. Rotation/mirror invariant.
+    yawOffset?: number;
     pitchAngle?: number;
     rollAngle?: number;
   };

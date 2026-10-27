@@ -6,6 +6,8 @@ const CENTER_TOLERANCE = 0.26;
 const TURNING_CENTER_TOLERANCE = 0.40;
 const MIN_FACE_SIZE = 0.15;
 const MAX_FACE_SIZE = 0.85;
+// About a 20 degree head turn when measured with the eye-axis yawOffset.
+const YAW_OFFSET_THRESHOLD = 0.22;
 const HEAD_TURN_THRESHOLD = 0.030;
 const FORWARD_FACING_THRESHOLD = 0.14;
 const STILLNESS_DURATION_MS = 1000;
@@ -28,9 +30,10 @@ export function getFaceAlignment(frame: LandmarkFrame, isTurning = false): FaceA
   const faceCenterX = (bounds.x + bounds.width / 2) / frame.frameWidth;
   const faceCenterY = (bounds.y + bounds.height / 2) / frame.frameHeight;
   const faceSizeRatio = Math.max(bounds.width / frame.frameWidth, bounds.height / frame.frameHeight);
+  const tolerance = isTurning ? TURNING_CENTER_TOLERANCE : CENTER_TOLERANCE;
   const centered =
-    Math.abs(faceCenterX - 0.5) <= CENTER_TOLERANCE &&
-    Math.abs(faceCenterY - 0.5) <= CENTER_TOLERANCE &&
+    Math.abs(faceCenterX - 0.5) <= tolerance &&
+    Math.abs(faceCenterY - 0.5) <= tolerance &&
     faceSizeRatio >= MIN_FACE_SIZE &&
     faceSizeRatio <= MAX_FACE_SIZE;
 
@@ -58,7 +61,14 @@ export function getHeadPoseDirection(face: FaceLandmarks): HeadPoseDirection {
     return 'center';
   }
 
-  const nose = landmark(face, FACE_LANDMARKS.noseTip);
+  
+  const yawOffset = face.signals?.yawOffset;
+  if (typeof yawOffset === 'number' && Number.isFinite(yawOffset)) {
+    if (yawOffset > YAW_OFFSET_THRESHOLD) return 'right';
+    if (yawOffset < -YAW_OFFSET_THRESHOLD) return 'left';
+    return 'center';
+  }
+const nose = landmark(face, FACE_LANDMARKS.noseTip);
   const leftCheek = landmark(face, FACE_LANDMARKS.leftCheek);
   const rightCheek = landmark(face, FACE_LANDMARKS.rightCheek);
   if (!nose) return 'unknown';
@@ -102,7 +112,12 @@ export function isFaceForward(face: FaceLandmarks): boolean {
     return Math.abs(yawAngle) <= 12;
   }
 
-  const nose = landmark(face, FACE_LANDMARKS.noseTip);
+  
+  const yawOffset = face.signals?.yawOffset;
+  if (typeof yawOffset === 'number' && Number.isFinite(yawOffset)) {
+    return Math.abs(yawOffset) <= YAW_OFFSET_THRESHOLD;
+  }
+const nose = landmark(face, FACE_LANDMARKS.noseTip);
   const leftCheek = landmark(face, FACE_LANDMARKS.leftCheek);
   const rightCheek = landmark(face, FACE_LANDMARKS.rightCheek);
   if (!nose || !leftCheek || !rightCheek) return false;

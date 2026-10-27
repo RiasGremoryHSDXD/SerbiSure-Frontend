@@ -127,10 +127,10 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: SerbiSure ${{ env.RELEASE_TAG }}
           body: |
-            ### 📱 Which APK should I install?
-            * **`SerbiSure-v${{ env.APP_VERSION }}.apk`** *(Recommended)* — Universal build. Works on **all Android devices**.
-            * **`SerbiSure-v${{ env.APP_VERSION }}-arm64.apk`** — Lightweight (~37 MB) build for modern 64-bit Android smartphones.
-            * **`SerbiSure-v${{ env.APP_VERSION }}-arm32.apk`** — Legacy build for older 32-bit devices.
+            ### Which APK should I install?
+            * **`SerbiSure-v${{ env.APP_VERSION }}.apk`** *(Recommended)* - Universal build. Works on **all Android devices**.
+            * **`SerbiSure-v${{ env.APP_VERSION }}-arm64.apk`** - Lightweight (~37 MB) build for modern 64-bit Android smartphones.
+            * **`SerbiSure-v${{ env.APP_VERSION }}-arm32.apk`** - Legacy build for older 32-bit devices.
           generate_release_notes: true
           draft: false
           prerelease: ${{ github.event.inputs.prerelease == 'true' }}

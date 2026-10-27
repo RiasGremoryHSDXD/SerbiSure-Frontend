@@ -89,11 +89,11 @@ function getRingProgress(state: LivenessState) {
     return 0.75 + state.stillnessProgress * 0.25;
   }
 
-  if (state.step === 'turnRight') {
+  if (state.step === 'turnLeft') {
     return 0.5;
   }
 
-  if (state.step === 'turnLeft') {
+  if (state.step === 'turnRight') {
     return 0.25;
   }
 

@@ -122,8 +122,8 @@ test('liveness requires both sustained turns and one observed second facing cent
     state = next;
     if (frame.timestamp < 3100) assert.equal(state.verified, false);
   }
-  assert.deepEqual(transitions, [['turnLeft', 0], ['turnRight', 1000], ['still', 2000], ['verified', 3100]]);
-  assert.deepEqual(state.completedSteps, ['face', 'turnLeft', 'turnRight', 'still']);
+  assert.deepEqual(transitions, [['turnRight', 0], ['turnLeft', 1000], ['still', 2000], ['verified', 3100]]);
+  assert.deepEqual(state.completedSteps, ['face', 'turnRight', 'turnLeft', 'still']);
   assert.equal(state.verified, true);
 });
 
@@ -133,22 +133,22 @@ test('liveness succeeds without blink or eye tracking data but still requires bo
   const closed = successfulFrames().map(frame => faceFrame(frame.face.signals.yawAngle, frame.timestamp, 'closed'));
   assert.equal(runFrames(closed).verified, true);
   const noTurns = successfulFrames().map(frame => faceFrame(0, frame.timestamp));
-  assert.equal(runFrames(noTurns).step, 'turnLeft');
-  const onlyRight = successfulFrames().map(frame => faceFrame(-15, frame.timestamp));
-  assert.equal(runFrames(onlyRight).step, 'turnLeft');
+  assert.equal(runFrames(noTurns).step, 'turnRight');
+  const onlyLeft = successfulFrames().map(frame => faceFrame(15, frame.timestamp));
+  assert.equal(runFrames(onlyLeft).step, 'turnRight');
 });
 
 test('single-frame turns and interrupted tracking cannot complete an action', () => {
   let state = advanceLiveness(initialLivenessState, faceFrame(0, 800));
   for (let time = 900; time <= 2500; time += 100) {
-    state = advanceLiveness(state, faceFrame(time === 1500 ? 15 : 0, time));
+    state = advanceLiveness(state, faceFrame(time === 1500 ? -15 : 0, time));
   }
-  assert.equal(state.step, 'turnLeft');
-  state = advanceLiveness(state, faceFrame(15, 2600));
+  assert.equal(state.step, 'turnRight');
+  state = advanceLiveness(state, faceFrame(-15, 2600));
   const old = state;
-  assert.equal(advanceLiveness(state, faceFrame(15, 2500)), old);
-  state = advanceLiveness(state, faceFrame(15, 5000));
-  assert.equal(state.step, 'turnLeft');
+  assert.equal(advanceLiveness(state, faceFrame(-15, 2500)), old);
+  state = advanceLiveness(state, faceFrame(-15, 5000));
+  assert.equal(state.step, 'turnRight');
   assert.equal(state.actionSince, null);
   assert.equal(retryCurrentStep(state).actionSince, null);
 });

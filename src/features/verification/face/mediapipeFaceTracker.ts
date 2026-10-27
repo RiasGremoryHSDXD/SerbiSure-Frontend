@@ -169,6 +169,30 @@ function boundsFromPoints(points: Point2D[]) {
   };
 }
 
+// MediaPipe returns landmarks in the camera sensor orientation, which on
+// Android front cameras is rotated 90 degrees from the portrait preview. The
+// face's left/right axis therefore does not line up with image x. Project the
+// nose onto the face's own eye axis instead, using aspect-correct pixels, so the
+// result is independent of rotation, mirroring and head tilt.
+function computeYawOffset(landmarks: Landmark[], imageWidth: number, imageHeight: number): number | undefined {
+  const rightEyeOuter = landmarks[33];
+  const leftEyeOuter = landmarks[263];
+  const nose = landmarks[1];
+  if (!rightEyeOuter || !leftEyeOuter || !nose) return undefined;
+
+  const ax = rightEyeOuter.x * imageWidth;
+  const ay = rightEyeOuter.y * imageHeight;
+  const ux = leftEyeOuter.x * imageWidth - ax;
+  const uy = leftEyeOuter.y * imageHeight - ay;
+  const lengthSquared = ux * ux + uy * uy;
+  if (lengthSquared < 1e-6) return undefined;
+
+  const dx = nose.x * imageWidth - (ax + ux / 2);
+  const dy = nose.y * imageHeight - (ay + uy / 2);
+  const offset = (dx * ux + dy * uy) / lengthSquared;
+  return Number.isFinite(offset) ? offset : undefined;
+}
+
 export function faceLandmarkerResultToLandmarkFrame(
   resultBundle: FaceLandmarkDetectionResultBundle,
   frameWidth: number,
@@ -195,6 +219,11 @@ export function faceLandmarkerResultToLandmarkFrame(
       points,
       signals: {
         mirrored: false,
+        yawOffset: computeYawOffset(
+          faceLandmarks,
+          Math.max(resultBundle.inputImageWidth || 1, 1),
+          Math.max(resultBundle.inputImageHeight || 1, 1),
+        ),
       },
       timestamp,
     },

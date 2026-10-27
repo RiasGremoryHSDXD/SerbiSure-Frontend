@@ -130,7 +130,7 @@ export function advanceLiveness(state: LivenessState, frame: LandmarkFrame): Liv
   }
 
   if (state.step === 'face') {
-    return completeStep(state, 'face', 'turnLeft', frame.timestamp);
+    return completeStep(state, 'face', 'turnRight', frame.timestamp);
   }
 
   const headPose = getHeadPoseDirection(face);
@@ -148,7 +148,7 @@ export function advanceLiveness(state: LivenessState, frame: LandmarkFrame): Liv
       actionSince = null;
     }
     if (actionSince !== null && frame.timestamp - actionSince >= TURN_HOLD_MS) {
-      return completeStep(state, state.step, state.step === 'turnLeft' ? 'turnRight' : 'still', frame.timestamp);
+      return completeStep(state, state.step, state.step === 'turnRight' ? 'turnLeft' : 'still', frame.timestamp);
     }
     return { ...state, actionSince, instruction: stepInstructions[state.step], retryMessage: null };
   }
