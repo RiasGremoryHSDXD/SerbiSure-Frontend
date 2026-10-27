@@ -16,13 +16,18 @@
 -keep class com.facebook.jni.** { *; }
 -keep class com.facebook.react.** { *; }
 
-# VisionCamera & Worklets
+# VisionCamera & Worklets & Frame Processor Plugins
 -keep class com.mrousavy.camera.** { *; }
+-keep class com.mrousavy.camera.frameprocessors.** { *; }
+-keepclassmembers class * extends com.mrousavy.camera.frameprocessors.FrameProcessorPlugin { *; }
 -keep class com.worklets.** { *; }
 
-# MediaPipe & TensorFlow Lite
+# MediaPipe & TensorFlow Lite & React Native Bridge
 -keep class com.google.mediapipe.** { *; }
 -keep class org.tensorflow.lite.** { *; }
+-keep class com.reactnativemediapipe.** { *; }
+-keepclassmembers class com.reactnativemediapipe.** { *; }
+-dontwarn com.reactnativemediapipe.**
 
 # Skia
 -keep class com.shopify.reactnative.skia.** { *; }

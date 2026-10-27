@@ -150,6 +150,10 @@ android {
             crunchPngs (findProperty('android.enablePngCrunchInReleaseBuilds')?.toBoolean() ?: true)
         }
     }
+    // Prevent compression of MediaPipe and TFLite model files in assets so MediaPipe can mmap them
+    aaptOptions {
+        noCompress 'task', 'tflite'
+    }
     packagingOptions {
         jniLibs {
             useLegacyPackaging (findProperty('expo.useLegacyPackaging')?.toBoolean() ?: false)

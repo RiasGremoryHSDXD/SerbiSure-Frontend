@@ -1920,7 +1920,11 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
                         accessibilityLabel={uiText("I consent to the") + ' ' + uiText("Terms and Conditions.")}
                         hitSlop={6}
                         onPress={() => {
-                          setTermsAccepted(!termsAccepted);
+                          if (termsAccepted) {
+                            setTermsAccepted(false);
+                          } else {
+                            setLegalDocument('terms');
+                          }
                           if (fieldErrors.consent) setFieldErrors(prev => ({ ...prev, consent: '' }));
                         }}
                       >
@@ -1948,7 +1952,11 @@ export function RegistrationScreen({ role, onBack, onNext, onCancel, onNavigateT
                         accessibilityLabel={uiText("I consent to the") + ' ' + uiText("Data Privacy Policy.")}
                         hitSlop={6}
                         onPress={() => {
-                          setPrivacyAccepted(!privacyAccepted);
+                          if (privacyAccepted) {
+                            setPrivacyAccepted(false);
+                          } else {
+                            setLegalDocument('privacy');
+                          }
                           if (fieldErrors.consent) setFieldErrors(prev => ({ ...prev, consent: '' }));
                         }}
                       >

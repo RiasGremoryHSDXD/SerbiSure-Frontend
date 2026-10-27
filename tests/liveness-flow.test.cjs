@@ -139,7 +139,7 @@ function registrationForm(t, role = 'homeowner', actualCamera) {
     '../../../shared/ui/SearchablePickerModal': { SearchablePickerModal: 'LocationPicker' },
     '../../../shared/ui/DateOfBirthPickerModal': { DateOfBirthPickerModal: 'BirthPicker' },
     '../../../shared/ui/DemographicPickerModal': { DemographicPickerModal: 'DemographicPicker' },
-    '../../profile/components/PrivacyPolicyModal': { PrivacyPolicyModal: () => null },
+    '../../profile/components/PrivacyPolicyModal': { PrivacyPolicyModal: ({ visible, onAccept }) => { React.useEffect(() => { if (visible && onAccept) onAccept(); }, [visible, onAccept]); return null; } },
     '../../profile/worker/WorkerCvForm': { WorkerCvForm: 'WorkerForm' },
     '../components/RegistrationStepper': { RegistrationStepper: () => null },
     '../components/RegistrationErrorModal': { RegistrationErrorModal: 'RegistrationError' },
@@ -178,7 +178,10 @@ function registrationForm(t, role = 'homeowner', actualCamera) {
     act(() => h.nodes().find(item => item.type === 'LocationPicker' && item.props.title === title).props.onSelect(value));
   }
   input('House No. / Street / Zone / Subdivision', '123 Street'); input('Zip Code (e.g. 9000)', '9000');
-  act(() => h.nodes().filter(item => item.type === 'Pressable' && item.props.accessibilityRole === 'checkbox').forEach(item => item.props.onPress()));
+  const checkboxes = h.nodes().filter(item => item.type === 'Pressable' && item.props.accessibilityRole === 'checkbox');
+  for (const checkbox of checkboxes) {
+    act(() => checkbox.props.onPress());
+  }
   return { ...h, requests, completed, users, act, node, input };
 }
 
