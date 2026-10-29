@@ -8,7 +8,9 @@ import * as FileSystem from 'expo-file-system';
 
 import { FaceCamera, type FaceCameraHandle } from '../camera/FaceCamera';
 import type { LandmarkFrame } from '../face/types';
-import { advanceLiveness, initialLivenessState, retryCurrentStep, type LivenessResult, type LivenessState } from '../liveness/livenessMachine';
+import { advanceLiveness, initialLivenessState, prepareSelfieRetake, retryCurrentStep, type LivenessResult, type LivenessState } from '../liveness/livenessMachine';
+import { assessSelfie } from '../quality/assessSelfie';
+import { selfieQualityMessage, type SelfieQuality } from '../quality/selfieQuality';
 
 import THEME from '../../../shared/theme/theme';
 import { RegistrationStepper } from '../../auth/components/RegistrationStepper';
@@ -99,20 +101,17 @@ function getRingProgress(state: LivenessState) {
   return 0;
 }
 
-function getInstruction(state: LivenessState, showTrackerNotice: boolean) {
+function getInstruction(state: LivenessState, showTrackerNotice: boolean, awaitingFirstFace: boolean) {
   if (state.verified) {
     return 'Verification Complete!';
   }
 
   if (showTrackerNotice) {
-    return 'Position your face\ninside the frame';
+    return awaitingFirstFace ? 'The camera may need a moment. Keep your face in the circle.'
+      : 'Take your time. Face the camera in a little more light.';
   }
 
   if (state.retryMessage) return state.retryMessage;
-
-  if (state.step === 'face') {
-    return 'Position your face\ninside the frame';
-  }
 
   return state.instruction;
 }
@@ -123,6 +122,8 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
   const cameraRef = useRef<FaceCameraHandle | null>(null);
   const captureStartedRef = useRef(false);
   const [started, setStarted] = useState(false);
+  const hasStarted = useRef(false);
+  const [cameraReady, setCameraReady] = useState(false);
   const [state, setState] = useState(initialLivenessState);
   const stateRef = useRef(initialLivenessState);
   const lastLandmarkAt = useRef<number | null>(null);
@@ -137,6 +138,7 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
   const [photoReady, setPhotoReady] = useState(false);
   const [previewError, setPreviewError] = useState(false);
   const [photoAccepted, setPhotoAccepted] = useState(false);
+  const [photoQuality, setPhotoQuality] = useState<SelfieQuality | 'checking'>('checking');
   const [showTrackerNotice, setShowTrackerNotice] = useState(false);
   const [showCenterCheck, setShowCenterCheck] = useState(false);
 
@@ -152,18 +154,19 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
   }, []);
 
   useEffect(() => {
-    if (!started) {
+    if (!started || state.verified || selfie) {
       return undefined;
     }
 
-    const timer = setTimeout(() => {
-      if (lastLandmarkAt.current === null) {
+    const timer = setInterval(() => {
+      const lastFrame = lastLandmarkAt.current ?? startedAt.current;
+      if (Date.now() - lastFrame > 2600) {
         setShowTrackerNotice(true);
       }
-    }, 2600);
+    }, 750);
 
-    return () => clearTimeout(timer);
-  }, [started]);
+    return () => clearInterval(timer);
+  }, [started, state.verified, selfie]);
 
   const prevCompletedCount = useRef(0);
   useEffect(() => {
@@ -178,9 +181,11 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
   }, [state.completedSteps.length]);
 
   const handleLandmarks = useCallback((frame: LandmarkFrame) => {
-    if (captureStartedRef.current || !mounted.current) return;
+    if (!mounted.current) return;
+    setCameraReady(true);
+    if (!hasStarted.current || captureStartedRef.current) return;
     const now = Date.now();
-    // FaceCamera already limits landmark mapping/UI callbacks to ten per second.
+    // FaceCamera already limits inference and landmark/UI callbacks.
     if (lastLandmarkAt.current === null) {
       console.info('[Liveness timing]', { stage: 'first_landmarks', durationMs: now - startedAt.current });
     }
@@ -211,9 +216,16 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
       const captured: LivenessResult = { verified: true, completedAt: Date.now(), selfiePath };
       pendingSelfie.current = captured;
       setPhotoReady(false);
+      setPhotoQuality('checking');
       setPreviewError(false);
       setSelfie(captured);
       setShowCenterCheck(false);
+      let quality: SelfieQuality;
+      const qualityStartedAt = Date.now();
+      try { quality = await assessSelfie(selfiePath); }
+      catch { quality = 'unreadable'; }
+      console.info('[Liveness timing]', { stage: 'selfie_quality', durationMs: Date.now() - qualityStartedAt });
+      if (mounted.current && pendingSelfie.current?.selfiePath === selfiePath) setPhotoQuality(quality);
     } catch (error) {
       captureStartedRef.current = false;
       const code = error && typeof error === "object" && "code" in error ? error.code : "capture-failed";
@@ -231,12 +243,18 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
 
   const instruction = submitting ? 'Face check passed. Creating your account…' : submissionFailed
     ? 'Your selfie is ready. Retry or go back to edit your details.' : selfie
-    ? previewError ? 'We couldn’t display your selfie. Retake the photo.' : 'Is your face clear and well-lit? Make sure your face is visible and not blurry.'
-    : state.verified ? 'Face check passed. Capturing selfie…' : started
-    ? getInstruction(state, showTrackerNotice)
-    : 'Make sure your selfie is within the frame and you\'re in a well lit area. Remove anything on your face like a face mask or sunglasses.';
+    ? previewError ? 'We couldn’t display your selfie. Retake the photo.' : photoQuality === 'checking'
+      ? 'Checking your photo…' : selfieQualityMessage(photoQuality)
+    : state.verified ? 'Face check passed. Capturing selfie…' : !cameraReady
+    ? 'Getting the camera ready… Hold your phone at eye level.' : started
+    ? getInstruction(state, showTrackerNotice, lastLandmarkAt.current === null)
+    : 'Hold your phone at eye level and look at the camera. Follow two small head turns. Normal room lighting is fine.';
   const ringProgress = started ? getRingProgress(state) : 0;
-  const showFaceIcon = !started;
+  const showFaceIcon = !cameraReady && !started;
+
+  const handleCameraReady = useCallback(() => {
+    if (mounted.current) setCameraReady(true);
+  }, []);
 
   const handleContinue = useCallback(() => {
     if (pendingSelfie.current) discardSelfie(pendingSelfie.current.selfiePath);
@@ -245,7 +263,9 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
     setPhotoReady(false);
     setPreviewError(false);
     setPhotoAccepted(false);
+    setPhotoQuality('checking');
     setStarted(true);
+    hasStarted.current = true;
     startedAt.current = Date.now();
     stateRef.current = initialLivenessState;
     setState(initialLivenessState);
@@ -259,7 +279,7 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
 
   const handleUsePhoto = () => {
     const captured = pendingSelfie.current;
-    if (!captured || !photoReady || previewError || submitting || photoAccepted) return;
+    if (!captured || !photoReady || previewError || photoQuality !== 'pass' || submitting || photoAccepted) return;
     // Transfer ownership before registration navigates away: its background
     // upload still needs this file. Repeated taps cannot submit it twice.
     pendingSelfie.current = null;
@@ -269,7 +289,21 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
 
   const handleRetakePhoto = () => {
     if (!pendingSelfie.current || submitting || photoAccepted) return;
-    handleContinue();
+    discardSelfie(pendingSelfie.current.selfiePath);
+    pendingSelfie.current = null;
+    setSelfie(null);
+    setPhotoReady(false);
+    setPreviewError(false);
+    setPhotoQuality('checking');
+    setCaptureError(null);
+    captureStartedRef.current = false;
+    stateRef.current = prepareSelfieRetake(stateRef.current);
+    setState(stateRef.current);
+    prevCompletedCount.current = stateRef.current.completedSteps.length;
+    lastLandmarkAt.current = null;
+    startedAt.current = Date.now();
+    setShowTrackerNotice(false);
+    setShowCenterCheck(false);
   };
 
   const handleRetry = useCallback(() => {
@@ -317,6 +351,11 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
             />
 
             <View style={styles.verificationFrame}>
+              <View style={styles.cameraCircle}>
+                <FaceCamera ref={cameraRef} onLandmarks={handleLandmarks}
+                  detecting={started && !state.verified && !selfie}
+                  isActive={!selfie && !submitting} onReady={handleCameraReady} />
+              </View>
               {selfie ? (
                 <View style={styles.cameraCircle}>
                   <Image
@@ -328,10 +367,6 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
                     onLoad={() => setPhotoReady(true)}
                     onError={() => { setPreviewError(true); setPhotoReady(false); }}
                   />
-                </View>
-              ) : started ? (
-                <View style={styles.cameraCircle}>
-                  <FaceCamera ref={cameraRef} onLandmarks={handleLandmarks} detecting={!state.verified} />
                 </View>
               ) : null}
               <LivenessRing progress={ringProgress} showFaceIcon={showFaceIcon} showCheck={!selfie && started && showCenterCheck} />
@@ -353,7 +388,7 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
                 </View>
               </View>
             ) : (
-              <Text style={[styles.instruction, !started && styles.helperInstruction]}>
+              <Text accessibilityLiveRegion="polite" style={[styles.instruction, !started && styles.helperInstruction]}>
                 {uiText(instruction)}
               </Text>
             )}
@@ -380,8 +415,8 @@ export function LivenessScreen({ role = 'homeowner', onVerified, onBack, submitt
                     <Text style={[styles.primaryButtonText, styles.reviewButtonText, styles.retakeButtonText]}>{uiText('Retake Photo')}</Text>
                   </Pressable>
                   <Pressable
-                    style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, (!photoReady || previewError || photoAccepted) && { opacity: 0.6 }]}
-                    disabled={!photoReady || previewError || photoAccepted}
+                    style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, (!photoReady || previewError || photoQuality !== 'pass' || photoAccepted) && { opacity: 0.6 }]}
+                    disabled={!photoReady || previewError || photoQuality !== 'pass' || photoAccepted}
                     onPress={handleUsePhoto}
                   >
                     <Text style={[styles.primaryButtonText, styles.reviewButtonText]}>{uiText('Use This Photo')}</Text>

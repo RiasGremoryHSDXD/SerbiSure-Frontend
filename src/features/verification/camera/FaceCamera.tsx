@@ -1,25 +1,33 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useLanguage } from '../../../shared/localization/LanguageContext';
-import { Camera as VisionCamera, useCameraDevice, useCameraFormat, useCameraPermission } from 'react-native-vision-camera';
+import { Camera as VisionCamera, runAtTargetFps, useFrameProcessor, useCameraDevice, useCameraFormat, useCameraPermission } from 'react-native-vision-camera';
 import { Delegate, RunningMode, useFaceLandmarkDetection, type DetectionError, type Dims, type FaceLandmarkDetectionResultBundle } from 'react-native-mediapipe';
 
 import { faceLandmarkerResultToLandmarkFrame } from '../face/mediapipeFaceTracker';
 import type { LandmarkFrame } from '../face/types';
+import { LIVENESS } from '../liveness/livenessConfig';
 
 type FaceCameraProps = {
   onLandmarks: (frame: LandmarkFrame) => void;
   detecting?: boolean;
+  isActive?: boolean;
+  onReady?: () => void;
 };
 
 export type FaceCameraHandle = {
   captureSelfie: () => Promise<string | null>;
 };
 
-export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function FaceCamera({ onLandmarks, detecting = true }, ref) {
+export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function FaceCamera({ onLandmarks, detecting = true, isActive = true, onReady }, ref) {
   const { tr } = useLanguage();
   const cameraRef = useRef<VisionCamera | null>(null);
+  const active = useRef(true);
   const lastResultAt = useRef(0);
+  const receiving = useRef(detecting && isActive);
+  const landmarksCallback = useRef(onLandmarks);
+  receiving.current = detecting && isActive;
+  landmarksCallback.current = onLandmarks;
   const device = useCameraDevice('front');
   // Avoid the default highest-resolution buffers and multi-megapixel selfie.
   // Keep enough photo detail for the official's manual identity review.
@@ -32,6 +40,11 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
   const [detectorError, setDetectorError] = useState<string | null>(null);
 
   useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+
+  useEffect(() => {
     if (!hasPermission) {
       void requestPermission();
     }
@@ -39,13 +52,13 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
 
   const handleResults = useCallback(
     (resultBundle: FaceLandmarkDetectionResultBundle, viewSize: Dims, mirrored: boolean) => {
-      if (!detecting) return;
+      if (!active.current || !receiving.current || viewSize.width <= 1 || viewSize.height <= 1) return;
       const now = Date.now();
       // Drop excess JS callbacks before mapping hundreds of landmark points.
-      if (now - lastResultAt.current < 100) return;
+      if (now - lastResultAt.current < 1000 / LIVENESS.inferenceFps) return;
       lastResultAt.current = now;
       setDetectorError(null);
-      onLandmarks(
+      landmarksCallback.current(
         faceLandmarkerResultToLandmarkFrame(
           resultBundle,
           Math.max(viewSize.width, 1),
@@ -54,12 +67,13 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
         ),
       );
     },
-    [onLandmarks, detecting],
+    [],
   );
 
   const handleError = useCallback((error: DetectionError) => {
+    if (!active.current) return;
     console.warn('[Liveness] Face tracking failed', { code: error.code });
-    setDetectorError('Face tracking paused. Face the camera in good light and try again.');
+    setDetectorError('Take your time. Face the camera in a little more light.');
   }, []);
 
   const faceLandmarkDetection = useFaceLandmarkDetection(
@@ -76,6 +90,12 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
       numFaces: 1,
     },
   );
+
+  const nativeFrameProcessor = faceLandmarkDetection.frameProcessor.frameProcessor;
+  const frameProcessor = useFrameProcessor((frame) => {
+    'worklet';
+    runAtTargetFps(LIVENESS.inferenceFps, () => { nativeFrameProcessor(frame); });
+  }, [nativeFrameProcessor]);
 
   useEffect(() => {
     faceLandmarkDetection.cameraDeviceChangeHandler(device);
@@ -125,14 +145,16 @@ export const FaceCamera = forwardRef<FaceCameraHandle, FaceCameraProps>(function
         device={device}
         format={format}
         fps={format ? Math.max(format.minFps, Math.min(30, format.maxFps)) : undefined}
-        photoQualityBalance="speed"
-        isActive
+        photoQualityBalance="balanced"
+        isActive={isActive}
+        onInitialized={onReady}
+        // The Android compatibility adapter copies these RGBA pixels to Bitmap.
         pixelFormat="rgb"
         photo
         // Keep outputs bound until capture finishes. Removing the processor
         // here rebuilds Android's ImageCapture and can race with takePhoto().
         // `detecting` pauses result handling; unmount releases the camera.
-        frameProcessor={faceLandmarkDetection.frameProcessor}
+        frameProcessor={frameProcessor}
         onLayout={faceLandmarkDetection.cameraViewLayoutChangeHandler}
         onOutputOrientationChanged={faceLandmarkDetection.cameraOrientationChangedHandler}
       />

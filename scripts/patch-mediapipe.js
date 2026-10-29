@@ -1,78 +1,46 @@
 const fs = require('fs');
 const path = require('path');
 
-// 1. Patch ConvertHelpers.kt
-const convertHelpersPath = path.join(__dirname, '..', 'node_modules', 'react-native-mediapipe', 'android', 'src', 'main', 'java', 'com', 'reactnativemediapipe', 'shared', 'ConvertHelpers.kt');
-if (fs.existsSync(convertHelpersPath)) {
-  let content = fs.readFileSync(convertHelpersPath, 'utf8');
-  if (content.includes('Orientation.LANDSCAPE_RIGHT -> -90')) {
-    content = content.replace('Orientation.LANDSCAPE_RIGHT -> -90', 'Orientation.LANDSCAPE_RIGHT -> 270');
-    fs.writeFileSync(convertHelpersPath, content, 'utf8');
-    console.log('Patched ConvertHelpers.kt (-90 -> 270)');
-  }
+function writeIfChanged(file, content) {
+  if (fs.readFileSync(file, 'utf8') !== content) fs.writeFileSync(file, content, 'utf8');
 }
 
-// 2. Patch FaceLandmarkDetectionFrameProcessorPlugin.kt
-const pluginPath = path.join(__dirname, '..', 'node_modules', 'react-native-mediapipe', 'android', 'src', 'main', 'java', 'com', 'reactnativemediapipe', 'facelandmarkdetection', 'FaceLandmarkDetectionFrameProcessorPlugin.kt');
-if (fs.existsSync(pluginPath)) {
-  const replacement = `package com.reactnativemediapipe.facelandmarkdetection
-
-import android.util.Log
-import com.google.mediapipe.framework.image.MediaImageBuilder
-import com.mrousavy.camera.frameprocessors.Frame
-import com.mrousavy.camera.frameprocessors.FrameProcessorPlugin
-
-class FaceLandmarkDetectionFrameProcessorPlugin() : FrameProcessorPlugin() {
-
-  companion object {
-    private const val TAG = "FaceLandmarkDetectionFrameProcessorPlugin"
+function patchMediaPipe(projectRoot = path.join(__dirname, '..')) {
+  const packageRoot = path.join(projectRoot, 'node_modules', 'react-native-mediapipe');
+  const { version } = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
+  if (version !== '0.6.0') {
+    throw new Error('MediaPipe native compatibility patch requires 0.6.0; found ' + version + '. Review the native adapter before upgrading.');
   }
+  const javaRoot = path.join(packageRoot, 'android', 'src', 'main', 'java', 'com', 'reactnativemediapipe');
+  const convertHelpers = path.join(javaRoot, 'shared', 'ConvertHelpers.kt');
+  // 270 and -90 describe the same rotation; keep the normalized value.
+  writeIfChanged(convertHelpers, fs.readFileSync(convertHelpers, 'utf8')
+    .replace('Orientation.LANDSCAPE_RIGHT -> -90', 'Orientation.LANDSCAPE_RIGHT -> 270'));
 
-  override fun callback(frame: Frame, params: MutableMap<String, Any>?): Any? {
-    val detectorHandle = (params?.get("detectorHandle") as? Double) ?: return false
-    val detector = FaceLandmarkDetectorMap.detectorMap[detectorHandle.toInt()] ?: return false
+  // Persist the working APK's Bitmap input path across installs and local builds.
+  const plugin = path.join(javaRoot, 'facelandmarkdetection', 'FaceLandmarkDetectionFrameProcessorPlugin.kt');
+  writeIfChanged(plugin, fs.readFileSync(path.join(__dirname, 'native', 'FaceLandmarkDetectionFrameProcessorPlugin.kt'), 'utf8'));
 
-    try {
-      val image = frame.image ?: return false
-      val mpImage = MediaImageBuilder(image).build()
-      detector.detectLiveStream(mpImage, frame.orientation)
-      return true
-    } catch (e: Throwable) {
-      Log.e(TAG, "FaceLandmarkDetection frame processing failed: \${e.message}", e)
-      return false
+  const helper = path.join(javaRoot, 'facelandmarkdetection', 'FaceLandmarkDetectorHelper.kt');
+  // The current challenge uses landmarks, not transformation matrices. Restore
+  // the baseline's output options instead of calculating an unused extra output.
+  writeIfChanged(helper, fs.readFileSync(helper, 'utf8')
+    .replace(/\r?\n[ \t]*\.setOutputFacialTransformationMatrixes\(true\)/g, ''));
+
+  // Preserve the existing iOS behavior; this compatibility fix targets Android.
+  const swiftHelper = path.join(packageRoot, 'ios', 'facelandmarkdetection', 'FaceLandmarkDetectorHelper.swift');
+  if (fs.existsSync(swiftHelper)) {
+    const content = fs.readFileSync(swiftHelper, 'utf8');
+    if (!content.includes('outputFacialTransformationMatrixes')) {
+      writeIfChanged(swiftHelper, content.replace(
+        'faceLandmarkerOptions.baseOptions.delegate = self.optionsDelegate',
+        'faceLandmarkerOptions.baseOptions.delegate = self.optionsDelegate\n    faceLandmarkerOptions.outputFacialTransformationMatrixes = true',
+      ));
     }
   }
-}
-`;
-  fs.writeFileSync(pluginPath, replacement, 'utf8');
-  console.log('Patched FaceLandmarkDetectionFrameProcessorPlugin.kt (using MediaImageBuilder)');
+  console.log('MediaPipe Android compatibility applied: RGB Bitmap input, landmark-based liveness.');
 }
 
-// 3. Patch FaceLandmarkDetectorHelper.kt to enable outputFacialTransformationMatrixes
-const helperPath = path.join(__dirname, '..', 'node_modules', 'react-native-mediapipe', 'android', 'src', 'main', 'java', 'com', 'reactnativemediapipe', 'facelandmarkdetection', 'FaceLandmarkDetectorHelper.kt');
-if (fs.existsSync(helperPath)) {
-  let content = fs.readFileSync(helperPath, 'utf8');
-  if (content.includes('.setOutputFaceBlendshapes(true)') && !content.includes('.setOutputFacialTransformationMatrixes(true)')) {
-    content = content.replace(
-      '.setOutputFaceBlendshapes(true)',
-      '.setOutputFaceBlendshapes(true)\n          .setOutputFacialTransformationMatrixes(true)'
-    );
-    fs.writeFileSync(helperPath, content, 'utf8');
-    console.log('Patched FaceLandmarkDetectorHelper.kt (setOutputFacialTransformationMatrixes = true)');
-  }
-}
-
-// 4. Patch FaceLandmarkDetectorHelper.swift to enable outputFacialTransformationMatrixes
-const swiftHelperPath = path.join(__dirname, '..', 'node_modules', 'react-native-mediapipe', 'ios', 'facelandmarkdetection', 'FaceLandmarkDetectorHelper.swift');
-if (fs.existsSync(swiftHelperPath)) {
-  let content = fs.readFileSync(swiftHelperPath, 'utf8');
-  if (content.includes('faceLandmarkerOptions.baseOptions.delegate = self.optionsDelegate') && !content.includes('outputFacialTransformationMatrixes')) {
-    content = content.replace(
-      'faceLandmarkerOptions.baseOptions.delegate = self.optionsDelegate',
-      'faceLandmarkerOptions.baseOptions.delegate = self.optionsDelegate\n    faceLandmarkerOptions.outputFacialTransformationMatrixes = true'
-    );
-    fs.writeFileSync(swiftHelperPath, content, 'utf8');
-    console.log('Patched FaceLandmarkDetectorHelper.swift (outputFacialTransformationMatrixes = true)');
-  }
-}
+if (require.main === module) patchMediaPipe();
+module.exports = { patchMediaPipe };
 
