@@ -172,7 +172,7 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, selfieUpload,
       }
 
       if (active.current) {
-        Alert.alert("Success", "Your documents have been submitted and are under review!");
+        Alert.alert(uiText("Success"), uiText("Your documents are submitted. We'll notify you after review."));
         onNext?.();
       }
 

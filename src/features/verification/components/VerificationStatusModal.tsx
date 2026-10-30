@@ -311,7 +311,7 @@ export function VerificationStatusModal({
         }
       }
 
-      Alert.alert('Success', 'Documents submitted successfully!');
+      Alert.alert(uiText('Success'), uiText("Your documents are submitted. We'll notify you after review."));
       setNbiImage(null);
       setPoliceImage(null);
       setNationalFrontImage(null);
@@ -324,34 +324,10 @@ export function VerificationStatusModal({
     }
   };
 
-  const resolveEffectiveStatus = (): 'Verified' | 'Pending' | 'Rejected' | 'Unverified' => {
-    if (!statusData) return 'Unverified';
-
-    // Derive directly from submitted documents list
-    if (statusData.documents && statusData.documents.length > 0) {
-      const verifiedTypes = new Set(
-        statusData.documents
-          .filter((d) => d.verification_status === 'Verified')
-          .map((d) => d.document_type)
-      );
-
-      if (statusData.account_type === 'Homeowner') {
-        if (verifiedTypes.has('national_id_front')) {
-          return 'Verified';
-        }
-      } else if (statusData.account_type === 'Kasambahay') {
-        if (verifiedTypes.has('nbi_clearance') && verifiedTypes.has('police_clearance')) {
-          return 'Verified';
-        }
-      }
-
-      const docStatuses = new Set(statusData.documents.map((d) => d.verification_status));
-      if (docStatuses.has('Rejected')) return 'Rejected';
-      if (docStatuses.has('Pending') || verifiedTypes.size > 0) return 'Pending';
-    }
-
-    return (statusData.overall_status as any) || 'Unverified';
-  };
+  // The backend evaluates current required documents and expiry in Philippine time.
+  // Individual past approvals must not override current account eligibility.
+  const resolveEffectiveStatus = (): 'Verified' | 'Pending' | 'Rejected' | 'Unverified' =>
+    statusData?.overall_status ?? 'Unverified';
 
   const renderStatusBanner = () => {
     const status = resolveEffectiveStatus();
@@ -563,7 +539,7 @@ export function VerificationStatusModal({
                 isRejected && styles.statusBadgeTextRejected,
               ]}
             >
-              {isVerified ? uiText("Approved") : isRejected ? 'Needs Re-upload' : uiText("Under Review")}
+              {isVerified ? uiText("Approved") : isRejected ? 'Needs Re-upload' : uiText(isProcessingOcr ? "Checking document" : "Under Review")}
             </Text>
           </View>
         </View>
@@ -613,7 +589,7 @@ export function VerificationStatusModal({
             <View style={{ flex: 1 }}>
               <Text style={styles.ocrScanningTitle}>{uiText("Reading your document...")}</Text>
               <Text style={styles.ocrScanningSubtitle}>
-                {uiText("Our system is checking the details on your")} {docTitle}{uiText(". This takes just a moment.")}</Text>
+                {uiText("Your document is saved. We're checking its details for review.")}</Text>
             </View>
           </View>
         ) : (!isRejected && (hasOcrData || hasDiscrepancies)) ? (
