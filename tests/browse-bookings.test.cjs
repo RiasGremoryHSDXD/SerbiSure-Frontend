@@ -37,6 +37,9 @@ function load(filename, mocks = {}) {
 const tick = async () => { await new Promise(resolve => setImmediate(resolve)); renderer.flushPassiveEffects(); };
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const localization = load('src/shared/localization/messages.ts');
+const addressApi = load('src/features/bookings/api/bookingApi.ts', {
+  '../../../shared/api/config': { API_BASE_URL: 'http://test.local' }, '../../../shared/api/httpClient': {},
+});
 function surfaces() {
   const native = { StyleSheet: { create: value => value, hairlineWidth: 1 }, AppState: { currentState: 'active' }, Alert: { alert() {} }, Animated: { View: 'AnimatedView' } };
   for (const name of ['View', 'Text', 'Image', 'Pressable', 'ActivityIndicator', 'ScrollView', 'RefreshControl']) native[name] = name;
@@ -84,7 +87,8 @@ function bookingDetails(t, role, bookingType, ongoing = false, options = {}) {
   const scheduleFields = load('src/features/bookings/components/WorkScheduleFields.tsx', { 'react-native': native, '@expo/vector-icons': { Ionicons: 'Icon' },
     '../../../shared/localization/LanguageContext': languageApi, '../engagementForm': engagement, '../../../shared/ui/WorkHoursPickerModal': { WorkHoursPickerModal: () => null } });
   const realLocation = options.locationService && load('src/features/bookings/hooks/useWorkLocation.ts', {
-    'react-native': native, '../../../shared/services/locationService': options.locationService,
+    'react-native': native, '../../../shared/services/locationService': { FALLBACK_REGIONS: [], FALLBACK_REGION_X_PROVINCES: [],
+      FALLBACK_MISAMIS_ORIENTAL_CITIES: [], FALLBACK_CDO_BARANGAYS: [], ...options.locationService },
   });
   const locationFields = options.locationService ? load('src/features/bookings/components/WorkLocationFields.tsx', {
     'react-native': native, '@expo/vector-icons': { Ionicons: 'Icon' }, '../../../shared/localization/LanguageContext': languageApi,
@@ -101,8 +105,8 @@ function bookingDetails(t, role, bookingType, ongoing = false, options = {}) {
     './BookingOfferReview': review, './WorkScheduleFields': scheduleFields,
     './WorkLocationFields': locationFields, '../workLocation': load('src/features/bookings/workLocation.ts'),
     '../hooks/useWorkLocation': realLocation || { useWorkLocation: () => address }, '../../posting/validation': load('src/features/posting/validation.ts', { './postingConfig': load('src/features/posting/postingConfig.ts') }),
-    '../../../shared/ui/ProfileAvatar': { ProfileAvatar: 'ProfileAvatar' }, '../api/bookingApi': { fetchMinimumWage: async (_token, type) => ({ booking_type: type, rate_period: type === 'long_term' ? 'month' : 'day', minimum_rate: type === 'long_term' ? '6500' : '600' }) },
-    '../../profile/components/PrivacyPolicyModal': { PrivacyPolicyModal: () => null },
+    '../../../shared/ui/ProfileAvatar': { ProfileAvatar: 'ProfileAvatar' }, '../api/bookingApi': { formatBookingAddress: addressApi.formatBookingAddress, fetchMinimumWage: async (_token, type) => ({ booking_type: type, rate_period: type === 'long_term' ? 'month' : 'day', minimum_rate: type === 'long_term' ? '6500' : '600' }) },
+    '../../profile/components/PrivacyPolicyModal': { PrivacyPolicyModal: props => props.visible ? React.createElement('PrivacyPolicyModal', props) : null },
     '../../../shared/theme/theme': theme, '../../../../assets/serbisure-logo.png': 1, '../../../../assets/serbisure-icon.png': 1,
   });
   const render = (status = {}) => screen.render(React.createElement(BookingModal, {
@@ -143,6 +147,39 @@ for (const [workHours, blocked] of [['08:00 AM - 05:00 PM', true], ['02:00 PM - 
   });
 }
 
+test('short-term date range selected in Step 2 reaches Review and confirmation without becoming one day', async t => {
+  t.mock.method(Date, 'now', () => Date.parse('2026-10-30T00:00:00Z'));
+  const weekdays = ['M', 'T', 'W', 'Th', 'F'];
+  const view = bookingDetails(t, 'homeowner', 'short_term', false, { edit: true, initialDetails: {
+    bookingType: 'short_term', workSetup: 'stay_out', startDate: '10/31/2026', endDate: '10/31/2026',
+    workHours: '08:00 AM - 05:00 PM', days: weekdays, salary: '600', serviceCategory: ['Cleaning'],
+  } });
+  await tick(); view.press('Next');
+  view.press('End date'); view.press('Next month'); view.press('13');
+  assert.match(view.text(), /11\/13\/2026/);
+  view.press('Service date'); view.press('31');
+  assert.match(view.text(), /11\/13\/2026/); // Editing start must not reset a valid end date.
+  view.press('End date'); view.press('Previous month');
+  const beforeStart = view.all('Pressable').find(node => content(node) === '30');
+  assert.equal(beforeStart.props.disabled, true);
+  view.press('Cancel');
+  view.press('Next'); view.press('Next');
+  assert.match(view.text(), /Step 4 of 4/);
+  assert.ok(view.text().includes('Start dateOct 31, 2026'));
+  assert.ok(view.text().includes('End dateNov 13, 2026'));
+  assert.ok(!view.text().includes('Service date'));
+  view.press('Back'); view.press('Next');
+  assert.ok(view.text().includes('End dateNov 13, 2026'));
+  view.act(() => view.all('Pressable').find(node => node.props.accessibilityRole === 'checkbox').props.onPress());
+  view.act(() => view.find('PrivacyPolicyModal').props.onAccept());
+  view.press('Send Offer'); await tick();
+  assert.equal(view.actions.length, 1);
+  assert.equal(view.actions[0].details.startDate, '10/31/2026');
+  assert.equal(view.actions[0].details.endDate, '11/13/2026');
+  assert.deepEqual(view.actions[0].details.days, weekdays);
+  view.actions[0].resolve(); await tick();
+});
+
 test('saved past-date offer details disable Accept and explain how to send a new offer', async t => {
   const view = bookingDetails(t, 'homeowner', 'short_term', false, { initialDetails: {
     bookingType: 'short_term', startDate: '01/01/2000', endDate: '01/01/2000', workHours: '08:00 AM - 05:00 PM',
@@ -157,11 +194,23 @@ test('saved past-date offer details disable Accept and explain how to send a new
 });
 
 for (const role of ['homeowner', 'kasambahay']) {
+  test(`${role}: confirmed booking ticket displays the complete retrieved work address`, async t => {
+    const location = addressApi.formatBookingAddress({ street: 'Lot 5555', floor_number: 'Unit 2B', barangay: 'Pagatpat',
+      city: 'City of Cagayan de Oro', province: 'Misamis Oriental', zip_code: '9000' });
+    const view = bookingDetails(t, role, 'short_term', false, { initialDetails: { bookingType: 'short_term',
+      startDate: '10/20/2099', endDate: '10/20/2099', workHours: '08:00 AM - 12:00 PM', location } });
+    view.render({ isConfirmed: true }); await tick();
+    assert.ok(view.text().includes('Lot 5555, Unit 2B, Brgy. Pagatpat, City of Cagayan de Oro, Misamis Oriental, 9000'));
+    assert.ok(view.text().includes('Booking Confirmed'));
+  });
+}
+
+for (const role of ['homeowner', 'kasambahay']) {
   test(`${role}: chat offer uses the signed-in profile address, allows edits and sends the chosen address`, async t => {
     const profile = { city: 'City of Cagayan De Oro', barangay: 'Brgy. Pagatpat', region: 'Northern Mindanao - Region X',
       province: 'Misamis Oriental', street: 'Lot 5555', zipcode: '9000' };
     const screen = bookingDetails(t, role, 'short_term', false, { edit: true, user: profile,
-      initialDetails: { bookingType: 'short_term', startDate: '12/31/2099', workHours: '08:00 AM - 12:00 PM', serviceCategory: ['Cleaning'], salary: '800' },
+      initialDetails: { bookingType: 'short_term', workSetup: 'stay_out', days: ['Th'], startDate: '12/31/2099', workHours: '08:00 AM - 12:00 PM', serviceCategory: ['Cleaning'], salary: '800' },
       locationService: {
         getRegions: async () => [{ code: '10', name: 'Region X', displayName: profile.region }],
         getProvinces: async () => [{ code: '1043', name: profile.province }],
@@ -178,12 +227,26 @@ for (const role of ['homeowner', 'kasambahay']) {
     const street = () => screen.all('TextInput').find(node => node.props.accessibilityLabel === 'Work street address');
     assert.equal(street().props.value, profile.street);
     assert.equal(screen.all('TextInput').find(node => node.props.accessibilityLabel === 'Work ZIP code').props.value, profile.zipcode);
-    screen.act(() => street().props.onChangeText('Lot 77')); screen.press('Review Offer');
-    assert.match(screen.text(), /Lot 77, Pagatpat, City of Cagayan De Oro/);
+    screen.act(() => {
+      street().props.onChangeText('Lot 77');
+      screen.all('TextInput').find(node => node.props.accessibilityLabel === 'Floor or unit (optional)').props.onChangeText('Unit 2B');
+    });
+    screen.press('Next');
+    const expectedAddress = 'Lot 77, Unit 2B, Brgy. Pagatpat, City of Cagayan De Oro, Misamis Oriental, 9000';
+    assert.ok(screen.text().includes(expectedAddress));
+    screen.press('Back');
+    assert.equal(street().props.value, 'Lot 77');
+    assert.equal(screen.all('TextInput').find(node => node.props.accessibilityLabel === 'Floor or unit (optional)').props.value, 'Unit 2B');
+    screen.press('Next');
+    assert.ok(screen.text().includes(expectedAddress));
+    screen.act(() => screen.all('Pressable').find(node => node.props.accessibilityRole === 'checkbox').props.onPress());
+    screen.act(() => screen.find('PrivacyPolicyModal').props.onAccept());
     screen.press('Send Offer'); await tick();
     assert.equal(screen.actions[0].details.street, 'Lot 77');
     assert.equal(screen.actions[0].details.barangay, 'Pagatpat');
     assert.equal(screen.actions[0].details.zipCode, '9000');
+    assert.equal(screen.actions[0].details.floorUnit, 'Unit 2B');
+    assert.equal(screen.actions[0].details.location, expectedAddress);
     assert.equal(screen.actions[0].details.salary, '800');
     screen.actions[0].resolve(); await tick();
   });
@@ -474,13 +537,15 @@ test('booking ownership uses real IDs, fails closed for missing IDs, and selects
 });
 
 for (const accountType of ['Homeowner', 'Kasambahay']) {
-  test(`${accountType}: booking offers use ownership and the heading follows all language settings`, async t => {
+  test(`${accountType}: booking cards show honest ratings, use ownership, and follow language settings`, async t => {
     const screen = mount(t);
     let language = 'English';
     const user = { id: 'viewer', accountType };
     const otherRole = accountType === 'Homeowner' ? 'Kasambahay' : 'Homeowner';
     const booking = { booking_id: 'own', poster: participant('viewer', accountType), assigned_partner: null, recipient: null,
       service_category: ['Cleaning'], booking_type: 'short_term', booking_status: 'Pending', rate_amount: '600', rate_period: 'day', start_time: '2026-10-20', end_time: '2026-10-20' };
+    const assignedBooking = { ...booking, booking_id: 'other', poster: participant('other', otherRole), recipient: participant('viewer', accountType) };
+    let initialTab = 'pending';
     const reactNativeMock = surfaces();
     reactNativeMock.Dimensions = { get: () => ({ width: 390, height: 844 }) };
     reactNativeMock.Animated.Value = class { setValue() {} interpolate() { return 0; } addListener() { return '1'; } removeListener() {} removeAllListeners() {} };
@@ -494,27 +559,70 @@ for (const accountType of ['Homeowner', 'Kasambahay']) {
       '../../../shared/realtime': { realtime: { subscribe: () => () => {} } }, '../workSetup': { workSetupLabel: () => 'Stay-out' }, '../bookingParticipants': participants,
       '../../auth/session/UserContext': { useUser: () => ({ user, updateUser() {} }) }, './ContractDownloadCard': { ContractDownloadCard: () => null },
       '../api/bookingApi': { formatBookingAddress: () => 'Agusan', fetchMyBookings: async () => [booking],
-        fetchMyAssignedBookings: async () => [{ ...booking, booking_id: 'other', poster: participant('other', otherRole), recipient: participant('viewer', accountType) }],
+        fetchMyAssignedBookings: async () => [assignedBooking],
         fetchBookingPenaltyStatus: async () => ({ penalty_points: 0, is_restricted: false }) },
       './CancelBookingModal': { CancelBookingModal: 'CancelBookingModal' }, '../../reviews/components/ReviewModal': { ReviewModal: 'ReviewModal' },
       './ProposalsModal': { ProposalsModal: 'ProposalsModal' }, '../../profile/components/UserProfileModal': { UserProfileModal: 'UserProfileModal' },
       './BookingModal': { BookingModal: 'BookingModal' },
     });
-    const render = () => screen.render(React.createElement(MyBookingsModal, { visible: true, token: 'token', accountType, initialTab: 'pending', onClose() {} }));
+    const render = () => screen.render(React.createElement(MyBookingsModal, { visible: true, token: 'token', accountType, initialTab, onClose() {} }));
     render(); await tick();
+    const descendants = node => [node, ...node.children.flatMap(descendants)];
+    const header = name => screen.all('Pressable').find(node => content(node).includes(name));
+    const stars = node => descendants(node).filter(child => child.type === 'Icon' && child.props.name === 'star-outline');
+    for (const tab of ['pending', 'active']) {
+      initialTab = tab;
+      booking.booking_status = assignedBooking.booking_status = tab === 'active' ? 'Accepted' : 'Pending';
+      render(); await tick();
+      const unassigned = header('Waiting for Kasambahay');
+      assert.ok(unassigned);
+      assert.equal(stars(unassigned).length, 0);
+      assert.doesNotMatch(content(unassigned), /Rating|No ratings yet|New|·/);
+      for (const value of [0, null, undefined, NaN, Infinity, -1, 6]) {
+        assignedBooking.poster.rating = value; render();
+        assert.ok(content(header('other Name')).includes(`${otherRole}New`));
+        assert.equal(stars(header('other Name')).length, 0);
+        assert.doesNotMatch(content(header('other Name')), /3\.7/);
+      }
+      for (const value of [5, 4.3, 3.7]) {
+        assignedBooking.poster.rating = value; render();
+        assert.ok(content(header('other Name')).includes(`${otherRole}·${value.toFixed(1)}`));
+        assert.doesNotMatch(content(header('other Name')), /New|Rating/);
+        assert.equal(stars(header('other Name')).length, 1);
+      }
+    }
+    for (const field of ['recipient', 'assigned_partner']) {
+      booking[field] = participant('partner', otherRole); render();
+      assert.ok(content(header('partner Name')).includes(`${otherRole}New`));
+      assert.equal(stars(header('partner Name')).length, 0);
+      booking[field].rating = 5; render();
+      assert.ok(content(header('partner Name')).includes(`${otherRole}·5.0`));
+      assert.equal(stars(header('partner Name')).length, 1);
+      booking[field] = null;
+    }
+    initialTab = 'pending'; booking.booking_status = assignedBooking.booking_status = 'Pending';
+    assignedBooking.poster.rating = 0; render(); await tick();
     const details = () => screen.all('Pressable').filter(node => content(node) === 'Details');
     assert.equal(details().length, 2);
     screen.act(() => details()[0].props.onPress());
     assert.equal(screen.find('BookingModal').props.visible, true);
     assert.equal(screen.find('BookingModal').props.bookingId, 'own');
+    booking.booking_type = 'long_term'; booking.end_time = null; render();
+    assert.equal(screen.find('BookingModal').props.initialDetails.endDate, '');
+    booking.end_time = '2027-04-30'; render();
+    assert.equal(screen.find('BookingModal').props.initialDetails.endDate, '2027-04-30');
+    booking.booking_type = 'short_term'; booking.end_time = '2026-10-20'; render();
     screen.act(() => screen.find('BookingModal').props.onClose());
     screen.act(() => details()[1].props.onPress());
     assert.equal(screen.find('BookingModal').props.visible, true);
     assert.equal(screen.find('BookingModal').props.bookingId, 'other');
+    screen.act(() => screen.find('BookingModal').props.onClose());
     for (const value of ['English', 'Tagalog', 'Bisaya']) {
       language = value; render();
       const heading = accountType === 'Homeowner' ? 'My Bookings & Hires' : 'My Jobs & Contracts';
-      assert.ok(screen.all('Text').some(node => content(node) === localization.translateMessage(language, heading)));
+      assert.ok(screen.all('Text').some(node => content(node) === localization.translateMessage(language, heading)),
+        JSON.stringify({ language, expected: localization.translateMessage(language, heading), text: screen.all('Text').slice(0, 6).map(content) }));
+      assert.ok(content(header('other Name')).includes(localization.translateMessage(language, 'New')));
     }
     booking.booking_status = 'Completed'; booking.assigned_partner = participant('other', otherRole);
     language = 'English'; render();

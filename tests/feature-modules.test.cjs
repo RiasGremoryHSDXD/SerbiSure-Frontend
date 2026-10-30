@@ -190,7 +190,7 @@ test('Home maps the same DTO into distinct job and worker cards', () => {
   assert.equal(job.price, '₱800');
   assert.equal(job.unit, '/ day');
   assert.equal(job.location, 'Nazareth, Cagayan de Oro');
-  assert.equal(job.aboutText, 'I am looking for Cleaning & Child Care at Test Street, Nazareth, Cagayan de Oro, on a stay-out setup.');
+  assert.equal(job.aboutText, 'I am looking for Cleaning & Child Care at Test Street, Brgy. Nazareth, Cagayan de Oro, on a stay-out setup.');
   assert.equal(worker.aboutText, 'Available for Cleaner & Child Care work in Nazareth, Cagayan de Oro.');
   assert.deepEqual(job.tags, ['Verified Employer', 'Short-term', 'Stay-out', 'Cleaning', 'Child Care']);
 });
@@ -247,7 +247,7 @@ test('missing data cannot create a verified feed badge or default contract terms
   assert.equal(card.startDate, '10/13/2026');
   assert.equal(card.endDate, '');
   assert.equal(card.workHours, '');
-  assert.equal(card.location, '');
+  assert.equal(card.location, 'Test Street, Brgy. Nazareth, Cagayan de Oro');
   assert.equal(card.isConfirmed, false);
   assert.equal(bookingCards.mapBookingCard({ booking, status: 'Confirmed', can_respond: false, sender_name: 'Sender' }).isConfirmed, true);
 });
@@ -267,7 +267,7 @@ test('chat offers use durable request keys and acceptance waits for authoritativ
     assert.deepEqual(JSON.parse(options.body), payload);
     return response({ booking: { booking_id: 'booking-1' }, chat_message: { chat_message_id: 'message-1' } }, 201);
   }, async () => assert.equal((await offersApi.sendBookingOffer('session', payload, 'draft-key')).booking.booking_id, 'booking-1'));
-  const card = { bookingId: 'booking-1', canRespond: true };
+  const card = { bookingId: 'booking-1', canRespond: true, startTime: '2099-01-01T00:00:00Z' };
   await withFetch(async (url, options) => {
     assert.equal(url, 'http://test.local/api/v1/booking/booking-1/accept/');
     assert.equal(options.method, 'PATCH');
@@ -393,7 +393,7 @@ test('feed query serialization includes selected filters and no empty defaults',
   assert.equal(query.get('work_setup'), 'stay_out');
   assert.equal(query.get('max_rate'), '900');
   assert.equal(query.get('location'), 'Nazareth');
-  assert.equal(query.get('sort'), 'rate_asc');
+  assert.equal(query.get('sort'), null); // Feed ordering is always newest first.
   assert.equal(query.get('rate_period'), 'day');
   const monthly = new URL(feedApi.buildFeedPath({ ...emptyFilters, bookingType: 'long_term', maxRate: 8000 }), 'http://test.local').searchParams;
   assert.equal(monthly.get('rate_period'), 'month');
@@ -590,6 +590,19 @@ test('short-term custom hours use the selected day and reject missing or reverse
   assert.equal(saved.end_time, '2030-01-07T06:00:00.000Z');
   assert.throws(() => engagementForm.buildEngagementSchedule({ ...form, workHours: '' }, now), /Choose your working hours/);
   assert.throws(() => engagementForm.buildEngagementSchedule({ ...form, workHours: '05:00 PM - 08:00 AM' }, now), /end after/);
+});
+
+test('short-term multi-day schedule preserves its end date and selected weekdays', () => {
+  const now = Date.parse('2026-10-30T00:00:00Z');
+  const form = { bookingType: 'short_term', startDate: '10/31/2026', endDate: '11/13/2026',
+    workHours: '08:00 AM - 05:00 PM', days: ['M', 'T', 'W', 'Th', 'F'], shift: 'custom' };
+  const schedule = engagementForm.buildEngagementSchedule(form, now);
+  assert.equal(schedule.start_time, '2026-10-31T00:00:00.000Z');
+  assert.equal(schedule.end_time, '2026-11-13T09:00:00.000Z');
+  assert.deepEqual(schedule.work_days, form.days);
+  assert.throws(() => engagementForm.buildEngagementSchedule({ ...form, endDate: '10/30/2026' }, now), /on or after/);
+  assert.throws(() => engagementForm.buildEngagementSchedule({ ...form, days: [] }, now), /working day/);
+  assert.throws(() => engagementForm.buildEngagementSchedule({ ...form, endDate: '11/01/2026', days: ['M'] }, now), /within the date range/);
 });
 
 test('both forms require a complete PSGC hierarchy and a real street and ZIP code', () => {

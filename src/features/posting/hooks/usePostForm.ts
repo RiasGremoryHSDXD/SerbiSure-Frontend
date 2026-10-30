@@ -221,7 +221,7 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
     return buildEngagementSchedule({
       bookingType: isShort ? 'short_term' : 'long_term',
       startDate: effectiveStart,
-      endDate: isShort ? effectiveStart : (endDate || ''),
+      endDate: endDate || (isShort ? effectiveStart : ''),
       workHours: effectiveHours,
       days: effectiveDays,
       shift: selectedTime || (isShort ? 'morning' : null),

@@ -84,32 +84,33 @@ export interface BookingItem {
 }
 
 /**
- * Formats a booking address gracefully and idiot-proof.
- * Falls back to Cagayan de Oro or custom fallback if all fields are empty.
+ * Complete work address for review, chat and booking details.
+ * Prefer stored components over older full_address strings that omit unit/ZIP.
  */
 export function formatBookingAddress(
   booking?: {
     full_address?: string | null;
     street?: string | null;
+    floor_number?: string | null;
     barangay?: string | null;
     city?: string | null;
     province?: string | null;
     region?: string | null;
     zip_code?: string | null;
   } | null,
-  fallback = 'Cagayan de Oro'
+  fallback = 'Address not provided'
 ): string {
   if (!booking) return fallback;
-  if (booking.full_address && booking.full_address.trim()) {
-    return booking.full_address.trim();
-  }
-  const parts = [booking.street, booking.barangay, booking.city, booking.province]
+  const hasAddressParts = [booking.street, booking.barangay, booking.city, booking.province].some(value => value?.trim());
+  if (!hasAddressParts && booking.full_address?.trim()) return booking.full_address.trim();
+  const barangay = (booking.barangay || '').trim().replace(/^(?:brgy\.?|barangay)\s+/i, '');
+  const parts = [booking.street, booking.floor_number, barangay ? `Brgy. ${barangay}` : '', booking.city, booking.province, booking.zip_code]
     .map(p => (p || '').trim())
     .filter(Boolean);
   if (parts.length > 0) {
     return parts.join(', ');
   }
-  return fallback;
+  return booking.full_address?.trim() || fallback;
 }
 
 /**

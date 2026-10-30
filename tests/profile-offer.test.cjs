@@ -39,7 +39,7 @@ const sourcePost = { id: '63212905-719c-444b-b42a-c0cc56790846', partnerId: work
   title: 'Caregiver', price: '₱8000', unit: '/ month', termTag: 'Long-term', location: 'Pagatpat', aboutText: 'Original service post' };
 const details = { bookingType: 'long_term', startDate: '12/01/2099', endDate: '01/02/2100', ongoing: false,
   workHours: '08:00 AM - 05:00 PM', days: ['M'], serviceCategory: ['Cleaning'], workSetup: 'stay_out',
-  salary: '8000', region: 'Region X', province: 'Misamis Oriental', city: 'Cagayan de Oro', barangay: 'Pagatpat', street: 'Lot 555', zipCode: '9000' };
+  salary: '8000', region: 'Region X', province: 'Misamis Oriental', city: 'Cagayan de Oro', barangay: 'Pagatpat', street: 'Lot 555', floorUnit: 'Unit 2B', zipCode: '9000' };
 
 function profile(t) {
   const requests = [], alerts = [];
@@ -113,6 +113,10 @@ test('profile offer preserves source details and a valid UUID across failed-send
   assert.equal(retry[1].headers['Idempotency-Key'], key);
   assert.equal('source_post_id' in JSON.parse(first[1].body), false);
   assert.equal(JSON.parse(first[1].body).recipient_id, workerId);
+  for (const [field, value] of Object.entries({ street: 'Lot 555', floor_number: 'Unit 2B', barangay: 'Pagatpat',
+    city: 'Cagayan de Oro', province: 'Misamis Oriental', zip_code: '9000', region: 'Region X' })) {
+    assert.equal(JSON.parse(first[1].body)[field], value);
+  }
   assert.equal(screen.find('BookingModal'), undefined);
 });
 
@@ -121,4 +125,15 @@ test('changing offer terms after failure generates a fresh UUID', async t => {
   await assert.rejects(screen.find('BookingModal').props.onConfirm(details));
   await assert.rejects(screen.find('BookingModal').props.onConfirm({ ...details, salary: '9000' }));
   assert.notEqual(screen.requests[0][1].headers['Idempotency-Key'], screen.requests[1][1].headers['Idempotency-Key']);
+});
+
+test('short-term range is sent as the actual start/end timestamps and selected weekdays', async t => {
+  const screen = profile(t);
+  screen.fail = false;
+  await screen.find('BookingModal').props.onConfirm({ ...details, bookingType: 'short_term',
+    startDate: '10/31/2099', endDate: '11/13/2099', days: ['M', 'T', 'W', 'Th', 'F'] });
+  const payload = JSON.parse(screen.requests[0][1].body);
+  assert.equal(payload.start_time, '2099-10-31T00:00:00.000Z');
+  assert.equal(payload.end_time, '2099-11-13T09:00:00.000Z');
+  assert.deepEqual(payload.work_days, ['M', 'T', 'W', 'Th', 'F']);
 });

@@ -2150,7 +2150,9 @@ function ChatDetailSession({
           isDeclined={activeBookingMsgId ? messages.find((m) => m.id === activeBookingMsgId)?.bookingInfo?.isDeclined : false}
           isAcquired={activeBookingMsgId ? Boolean(messages.find((m) => m.id === activeBookingMsgId)?.bookingInfo?.isAcquired || activeBookingDetails?.isAcquired) : Boolean(activeBookingDetails?.isAcquired)}
           userRole={isHomeowner ? 'homeowner' : 'kasambahay'}
-          initialDetails={activeBookingDetails}
+          initialDetails={bookingReadOnly && activeBookingMsgId
+            ? messages.find(message => message.id === activeBookingMsgId)?.bookingInfo || activeBookingDetails
+            : activeBookingDetails}
           token={effectiveToken}
           bookingType={activeBookingDetails?.bookingType}
           onConfirm={handleSendOffer}

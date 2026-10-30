@@ -33,7 +33,7 @@ export function WorkScheduleFields(props: Props) {
   const short = bookingType === 'short_term';
   const locked = readOnly || disabled;
   const ongoing = !short && !!props.ongoing;
-  const earliestEnd = startDate ? earliestLongTermEnd(startDate) : '';
+  const earliestEnd = startDate ? (short ? startDate : earliestLongTermEnd(startDate)) : '';
   const earliestEndStamp = earliestEnd ? bookingSchedule(earliestEnd, '12:00 PM').iso : '';
   const [target, setTarget] = useState<'start' | 'end' | null>(null);
   const [month, setMonth] = useState(() => new Date().getMonth());
@@ -218,7 +218,7 @@ export function WorkScheduleFields(props: Props) {
                 const date = `${String(month + 1).padStart(2, '0')}/${String(index + 1).padStart(2, '0')}/${year}`;
                 const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(index + 1).padStart(2, '0')}`;
                 const past = iso < today;
-                const tooEarly = target === 'end' && !short && !!earliestEndStamp && bookingSchedule(date, '12:00 PM').iso < earliestEndStamp;
+                const tooEarly = target === 'end' && !!earliestEndStamp && bookingSchedule(date, '12:00 PM').iso < earliestEndStamp;
                 const unavailable = past || tooEarly;
                 const isSelected = (target === 'end' ? endDate : startDate) === date;
                 return (
@@ -231,8 +231,8 @@ export function WorkScheduleFields(props: Props) {
                       if (target === 'end') props.onEndDate(date);
                       else {
                         props.onStartDate(date);
-                        if (short) props.onEndDate(date);
-                        else if (endDate && bookingSchedule(endDate, '12:00 PM').iso < bookingSchedule(earliestLongTermEnd(date), '12:00 PM').iso) {
+                        if (short && (!endDate || bookingSchedule(endDate, '12:00 PM').iso < bookingSchedule(date, '12:00 PM').iso)) props.onEndDate(date);
+                        else if (!short && endDate && bookingSchedule(endDate, '12:00 PM').iso < bookingSchedule(earliestLongTermEnd(date), '12:00 PM').iso) {
                           props.onEndDate('');
                         }
                       }

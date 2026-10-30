@@ -84,16 +84,26 @@ export function buildEngagementSchedule(form: EngagementSchedule, now = Date.now
   if (!hours.trim()) throw new Error('Choose your working hours before continuing.');
   const [startClock = '', endClock = ''] = hours.split(' - ');
   const start = bookingSchedule(form.startDate, startClock);
-  const end = bookingSchedule(short || form.ongoing ? form.startDate : form.endDate, endClock);
+  const endDate = short ? (form.endDate || form.startDate) : form.ongoing ? form.startDate : form.endDate;
+  const end = bookingSchedule(endDate, endClock);
   if (start.clock >= end.clock) throw new Error('Daily work hours must end after they start.');
-  const latestAllowed = short ? Date.parse(end.iso) : Date.parse(bookingSchedule(form.startDate, '11:59 PM').iso);
+  if (end.iso <= start.iso) throw new Error('The end date must be on or after the start date.');
+  const latestAllowed = short ? Date.parse(bookingSchedule(form.startDate, endClock).iso) : Date.parse(bookingSchedule(form.startDate, '11:59 PM').iso);
   if (latestAllowed <= now) throw new Error('Choose a start date and shift that have not passed.');
   if (!short && !form.ongoing && bookingSchedule(form.endDate, '12:00 PM').iso < bookingSchedule(earliestLongTermEnd(form.startDate), '12:00 PM').iso) throw new Error(LONG_TERM_MINIMUM_MESSAGE);
   const days = WORK_DAYS.filter(item => form.days.includes(item.value)).map(item => item.value);
+  const daySpan = Math.round((Date.parse(bookingSchedule(endDate, '12:00 PM').iso) - Date.parse(bookingSchedule(form.startDate, '12:00 PM').iso)) / 86400000);
+  if (short && daySpan > 0) {
+    if (!days.length) throw new Error('Select at least one working day.');
+    const startDay = WORK_DAYS.findIndex(item => item.value === dayForDate(form.startDate));
+    if (!Array.from({ length: Math.min(daySpan + 1, 7) }, (_, index) => WORK_DAYS[(startDay + index) % 7]!.value).some(day => days.includes(day))) {
+      throw new Error('Select a working day within the date range.');
+    }
+  }
   if (!short && !days.length) throw new Error('Select at least one working day.');
   if (!short && !days.includes(dayForDate(form.startDate) as typeof days[number])) throw new Error('The start date must fall on a selected working day.');
   return {
     start_time: start.iso, end_time: !short && form.ongoing ? null : end.iso, daily_start_time: start.clock, daily_end_time: end.clock,
-    work_days: short ? [dayForDate(form.startDate)] : days,
+    work_days: short && daySpan === 0 ? [dayForDate(form.startDate)] : days,
   };
 }

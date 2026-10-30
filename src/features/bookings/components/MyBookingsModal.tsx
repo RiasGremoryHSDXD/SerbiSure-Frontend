@@ -539,9 +539,8 @@ export function MyBookingsModal({
               const partnerInfo = counterparty || (booking.poster?.id !== user.id ? booking.poster : null);
               const displayName = partnerInfo?.name || uiText("Waiting for Kasambahay");
               const displayRole = partnerInfo?.account_type || uiText("Kasambahay");
-              const displayRating = (partnerInfo?.rating && partnerInfo.rating > 0)
-                ? `${partnerInfo.rating} Rating`
-                : '3.7 Rating';
+              const rating = partnerInfo?.rating;
+              const hasRating = typeof rating === 'number' && Number.isFinite(rating) && rating >= 1 && rating <= 5;
               const avatarUri = partnerInfo?.profile_link ||
                 `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=FFB380&color=fff`;
 
@@ -591,8 +590,17 @@ export function MyBookingsModal({
                       </View>
                       <View style={styles.cardSubRow}>
                         <Text style={styles.cardRoleText}>{displayRole}</Text>
-                        <Ionicons name="star-outline" size={13.5} color="#FFB380" style={styles.starIcon} />
-                        <Text style={styles.cardRatingText}>{displayRating}</Text>
+                        {partnerInfo && (hasRating ? (
+                          <>
+                            <Text style={styles.ratingSeparator}>·</Text>
+                            <Ionicons name="star-outline" size={13.5} color="#FFB380" style={styles.starIcon} />
+                            <Text style={styles.cardRatingText}>{rating.toFixed(1)}</Text>
+                          </>
+                        ) : (
+                          <View style={styles.newBadge}>
+                            <Text style={styles.newBadgeText}>{uiText('New')}</Text>
+                          </View>
+                        ))}
                       </View>
                     </View>
                   </Pressable>
@@ -814,7 +822,7 @@ export function MyBookingsModal({
           workSetup: selectedBookingForDetails.work_setup || (selectedBookingForDetails.booking_type === 'short_term' ? 'stay_out' : 'stay_in'),
           region: selectedBookingForDetails.region || 'Northern Mindanao',
           startDate: selectedBookingForDetails.start_time || '',
-          endDate: selectedBookingForDetails.end_time || selectedBookingForDetails.start_time || '',
+          endDate: selectedBookingForDetails.end_time || '',
           workHours: (selectedBookingForDetails.daily_start_time && selectedBookingForDetails.daily_end_time)
             ? `${selectedBookingForDetails.daily_start_time} - ${selectedBookingForDetails.daily_end_time}`
             : '08:00 AM - 12:00 PM',
@@ -967,7 +975,23 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   starIcon: {
-    marginHorizontal: 5,
+    marginRight: 4,
+  },
+  ratingSeparator: {
+    marginHorizontal: 6,
+    color: '#6B7280',
+  },
+  newBadge: {
+    marginLeft: 8,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: '#F1F5F9',
+  },
+  newBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
   },
   cardRatingText: {
     fontSize: 13,

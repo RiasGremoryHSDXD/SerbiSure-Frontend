@@ -18,7 +18,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { StyleSheet, Text, View, Image, TextInput, Pressable, Modal, Alert, Animated, Dimensions, ScrollView, Keyboard, KeyboardAvoidingView, Platform, ActivityIndicator, BackHandler, Easing } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { fetchMinimumWage, MinimumWageData } from '../api/bookingApi';
+import { fetchMinimumWage, formatBookingAddress, MinimumWageData } from '../api/bookingApi';
 import THEME from '../../../shared/theme/theme';
 
 const logoSource = require('../../../../assets/serbisure-icon.png');
@@ -138,7 +138,10 @@ export function BookingModal({
   const [workHours, setWorkHours] = useState('');
   const [savedLocation, setSavedLocation] = useState('');
   const address = useWorkLocation(visible && !readOnly);
-  const location = readOnly ? savedLocation : [address.streetAddress, address.selectedBarangay?.name, address.selectedCity?.name, address.selectedProvince?.name].filter(Boolean).join(', ');
+  const location = readOnly ? savedLocation : formatBookingAddress({
+    street: address.streetAddress, floor_number: address.floorUnit, barangay: address.selectedBarangay?.name,
+    city: address.selectedCity?.name, province: address.selectedProvince?.name, zip_code: address.zipcode,
+  }, '');
   const [selectedShift, setSelectedShift] = useState<WorkShift | null>(null);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [salary, setSalary] = useState('');
@@ -159,7 +162,7 @@ export function BookingModal({
   const scrollRef = useRef<ScrollView>(null);
   const currentStep = OFFER_STEPS[offerStep - 1]!;
   const wageLocation = address.selectedCity?.name || '';
-  const previewLocation = readOnly ? savedLocation : [address.floorUnit.trim(), address.streetAddress.trim(), address.selectedBarangay?.name, address.selectedCity?.name, address.selectedProvince?.name, address.zipcode.trim()].filter(Boolean).join(', ');
+  const previewLocation = location;
 
   const goToStep = (step: BookingOfferStep) => {
     if (submittingRef.current) return;
@@ -368,7 +371,7 @@ export function BookingModal({
     submittingRef.current = true;
     setSubmitting(true);
     void Promise.resolve().then(() => onConfirm({
-      startDate, endDate: selectedBookingType === 'short_term' ? startDate : ongoing ? '' : endDate,
+      startDate, endDate: selectedBookingType === 'short_term' ? (endDate || startDate) : ongoing ? '' : endDate,
       ongoing: selectedBookingType === 'long_term' && ongoing,
       workHours: selectedBookingType === 'short_term' && selectedShift !== 'custom' ? WORK_SHIFTS.find(item => item.value === selectedShift)!.hours : workHours,
       location: location.trim(), days: schedule.work_days,
@@ -731,7 +734,7 @@ export function BookingModal({
                 workSetup={workSetup || 'stay_out'}
                 bookingType={selectedBookingType || 'long_term'}
                 startDate={startDate}
-                endDate={selectedBookingType === 'short_term' && !readOnly ? startDate : endDate}
+                endDate={selectedBookingType === 'short_term' ? (endDate || startDate) : endDate}
                 ongoing={ongoing}
                 workHours={workHours}
                 days={selectedDays}
