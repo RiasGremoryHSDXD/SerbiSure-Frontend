@@ -1,6 +1,6 @@
 import { workSetupLabel } from '../bookings/workSetup';
 import type { Role } from '../../app/roleConfig';
-import { formatTimeAgo } from '../../shared/utils/date';
+import { formatCompactTimeAgo } from '../../shared/utils/date';
 import { formatBookingAddress, formatBookingLocationShort } from '../bookings/api/bookingApi';
 import type { BookingFeedDto, FeedPost } from './types';
 import type { SavedJobItem } from '../bookings/store/savedJobsStore';
@@ -42,7 +42,7 @@ export function mapFeedPost(item: BookingFeedDto, viewerRole: Role): FeedPost {
     start_time: item.start_time, booking_status: item.booking_status, post_status: item.post_status,
     employerName: name, title: categories[0] || (isJob ? 'Household Service' : 'Kasambahay'),
     avatar: item.profile_link || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || authorRole)}&background=FFB43B&color=fff`,
-    time: formatTimeAgo(item.createdAt), location, categories,
+    time: formatCompactTimeAgo(item.createdAt), location, categories,
     roleTag: categories[0] || (isJob ? 'Household Service' : 'Kasambahay'), termTag, setupTag,
     price: formatRate(item.rate_amount), unit: longTerm ? '/ month' : '/ day', aboutText: description,
     tags: Array.from(new Set(isJob ? [...(item.poster_verification_status === 'Verified' ? ['Verified Employer'] : []), termTag, setupTag, ...categories] : [...categories, termTag, ...(item.work_setup ? [setupTag] : [])])),

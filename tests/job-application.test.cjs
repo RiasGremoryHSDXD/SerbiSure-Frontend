@@ -16,6 +16,7 @@ function load(file, mocks) {
   new Function('require', 'module', 'exports', source)(name => {
     if (name === 'react') return { ...React, default: React };
     if (name in mocks) return mocks[name];
+    if (name.endsWith('/utils/rate')) return load('src/shared/utils/rate.ts', {});
     throw new Error('Unexpected dependency: ' + name);
   }, module, module.exports);
   return module.exports;

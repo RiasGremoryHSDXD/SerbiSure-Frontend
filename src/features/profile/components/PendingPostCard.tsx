@@ -8,7 +8,7 @@ import { formatBookingAddress, formatBookingLocationShort, type BookingItem } fr
 import { profileStyles as styles } from '../styles';
 import { FeedPostCard } from '../../feed/components/FeedPostCard';
 import { useJobsActivity } from '../../bookings/store/savedJobsStore';
-import { formatTimeAgo } from '../../../shared/utils/date';
+import { formatCompactTimeAgo } from '../../../shared/utils/date';
 import type { FeedPost } from '../../feed/types';
 
 export const CATEGORY_LABELS: Record<string, string> = {
@@ -84,7 +84,7 @@ export function PendingPostCard({
       avatar:
         authorAvatar ||
         `https://ui-avatars.com/api/?name=${encodeURIComponent(authorName || authorRole || 'User')}&background=FFB43B&color=fff`,
-      time: post.createdAt ? formatTimeAgo(post.createdAt) : 'Recently',
+      time: formatCompactTimeAgo(post.createdAt),
       location,
       categories,
       roleTag: categories[0] || (isJob ? 'Household Service' : 'Kasambahay'),

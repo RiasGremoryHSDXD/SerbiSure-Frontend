@@ -1,6 +1,9 @@
 // English source text -> Tagalog, Bisaya. Keep stored API values in English;
 // translate only their presentation. User-authored content is never passed here.
 export const UI_MESSAGES = {
+  'Profile': ['Profile', 'Profile'],
+  'Details': ['Mga detalye', 'Mga detalye'],
+  'Now': ['Ngayon', 'Karon'],
   'Verification check unavailable': ['Hindi masuri ang beripikasyon', 'Dili masusi ang beripikasyon'],
   'Verification Required': ['Kailangan ang Beripikasyon', 'Gikinahanglan ang Beripikasyon'],
   'Could not check your verification status. Check your connection and try again.': ['Hindi masuri ang iyong beripikasyon. Suriin ang koneksyon at subukan muli.', 'Dili masusi ang imong beripikasyon. Susiha ang koneksyon ug sulayi pag-usab.'],

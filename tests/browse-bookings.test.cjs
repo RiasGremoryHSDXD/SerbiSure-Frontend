@@ -410,7 +410,7 @@ function browse(t, role) {
     '../feedCache': { loadExploreFeed: (...args) => { const request = { ...deferred(), args }; requests.push(request); return request.promise; } },
   });
   const mapper = load('src/features/feed/feedMapper.ts', {
-    '../bookings/workSetup': { workSetupLabel: () => 'Stay-out' }, '../../shared/utils/date': { formatTimeAgo: () => 'Just now' },
+    '../bookings/workSetup': { workSetupLabel: () => 'Stay-out' }, '../../shared/utils/date': { formatCompactTimeAgo: () => 'Now' },
     '../bookings/api/bookingApi': { formatBookingAddress: () => 'Agusan', formatBookingLocationShort: () => 'Agusan' },
   });
   let language = 'English';

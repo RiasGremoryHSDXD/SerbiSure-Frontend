@@ -1,8 +1,9 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MapPinIcon } from '../../../shared/components/icons/LucideIcons';
+import { ProfileAvatar } from '../../../shared/ui/ProfileAvatar';
 import THEME from '../../../shared/theme/theme';
 import type { FeedPost } from '../types';
 import { ScheduleBadge } from '../../bookings/components/ScheduleBadge';
@@ -19,99 +20,53 @@ export interface FeedPostCardProps {
 }
 
 export function FeedPostCard({
-  post,
-  saved,
-  applied = false,
-  onViewProfile,
-  onDetails,
-  onToggleSave,
-  leftActionButton,
-  rightActionButton,
+  post, saved, applied = false, onViewProfile, onDetails, onToggleSave,
+  leftActionButton, rightActionButton,
 }: FeedPostCardProps) {
   const { tr: uiText } = useUiLanguage();
+  const unit = (post.unit || '').replace(/^(?:\/|per\s+)\s*/i, '').trim();
+  const hasPrice = /^(?:₱|PHP?\s*)\d/i.test(post.price || '');
   return (
     <View style={styles.workerCard}>
-      {/* Header: Avatar, Name, Role Tag, Time & Bookmark */}
+      <View style={styles.statusRow}><ScheduleBadge post={post} /></View>
       <View style={styles.workerHeader}>
-        <Pressable
-          style={styles.workerHeaderLeft}
-          onPress={onViewProfile}
-          hitSlop={6}
-        >
-          <Image source={{ uri: post.avatar }} style={styles.workerAvatar} />
-          <View style={styles.workerInfo}>
-            <View style={styles.workerNameRow}>
-              <Text style={styles.workerName}>{post.employerName}</Text>
-            </View>
-            <View style={styles.roleRow}>
-              <View style={styles.roleBadge}>
-                <Text style={styles.roleBadgeText}>{uiText(post.roleTag)}</Text>
-              </View>
-              <Text style={styles.workerTime}>{uiText(post.time)}</Text>
-            </View>
-          </View>
+        <Pressable onPress={onViewProfile} disabled={!onViewProfile}
+          accessibilityRole="button" accessibilityLabel={uiText('Profile')} hitSlop={4}>
+          <ProfileAvatar uri={post.avatar} name={post.employerName} size={56} />
         </Pressable>
-
-        {/* Bookmark Button in Top Right Corner */}
-        <Pressable
-          style={styles.bookmarkBtn}
-          onPress={onToggleSave}
-          hitSlop={10}
-        >
-          <Ionicons
-            name={saved ? "bookmark" : "bookmark-outline"}
-            size={24}
-            color={saved ? "#FFAA77" : THEME.colors.ink}
-          />
-        </Pressable>
-      </View>
-
-      <ScheduleBadge post={post} />
-      {/* Details: Location on row 1, Term & Green Rate Pill on row 2 */}
-      <View style={styles.metaColumn}>
-        <View style={styles.locationBadge}>
-          <MapPinIcon size={14} color="#6B7280" style={{ marginRight: 4 }} />
-          <Text style={styles.metaBadgeText} numberOfLines={1}>{post.location}</Text>
-        </View>
-        <View style={styles.termRateRow}>
-          <View style={styles.metaBadge}>
-            <Ionicons name="briefcase-outline" size={13} color="#6B7280" style={{ marginRight: 4 }} />
-            <Text style={styles.metaBadgeText}>{uiText(post.termTag)}</Text>
+        <View style={styles.workerInfo}>
+          <View style={styles.workerNameRow}>
+            <Text style={styles.workerName} numberOfLines={2}>{post.employerName}</Text>
+            <Text style={styles.rateAmount} numberOfLines={unit === 'month' ? 2 : 1} adjustsFontSizeToFit minimumFontScale={0.75}>
+              {post.price}{unit && hasPrice ? <Text style={styles.rateUnit}>{unit === 'month' ? '\n/' : '/'}{uiText(unit)}</Text> : null}
+            </Text>
           </View>
-          <View style={styles.rateBadge}>
-            <Text style={styles.rateBadgeAmount}>{post.price}</Text>
-            <Text style={styles.rateBadgeUnit}> / {uiText(post.unit || 'month').replace(/^\//, '').trim()}</Text>
+          <View style={styles.roleBadge}><Text style={styles.roleBadgeText}>{uiText(post.roleTag)}</Text></View>
+          <View style={styles.locationRow}>
+            <MapPinIcon size={13} color="#6B7280" />
+            <Text style={styles.locationText} numberOfLines={1}>{post.location}</Text>
+            {post.time ? <Text style={styles.workerTime}>· {uiText(post.time)}</Text> : null}
           </View>
         </View>
       </View>
-
-      {/* Description snippet */}
-      {post.aboutText ? (
-        <Text style={styles.descriptionText} numberOfLines={2}>
-          {post.aboutText}
-        </Text>
-      ) : null}
-
-      {/* Card Action Buttons: View Profile & See Details */}
+      {post.aboutText ? <Text style={styles.descriptionText} numberOfLines={2} ellipsizeMode="tail">{post.aboutText}</Text> : null}
       <View style={styles.cardActionsRow}>
-        {leftActionButton !== undefined ? (
-          leftActionButton
-        ) : (
-          <Pressable
-            style={styles.viewProfileBtn}
-            onPress={onViewProfile}
-          >
-            <Text style={styles.viewProfileText}>{uiText("View Profile")}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={uiText(saved ? 'Unsave post' : 'Save post')}
+          accessibilityState={{ selected: saved, disabled: !onToggleSave }} disabled={!onToggleSave}
+          onPress={onToggleSave} hitSlop={4}
+          style={({ pressed }) => [styles.bookmarkBtn, pressed && styles.actionPressed]}>
+          <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={22} color={saved ? '#FFA135' : '#4B5563'} />
+        </Pressable>
+        {leftActionButton !== undefined ? leftActionButton : (
+          <Pressable accessibilityRole="button" disabled={!onViewProfile} onPress={onViewProfile}
+            style={({ pressed }) => [styles.viewProfileBtn, pressed && styles.actionPressed]}>
+            <Text style={styles.viewProfileText}>{uiText('Profile')}</Text>
           </Pressable>
         )}
-        {rightActionButton !== undefined ? (
-          rightActionButton
-        ) : (
-          <Pressable
-            style={styles.seeDetailsBtn}
-            onPress={onDetails}
-          >
-            <Text style={styles.seeDetailsBtnText}>{uiText(applied ? 'Applied' : 'See Details')}</Text>
+        {rightActionButton !== undefined ? rightActionButton : (
+          <Pressable accessibilityRole="button" disabled={!onDetails} onPress={onDetails}
+            style={({ pressed }) => [styles.seeDetailsBtn, pressed && styles.actionPressed]}>
+            <Text style={styles.seeDetailsBtnText}>{uiText(applied ? 'Applied' : 'Details')}</Text>
           </Pressable>
         )}
       </View>
@@ -121,158 +76,50 @@ export function FeedPostCard({
 
 const styles = StyleSheet.create({
   workerCard: {
-    backgroundColor: THEME.colors.white,
-    borderRadius: THEME.roundness.card,
-    padding: 18,
-    marginBottom: 14,
+    backgroundColor: THEME.colors.white, borderRadius: 20, padding: 16, marginBottom: 16,
+    shadowColor: '#2D241D', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2,
   },
-  workerHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  workerHeaderLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  bookmarkBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
-  },
-  workerAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    marginRight: 12,
-    backgroundColor: '#E5E7EB',
-  },
-  workerInfo: {
-    flex: 1,
-  },
-  workerNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 3,
-  },
+  statusRow: { alignSelf: 'flex-end' },
+  workerHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 12 },
+  workerInfo: { flex: 1, minWidth: 0 },
+  workerNameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 5 },
   workerName: {
-    fontSize: 16,
-    fontFamily: THEME.typography.fontFamily.display,
-    color: THEME.colors.ink,
+    flex: 1, minWidth: 0, fontSize: 16, lineHeight: 21,
+    fontFamily: THEME.typography.fontFamily.display, color: THEME.colors.ink,
   },
-  roleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  rateAmount: {
+    flexShrink: 1, maxWidth: '48%', fontSize: 17, lineHeight: 22, textAlign: 'right',
+    fontFamily: THEME.typography.fontFamily.secondaryBold, color: '#176B3A',
   },
+  rateUnit: { fontSize: 12, fontFamily: THEME.typography.fontFamily.secondaryMedium },
   roleBadge: {
-    backgroundColor: '#FFAA77',
-    paddingHorizontal: 9,
-    paddingVertical: 2.5,
-    borderRadius: 8,
+    alignSelf: 'flex-start', backgroundColor: '#FFF0DB', paddingHorizontal: 9,
+    paddingVertical: 3, borderRadius: 8, marginBottom: 6,
   },
-  roleBadgeText: {
-    fontSize: 11,
-    fontFamily: THEME.typography.fontFamily.secondaryBold,
-    color: '#FFFFFF',
+  roleBadgeText: { fontSize: 11, color: '#8B511F', fontFamily: THEME.typography.fontFamily.secondaryBold },
+  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 0 },
+  locationText: {
+    flexShrink: 1, fontSize: 11.5, lineHeight: 16, color: '#6B7280',
+    fontFamily: THEME.typography.fontFamily.secondaryRegular,
   },
   workerTime: {
-    fontSize: 11,
+    flexShrink: 0, fontSize: 11.5, lineHeight: 16, color: '#6B7280',
     fontFamily: THEME.typography.fontFamily.secondaryRegular,
-    color: THEME.colors.textMuted,
-  },
-  metaColumn: {
-    gap: 7,
-    marginBottom: 12,
-  },
-  locationBadge: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EAEAEA',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  termRateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  metaBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EAEAEA',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  metaBadgeText: {
-    fontSize: 11.5,
-    fontFamily: THEME.typography.fontFamily.secondaryMedium,
-    color: '#0D0D11',
-  },
-  rateBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#10B981',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  rateBadgeAmount: {
-    fontSize: 12,
-    fontFamily: THEME.typography.fontFamily.secondaryBold,
-    color: '#FFFFFF',
-    fontWeight: '800',
-  },
-  rateBadgeUnit: {
-    fontSize: 11,
-    fontFamily: THEME.typography.fontFamily.secondaryMedium,
-    color: '#FFFFFF',
   },
   descriptionText: {
-    fontSize: 12.5,
+    fontSize: 13, lineHeight: 20, color: '#4B5563', marginBottom: 12,
     fontFamily: THEME.typography.fontFamily.body,
-    color: '#4B5563',
-    lineHeight: 18,
-    marginBottom: 14,
   },
-  cardActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  viewProfileBtn: {
-    flex: 1,
-    backgroundColor: '#ECECEC',
-    borderRadius: THEME.roundness.pill,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  viewProfileText: {
-    color: '#0D0D11',
-    fontFamily: THEME.typography.fontFamily.secondaryBold,
-    fontSize: 13,
-  },
+  cardActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 8 },
+  viewProfileBtn: { minHeight: 44, paddingHorizontal: 12, justifyContent: 'center', borderRadius: 22 },
+  viewProfileText: { fontSize: 13, color: '#4B5563', fontFamily: THEME.typography.fontFamily.secondaryMedium },
+  bookmarkBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   seeDetailsBtn: {
-    flex: 1,
-    backgroundColor: '#FFAA77',
-    borderRadius: THEME.roundness.pill,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    minHeight: 44, minWidth: 88, paddingHorizontal: 20, borderRadius: 22,
+    backgroundColor: '#FFA135', alignItems: 'center', justifyContent: 'center',
   },
-  seeDetailsBtnText: {
-    color: '#FFFFFF',
-    fontFamily: THEME.typography.fontFamily.secondaryBold,
-    fontSize: 13,
-  },
+  seeDetailsBtnText: { fontSize: 13, color: '#35220D', fontFamily: THEME.typography.fontFamily.secondaryBold },
+  actionPressed: { opacity: 0.75 },
 });
 
 export const feedPostStyles = styles;
