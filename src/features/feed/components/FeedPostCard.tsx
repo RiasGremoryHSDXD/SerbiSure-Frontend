@@ -238,14 +238,16 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   cardActionsLeft: {
-    flex: 1,
     justifyContent: 'center',
     paddingRight: 8,
+    flexShrink: 0,
   },
   cardActionsRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 0,
+    marginLeft: 'auto',
   },
   bookmarkBtn: {
     width: 34,

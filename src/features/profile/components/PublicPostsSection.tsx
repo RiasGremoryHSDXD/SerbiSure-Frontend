@@ -202,11 +202,10 @@ export function PublicPostsSection({
                   <Pressable
                     accessibilityRole="button"
                     style={{
-                      flex: 1,
                       backgroundColor: isJob && pending ? '#F3F4F6' : '#ECECEC',
-                      borderRadius: 9999,
-                      minHeight: 44,
-                      paddingVertical: 12,
+                      borderRadius: 10,
+                      minHeight: 36,
+                      paddingHorizontal: 16,
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
