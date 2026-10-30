@@ -149,7 +149,7 @@ test('own history offers rescheduling only on expired unbooked posts, retaining 
   const buttons = view.all('Pressable');
   assert.equal(buttons.length, 2);
   assert.equal(content(buttons[0]), 'Cancel Post');
-  assert.equal(content(buttons[1]), 'Repost / Reschedule');
+  assert.equal(content(buttons[1]), 'Reschedule');
   view.act(() => buttons[1].props.onPress());
   assert.equal(view.all('RepostModal')[0].props.post.booking_id, post.booking_id);
 });

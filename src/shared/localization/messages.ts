@@ -84,6 +84,7 @@ export const UI_MESSAGES = {
   'Edit': ['Baguhin', 'Usba'],
   'Save': ['I-save', 'I-save'],
   'Cancel': ['Kanselahin', 'Kanselaha'],
+  'Reschedule': ['I-reschedule', 'I-reschedule'],
   'Back': ['Bumalik', 'Balik'],
   'Close': ['Isara', 'Isira'],
   'Done': ['Tapos na', 'Nahuman'],
