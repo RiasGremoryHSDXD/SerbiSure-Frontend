@@ -73,7 +73,7 @@ function bookingDetails(t, role, bookingType, ongoing = false, options = {}) {
   const address = options.edit ? { selectedRegion: { name: 'Region X' }, selectedProvince: { name: 'Misamis Oriental' },
     selectedCity: { name: 'Cagayan de Oro' }, selectedBarangay: { name: 'Agusan' }, streetAddress: 'Lot 3', floorUnit: '', zipcode: '9000' }
     : { streetAddress: '', floorUnit: '', zipcode: '' };
-  const initialDetails = options.initialDetails === null ? null : options.initialDetails || { bookingType, startDate: '10/20/2026', endDate: ongoing ? '' : bookingType === 'short_term' ? '10/20/2026' : '11/20/2026',
+  const initialDetails = options.initialDetails === null ? null : options.initialDetails || { bookingType, startDate: '10/20/2099', endDate: ongoing ? '' : bookingType === 'short_term' ? '10/20/2099' : '11/20/2099',
     salary: bookingType === 'short_term' ? '600' : '6500', serviceCategory: ['Cleaning'], workSetup: 'stay_out', workHours: '08:00 AM - 12:00 PM', days: [], region: 'Region X', location: 'Agusan' };
   const engagement = load('src/features/bookings/engagementForm.ts');
   const languageApi = { useLanguage: () => ({ tr: text => localization.translateMessage(language, text), formatDate: (date, style) => localization.formatLocalizedDate(language, date, style) }) };
@@ -95,13 +95,15 @@ function bookingDetails(t, role, bookingType, ongoing = false, options = {}) {
     '../../../shared/localization/LanguageContext': languageApi,
     '../../auth/session/UserContext': { useUser: () => ({ user: options.user || {} }) },
     '../workSetup': load('src/features/bookings/workSetup.ts'), '../engagementForm': engagement,
+    '../postAvailability': load('src/features/bookings/postAvailability.ts', { './engagementForm': engagement }),
+    '../hooks/useScheduleClock': { useScheduleClock: () => Date.now() },
     '../bookingAcceptance': load('src/features/bookings/bookingAcceptance.ts', { 'react-native': native }),
     './BookingOfferReview': review, './WorkScheduleFields': scheduleFields,
     './WorkLocationFields': locationFields, '../workLocation': load('src/features/bookings/workLocation.ts'),
     '../hooks/useWorkLocation': realLocation || { useWorkLocation: () => address }, '../../posting/validation': load('src/features/posting/validation.ts', { './postingConfig': load('src/features/posting/postingConfig.ts') }),
     '../../../shared/ui/ProfileAvatar': { ProfileAvatar: 'ProfileAvatar' }, '../api/bookingApi': { fetchMinimumWage: async (_token, type) => ({ booking_type: type, rate_period: type === 'long_term' ? 'month' : 'day', minimum_rate: type === 'long_term' ? '6500' : '600' }) },
     '../../profile/components/PrivacyPolicyModal': { PrivacyPolicyModal: () => null },
-    '../../../shared/theme/theme': theme, '../../../../assets/serbisure-logo.png': 1,
+    '../../../shared/theme/theme': theme, '../../../../assets/serbisure-logo.png': 1, '../../../../assets/serbisure-icon.png': 1,
   });
   const render = (status = {}) => screen.render(React.createElement(BookingModal, {
     visible: true, readOnly: !options.edit, canRespond: !options.edit, userRole: role, bookingType, contactName: 'Other Participant', initialDetails,
@@ -119,6 +121,40 @@ function bookingDetails(t, role, bookingType, ongoing = false, options = {}) {
   };
   return { ...screen, render, pressAccept, press, text: () => content(screen.find('Modal')), alerts, actions, closed, language(value) { language = value; render(); } };
 }
+
+for (const [workHours, blocked] of [['08:00 AM - 05:00 PM', true], ['02:00 PM - 05:00 PM', false]]) {
+  test(`new offer schedule ${blocked ? 'blocks an already-started shift' : 'accepts a future shift'}`, async t => {
+    t.mock.method(Date, 'now', () => Date.parse('2026-10-30T05:00:00Z')); // 1 PM Philippine time.
+    const screen = bookingDetails(t, 'homeowner', 'short_term', false, { edit: true, initialDetails: {
+      bookingType: 'short_term', startDate: '10/30/2026', endDate: '10/30/2026', workHours,
+      salary: '800', serviceCategory: ['Cleaning'], workSetup: 'stay_out', days: ['F'],
+    } });
+    await tick();
+    screen.press('Next');
+    screen.press('Next');
+    if (blocked) {
+      assert.match(screen.text(), /Step 2 of 4/);
+      assert.equal(screen.alerts.at(-1)[1], 'Choose a start time that is still ahead.');
+    } else {
+      assert.match(screen.text(), /Step 3 of 4/);
+      assert.equal(screen.alerts.length, 0);
+    }
+    assert.equal(screen.actions.length, 0);
+  });
+}
+
+test('saved past-date offer details disable Accept and explain how to send a new offer', async t => {
+  const view = bookingDetails(t, 'homeowner', 'short_term', false, { initialDetails: {
+    bookingType: 'short_term', startDate: '01/01/2000', endDate: '01/01/2000', workHours: '08:00 AM - 05:00 PM',
+  } });
+  await tick();
+  const accept = view.all('Pressable').find(node => content(node) === 'Accept');
+  assert.equal(accept.props.disabled, true);
+  assert.match(view.text(), /Cannot accept: Original date has passed/);
+  view.act(() => accept.props.onPress());
+  assert.equal(view.actions.length, 0);
+  assert.equal(view.alerts.length, 0);
+});
 
 for (const role of ['homeowner', 'kasambahay']) {
   test(`${role}: chat offer uses the signed-in profile address, allows edits and sends the chosen address`, async t => {
@@ -320,12 +356,14 @@ function browse(t, role) {
     '../../../shared/localization/LanguageContext': { useLanguage: () => ({ tr: (text, params) => localization.translateMessage(language, text, params) }) },
     '../../../shared/components/AppHeader': { AppHeader: 'AppHeader' }, '../../auth/session/UserContext': { useUser: () => ({ user }) },
     '../../bookings/store/savedJobsStore': { useJobsActivity: () => store }, '../../chat/components/ChatDetailScreen': { ChatDetailScreen: 'ChatDetailScreen' },
+    '../../bookings/hooks/useJobApplication': { useJobApplication: () => ({ applyJob: async () => ({ created: true }), applyingJobId: null }) },
     '../../chat/store/chatStore': { chatStore: { addOrUpdateChat: chat => chats.push(chat) } }, '../../notifications/NotificationContext': { NotificationBell: 'NotificationBell' },
     '../../profile/components/UserProfileModal': { UserProfileModal: 'UserProfileModal' }, '../components/BrowseActivityCard': { BrowseActivityCard: 'BrowseActivityCard' },
     '../components/BrowseHeader': { BrowseHeader: 'BrowseHeader', BrowseFilters: 'BrowseFilters' }, '../components/BrowsePostCard': { BrowsePostCard: 'BrowsePostCard', BrowseCardBackdrop: 'BrowseCardBackdrop' },
     '../components/BrowseDeck': { ...Object.fromEntries(['BrowseDeckEmpty', 'BrowseDeckSkeleton', 'BrowseDeckSwipeControls', 'BrowseEmptyState'].map(name => [name, name])), browseDeckStyles: {} },
     '../components/FilterModal': { FilterModal: 'FilterModal', DEFAULT_FILTERS: defaultFilters }, '../components/JobDetailSheet': { JobDetailSheet: 'JobDetailSheet' },
     '../browsePresentation': load('src/features/feed/browsePresentation.ts'), '../feedMapper': mapper, '../hooks/useExploreFeed': { useExploreFeed },
+    '../hooks/usePostUpdates': { usePostUpdates: () => ({ canUsePost: () => true, now: Date.now() }) },
     '../hooks/useBrowseSwipeDeck': { useBrowseSwipeDeck: (_id, onSwipe) => { swipe = onSwipe; return { position: { x: 0, y: 0, setValue() {} }, rotateCard: 0, panHandlers: {}, swipeCard: direction => swipe(direction === 'right') }; } },
   });
   const render = () => screen.render(React.createElement(BrowseScreen, { role, token: user.token }));
@@ -358,6 +396,7 @@ for (const role of ['homeowner', 'kasambahay']) {
     screen.act(() => screen.find('BrowsePostCard').props.onDetails());
     assert.equal(screen.find('JobDetailSheet').props.job.partnerId, 'author');
     screen.act(() => screen.find('JobDetailSheet').props.onApply());
+    await tick();
     assert.equal(screen.find('ChatDetailScreen').props.partnerId, 'author');
     assert.equal(screen.find('ChatDetailScreen').props.userRole, role);
     screen.act(() => screen.find('ChatDetailScreen').props.onClose());
@@ -371,6 +410,7 @@ for (const role of ['homeowner', 'kasambahay']) {
     assert.equal(screen.requests.at(-1).args[2].location, 'Agusan');
     screen.requests.at(-1).resolve([screen.post()]); await refresh; await tick();
     screen.swipe(true);
+    await tick();
     assert.equal(screen.chats.at(-1).partnerId, 'author');
     assert.equal(screen.find('ChatDetailScreen').props.initialReplyTo.author, role === 'homeowner' ? 'Service Post' : 'Job Post');
     assert.ok(screen.find('ChatDetailScreen').props.initialReplyTo.text.includes('₱8000'));

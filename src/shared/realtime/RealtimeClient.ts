@@ -1,7 +1,7 @@
 import { notifyAccountSuspension, requestJson } from '../api/httpClient';
 
 export type RealtimeStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'unauthorized';
-export type RealtimeEvent = { type: 'sync' | 'chat.changed' | 'chat.typing' | 'presence.changed' | 'booking.changed' | 'notifications.changed' | 'moderation.changed'; partner_id?: string; message_id?: string; booking_id?: string; is_typing?: boolean; is_online?: boolean | null; expires_in?: number };
+export type RealtimeEvent = { type: 'sync' | 'feed.changed' | 'chat.changed' | 'chat.typing' | 'presence.changed' | 'booking.changed' | 'notifications.changed' | 'moderation.changed'; partner_id?: string; message_id?: string; booking_id?: string; available?: boolean; is_typing?: boolean; is_online?: boolean | null; expires_in?: number };
 export interface SocketLike {
   onopen: ((event: any) => void) | null;
   onmessage: ((event: any) => void) | null;
@@ -112,7 +112,7 @@ export class RealtimeClient {
           if (Date.now() - this.lastSeen > 65000) { reconnect(); return; }
           try { socket.send(JSON.stringify({ type: 'ping' })); } catch { reconnect(); }
         }, 25000);
-      } else if (this.status === 'connected' && ['chat.changed', 'chat.typing', 'presence.changed', 'booking.changed', 'notifications.changed', 'moderation.changed'].includes(data.type)) {
+      } else if (this.status === 'connected' && ['feed.changed', 'chat.changed', 'chat.typing', 'presence.changed', 'booking.changed', 'notifications.changed', 'moderation.changed'].includes(data.type)) {
         if (data.type === 'presence.changed' && typeof data.partner_id === 'string') this.recordPresence(this.account, data.partner_id, data.is_online);
         else this.events.forEach(listener => listener(data as RealtimeEvent));
       }

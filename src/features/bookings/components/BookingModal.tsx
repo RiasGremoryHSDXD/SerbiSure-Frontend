@@ -3,6 +3,8 @@ import { useUser } from '../../auth/session/UserContext';
 import type { WorkSetup } from '../workSetup';
 import { workSetupLabel } from '../workSetup';
 import { confirmBookingAcceptance, bookingResponseMessage } from '../bookingAcceptance';
+import { bookingStartTime, isAcceptanceExpired, PASSED_SCHEDULE_MESSAGE } from '../postAvailability';
+import { useScheduleClock } from '../hooks/useScheduleClock';
 import { buildEngagementSchedule, normalizeServices, toggleService, SERVICE_CHOICES, WORK_SHIFTS, type WorkShift } from '../engagementForm';
 import { BookingOfferReview, type BookingOfferStep } from './BookingOfferReview';
 import { WorkScheduleFields } from './WorkScheduleFields';
@@ -77,6 +79,7 @@ interface BookingModalProps {
     workSetup?: WorkSetup | null;
     region?: string;
     startDate?: string;
+    startTime?: string;
     endDate?: string;
     workHours?: string;
     location?: string;
@@ -121,6 +124,8 @@ export function BookingModal({
   const { tr: uiText } = useUiLanguage();
   const { user } = useUser();
   const insets = useSafeAreaInsets();
+  const scheduleNow = useScheduleClock([bookingStartTime(initialDetails)], visible && readOnly);
+  const acceptanceExpired = readOnly && isAcceptanceExpired(initialDetails, scheduleNow);
 
   // Slide animation: Right to Left
   const [modalVisible, setModalVisible] = useState(visible);
@@ -276,9 +281,15 @@ export function BookingModal({
     return () => { current = false; };
   }, [visible, readOnly, token, selectedBookingType, wageLocation, region, policyAttempt]);
 
-  const getSchedule = () => buildEngagementSchedule({
-    bookingType: selectedBookingType || 'long_term', startDate, endDate, workHours, days: selectedDays, shift: selectedShift, ongoing,
-  });
+  const getSchedule = () => {
+    const schedule = buildEngagementSchedule({
+      bookingType: selectedBookingType || 'long_term', startDate, endDate, workHours, days: selectedDays, shift: selectedShift, ongoing,
+    });
+    if (!readOnly && Date.parse(schedule.start_time) <= Date.now()) {
+      throw new Error('Choose a start time that is still ahead.');
+    }
+    return schedule;
+  };
 
   const validateStep = (step: BookingOfferStep): Record<string, boolean> => {
     const errors: Record<string, boolean> = {};
@@ -789,6 +800,8 @@ export function BookingModal({
           )}
         </ScrollView>
 
+        {readOnly && canRespond && !isConfirmed && !isDeclined && !isAcquired && acceptanceExpired &&
+          <Text style={{ color: '#92400E', paddingHorizontal: 20, paddingVertical: 8 }}>{uiText(PASSED_SCHEDULE_MESSAGE)}</Text>}
         {/* Action Button Footer */}
         <View style={styles.footerContainer}>
           <View style={styles.footerDivider} />
@@ -833,8 +846,8 @@ export function BookingModal({
                 </Pressable>
 
                 <Pressable
-                  disabled={submitting} style={({ pressed }) => [styles.agreeBtn, { flex: 1 }, pressed && styles.pressedBtn]}
-                  onPress={() => confirmBookingAcceptance(selectedBookingType || 'long_term', uiText, () => runResponse(onKasambahayConfirm))}
+                  disabled={submitting || acceptanceExpired} style={({ pressed }) => [styles.agreeBtn, { flex: 1 }, acceptanceExpired && { backgroundColor: '#9CA3AF' }, pressed && styles.pressedBtn]}
+                  onPress={() => { if (!isAcceptanceExpired(initialDetails)) confirmBookingAcceptance(selectedBookingType || 'long_term', uiText, () => runResponse(onKasambahayConfirm)); }}
                 >
                   <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
                   <Text style={styles.agreeBtnText}>{uiText("Accept")}</Text>

@@ -7,12 +7,11 @@ export function buildFeedPath(filters?: FeedQuery): string {
   if (filters?.bookingType) params.set('booking_type', filters.bookingType);
   if (filters?.workSetup) params.set('work_setup', filters.workSetup);
   if (filters?.maxRate !== null && filters?.maxRate !== undefined) params.set('max_rate', String(filters.maxRate));
-  if (filters && (filters.maxRate !== null || filters.sortBy !== 'newest')) {
+  if (filters && filters.maxRate !== null) {
     params.set('rate_period', filters.bookingType === 'long_term' ? 'month'
       : filters.bookingType === 'short_term' ? 'day' : filters.ratePeriod || 'day');
   }
   if (filters?.location.trim()) params.set('location', filters.location.trim());
-  if (filters?.sortBy && filters.sortBy !== 'newest') params.set('sort', filters.sortBy);
   const query = params.toString();
   return `/api/v1/booking/feed/${query ? `?${query}` : ''}`;
 }

@@ -31,11 +31,12 @@ export interface MyBookingsModalProps {
   initialTab?: TabType;
 }
 
-type TabType = 'active' | 'pending' | 'completed' | 'cancelled';
+type TabType = 'active' | 'pending' | 'ongoing' | 'completed' | 'cancelled';
 
 const TABS: { key: TabType; label: string }[] = [
   { key: 'active', label: 'Active' },
   { key: 'pending', label: 'Pending' },
+  { key: 'ongoing', label: 'Ongoing' },
   { key: 'completed', label: 'Completed' },
   { key: 'cancelled', label: 'Cancelled' },
 ];
@@ -124,12 +125,13 @@ export function MyBookingsModal({
     setErrorMessage(null);
 
     const currentTab = activeTab;
+    const statusFilter = currentTab === 'active' ? 'Accepted' : currentTab === 'ongoing' ? 'InProgress' : currentTab;
 
     try {
       let data: BookingItem[] = [];
 
       const [posted, assigned, penaltyState] = await Promise.all([
-        fetchMyBookings(token, currentTab), fetchMyAssignedBookings(token, currentTab), fetchBookingPenaltyStatus(token),
+        fetchMyBookings(token, statusFilter), fetchMyAssignedBookings(token, statusFilter), fetchBookingPenaltyStatus(token),
       ]);
       data = Array.from(new Map([...posted, ...assigned].map(item => [item.booking_id, item])).values());
 
@@ -479,7 +481,7 @@ export function MyBookingsModal({
         })()}
 
         {/* Tab Switcher */}
-        <View style={styles.tabsRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.tabsRow}>
           {TABS.map((tab) => {
             const isCurrent = activeTab === tab.key;
             return (
@@ -494,7 +496,7 @@ export function MyBookingsModal({
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
 
         {/* Content List */}
         <ScrollView
@@ -694,11 +696,13 @@ export function MyBookingsModal({
                 name={
                   activeTab === 'active'
                     ? 'briefcase-outline'
-                    : activeTab === 'pending'
-                      ? 'hourglass-outline'
-                      : activeTab === 'completed'
-                        ? 'checkmark-done-circle-outline'
-                        : 'close-circle-outline'
+                    : activeTab === 'ongoing'
+                      ? 'time-outline'
+                      : activeTab === 'pending'
+                        ? 'hourglass-outline'
+                        : activeTab === 'completed'
+                          ? 'checkmark-done-circle-outline'
+                          : 'close-circle-outline'
                 }
                 size={52}
                 color="#0D0D11"
@@ -706,20 +710,24 @@ export function MyBookingsModal({
               <Text style={styles.emptyTitle}>
                 {activeTab === 'active'
                   ? 'No Active Contracts'
-                  : activeTab === 'pending'
-                    ? 'No Pending Postings'
-                    : activeTab === 'completed'
-                      ? 'No Completed Bookings'
-                      : 'No Cancelled Bookings'}
+                  : activeTab === 'ongoing'
+                    ? 'No Ongoing Contracts'
+                    : activeTab === 'pending'
+                      ? 'No Pending Postings'
+                      : activeTab === 'completed'
+                        ? 'No Completed Bookings'
+                        : 'No Cancelled Bookings'}
               </Text>
               <Text style={styles.emptySubtitle}>
                 {activeTab === 'active'
-                  ? 'Confirmed bookings and ongoing domestic work contracts will appear here.'
-                  : activeTab === 'pending'
-                    ? 'Open postings waiting for worker assignment, acceptance, or counter-offers will appear here.'
-                    : activeTab === 'completed'
-                      ? 'Domestic work contracts that have reached completion will appear here.'
-                      : 'Bookings that were cancelled or withdrawn will appear here.'}
+                  ? 'Accepted bookings waiting to start will appear here.'
+                  : activeTab === 'ongoing'
+                    ? 'Jobs that have started and are still in progress will appear here.'
+                    : activeTab === 'pending'
+                      ? 'Open postings waiting for worker assignment, acceptance, or counter-offers will appear here.'
+                      : activeTab === 'completed'
+                        ? 'Domestic work contracts that have reached completion will appear here.'
+                        : 'Bookings that were cancelled or withdrawn will appear here.'}
               </Text>
             </View>
           )}
@@ -862,13 +870,15 @@ const styles = StyleSheet.create({
     color: '#0D0D11',
   },
   tabsRow: {
+    flexGrow: 1,
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingBottom: 14,
     gap: 8,
   },
   tabItem: {
-    flex: 1,
+    flexGrow: 1,
+    paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: THEME.roundness.pill,
     alignItems: 'center',

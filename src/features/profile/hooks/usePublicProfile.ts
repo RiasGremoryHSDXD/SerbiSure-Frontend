@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchPublicProfile, type PublicProfile } from '../api/accountApi';
 import { fetchReviewSummary, fetchUserReviews, type ReviewItem, type ReviewSummaryData } from '../../reviews/api/reviewApi';
 import { fetchPublicPendingPosts, type PublicPendingPost } from '../../bookings/api/bookingApi';
+import { usePostUpdates } from '../../feed/hooks/usePostUpdates';
 
 export function usePublicProfile(visible: boolean, userId?: string, token?: string | null) {
   const [profile, setProfile] = useState<PublicProfile | null>(null);
@@ -51,11 +52,14 @@ export function usePublicProfile(visible: boolean, userId?: string, token?: stri
     return () => { generation.current++; };
   }, [visible, userId, token, refreshPosts]);
 
+  const updates = usePostUpdates(posts.map(post => ({ ...post, id: post.booking_id })), refreshPosts, visible);
+
   const markSubmitted = (postId: string, proposal: NonNullable<PublicPendingPost['viewer_proposal']>) => {
     postsRequest.current++;
     setPostsLoading(false);
     setPostsError(null);
     setPosts(current => current.map(post => post.booking_id === postId ? { ...post, viewer_proposal: proposal } : post));
   };
-  return { profile, reviews, summary, posts, loading, postsLoading, profileError, postsError, refreshPosts, markSubmitted };
+  return { profile, reviews, summary, posts: posts.filter(post => updates.canUsePost({ ...post, id: post.booking_id })),
+    canUsePost: updates.canUsePost, loading, postsLoading, profileError, postsError, refreshPosts, markSubmitted };
 }

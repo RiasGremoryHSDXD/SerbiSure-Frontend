@@ -17,6 +17,7 @@ export interface BookingCardInfo {
   proposalId?: string;
   canRespond: boolean;
   startDate: string;
+  startTime?: string;
   endDate: string;
   workHours: string;
   location: string;
@@ -59,7 +60,7 @@ export function mapBookingCard(offer?: PersistedChatOffer | null): BookingCardIn
   return {
     title: confirmed ? 'BOOKING CONFIRMED' : declined ? 'BOOKING DECLINED' : unavailable ? 'OFFER UNAVAILABLE' : 'BOOKING OFFER',
     bookedByName: offer.sender_name, bookingId: b.booking_id, proposalId: offer.proposal_id || undefined,
-    canRespond: offer.can_respond, startDate: philippinesDate(b.start_time), endDate: philippinesDate(b.end_time),
+    canRespond: offer.can_respond, startTime: b.start_time, startDate: philippinesDate(b.start_time), endDate: philippinesDate(b.end_time),
     workHours: hours, location: b.full_address || '', region: b.region || '', days: b.work_days || [],
     salary: rate, bookingType: b.booking_type, serviceCategory: b.service_category, workSetup: b.work_setup || null,
     jobRole: b.service_category.map(value => value.replace(/_/g, ' ')).join(', '),

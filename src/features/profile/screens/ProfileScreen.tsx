@@ -29,6 +29,8 @@ import { SettingsSection } from '../components/SettingsSection';
 import { ReviewsSection } from '../components/ReviewsSection';
 import { SocialIconsRow } from '../components/SocialIconsRow';
 import { WorkerCvModal } from '../worker/WorkerCvModal';
+import { ProfileTabs } from '../components/ProfileTabs';
+import { OwnPostsSection } from '../components/OwnPostsSection';
 
 export function ProfileScreen(props: ProfileScreenProps) {
   const { tr: uiText } = useUiLanguage();
@@ -246,7 +248,12 @@ export function ProfileScreen(props: ProfileScreenProps) {
 
             <BioSection profile={profile} />
             {isWorker && <ReputationSection profile={profile} />}
-            <ReviewsSection profile={profile} showHeader />
+            <ProfileTabs activeTab={profile.activeProfileTab} onChange={profile.setActiveProfileTab}
+              postsCount={profile.pendingPosts.length} reviewsCount={totalReviews} />
+            {profile.activeProfileTab === 'posts'
+              ? <OwnPostsSection posts={profile.pendingPosts} loading={profile.isLoadingPendingPosts} error={profile.pendingPostsError}
+                  token={user.token} now={profile.postsNow} onRefresh={() => { void profile.loadPendingPosts(true); }} />
+              : <ReviewsSection profile={profile} showHeader={false} />}
 
             {/* Bottom padding */}
             <View style={{ height: 90 }} />

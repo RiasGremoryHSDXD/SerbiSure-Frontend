@@ -4,6 +4,8 @@ import { realtime } from '../../../shared/realtime';
 import { useRealtimeStatus } from '../../../shared/realtime/useRealtimeStatus';
 import { useChatPresence } from '../../../shared/realtime/useChatPresence';
 import { mapBookingCard, bookingSchedule, type BookingCardInfo } from '../bookingCards';
+import { bookingStartTime, isAcceptanceExpired, PASSED_SCHEDULE_MESSAGE } from '../../bookings/postAvailability';
+import { useScheduleClock } from '../../bookings/hooks/useScheduleClock';
 import { sendBookingOffer, respondToBookingOffer } from '../api/bookingOffersApi';
 import type { BookingConfirmData } from '../../bookings/components/BookingModal';
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
@@ -581,6 +583,7 @@ function ChatDetailSession({
   const [bookingReadOnly, setBookingReadOnly] = useState(false);
   const [activeBookingMsgId, setActiveBookingMsgId] = useState<string | null>(null);
   const [activeBookingDetails, setActiveBookingDetails] = useState<BookingCardInfo | null>(null);
+  const scheduleNow = useScheduleClock(messages.map(message => bookingStartTime(message.bookingInfo)), !!effectiveToken);
 
   useEffect(() => {
     if (bookingModalVisible) {
@@ -740,6 +743,7 @@ function ChatDetailSession({
   const confirmFromCard = (id: string, action: 'accept' | 'reject') => {
     const card = messages.find(message => message.id === id)?.bookingInfo;
     if (!card?.canRespond || responseBusyRef.current) return;
+    if (action === 'accept' && isAcceptanceExpired(card)) return;
     const respond = () => {
       if (!sessionActive.current) return;
       void handleOfferResponse(id, action).catch(error => {
@@ -1673,6 +1677,7 @@ function ChatDetailSession({
                       : isDeclined
                         ? 'Declined'
                         : item.bookingInfo.canRespond ? 'Offer' : 'Pending';
+                  const acceptanceExpired = isAcceptanceExpired(item.bookingInfo, scheduleNow);
 
                   const isSolidCard = isConfirmed || isDeclined;
                   const cardFgColor = isSolidCard ? '#FFFFFF' : '#0D0D11';
@@ -1746,9 +1751,10 @@ function ChatDetailSession({
                             <Pressable
                               style={({ pressed }) => [
                                 styles.compactQuickAgreeBtn,
+                                acceptanceExpired && { backgroundColor: '#9CA3AF' },
                                 pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
                               ]}
-                              disabled={responseBusy} onPress={(e) => {
+                              disabled={responseBusy || acceptanceExpired} onPress={(e) => {
                                 e.stopPropagation();
                                 confirmFromCard(item.id, 'accept');
                               }}
@@ -1758,6 +1764,8 @@ function ChatDetailSession({
                             </Pressable>
                           </View>
                         ) : null}
+                        {!isConfirmed && !isDeclined && !isAcquired && item.bookingInfo.canRespond && acceptanceExpired &&
+                          <Text style={{ color: '#92400E', padding: 10, fontSize: 12 }}>{uiText(PASSED_SCHEDULE_MESSAGE)}</Text>}
                       </View>
                     </View>
                   );

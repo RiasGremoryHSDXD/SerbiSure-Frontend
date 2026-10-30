@@ -5,6 +5,7 @@ import { useLanguage } from '../../../shared/localization/LanguageContext';
 import THEME from '../../../shared/theme/theme';
 import { useUser } from '../../auth/session/UserContext';
 import { useJobsActivity, type SavedJobItem } from '../../bookings/store/savedJobsStore';
+import { useJobApplication } from '../../bookings/hooks/useJobApplication';
 import { ChatDetailScreen } from '../../chat/components/ChatDetailScreen';
 import { chatStore } from '../../chat/store/chatStore';
 import { UserProfileModal } from '../../profile/components/UserProfileModal';
@@ -18,6 +19,7 @@ import { activeBrowseChip, quickBrowseFilters, countBrowseFilters, browseHeaderC
 import { mapBrowsePost } from '../feedMapper';
 import { useBrowseSwipeDeck } from '../hooks/useBrowseSwipeDeck';
 import { useExploreFeed } from '../hooks/useExploreFeed';
+import { usePostUpdates } from '../hooks/usePostUpdates';
 import type { BookingFeedDto } from '../types';
 
 interface Props {
@@ -41,6 +43,7 @@ export function BrowseScreen({ role, avatarUri, onViewProfile, token, onBookings
   const { tr: uiText } = useLanguage();
   const { user } = useUser();
   const effectiveToken = token || user.token;
+  const { applyJob, applyingJobId } = useJobApplication(effectiveToken, () => { void refresh(); });
   const findingJobs = role === 'kasambahay';
   const partnerRole = ROLE_CONFIG[role].partnerType;
   const mapPost = useCallback((item: BookingFeedDto) => mapBrowsePost(item, role), [role]);
@@ -55,8 +58,9 @@ export function BrowseScreen({ role, avatarUri, onViewProfile, token, onBookings
   const [activeChat, setActiveChat] = useState<ActiveChat | null>(null);
   const { savedJobs, savedLoadError, loadingSaved, appliedJobs, savedCount, appliedCount,
     isSaved, isApplied, isJobClosed, toggleSave, refreshSavedFromBackend } = useJobsActivity();
+  const { canUsePost, now } = usePostUpdates([...items, ...savedJobs, ...appliedJobs], () => { void refresh(); });
   const visiblePosts = useMemo(() => {
-    let posts = findingJobs ? items.filter(post => !isJobClosed(post)) : [...items];
+    let posts = items.filter(post => canUsePost(post) && (!findingJobs || !isJobClosed(post)));
 
     // 1. Service Category filter
     if (filters.categories && filters.categories.length > 0) {
@@ -104,44 +108,37 @@ export function BrowseScreen({ role, avatarUri, onViewProfile, token, onBookings
       posts = posts.filter(post => (post.location || '').toLowerCase().includes(locTarget));
     }
 
-    // 6. Sorting
-    if (filters.sortBy === 'rate_asc') {
-      posts.sort((a, b) => {
-        const rateA = parseFloat(String(a.price || '').replace(/[^0-9.]/g, '')) || 0;
-        const rateB = parseFloat(String(b.price || '').replace(/[^0-9.]/g, '')) || 0;
-        return rateA - rateB;
-      });
-    } else if (filters.sortBy === 'rate_desc') {
-      posts.sort((a, b) => {
-        const rateA = parseFloat(String(a.price || '').replace(/[^0-9.]/g, '')) || 0;
-        const rateB = parseFloat(String(b.price || '').replace(/[^0-9.]/g, '')) || 0;
-        return rateB - rateA;
-      });
-    }
-
     return posts;
-  }, [items, findingJobs, isJobClosed, filters]);
+  }, [items, findingJobs, isJobClosed, filters, canUsePost]);
   const currentPost = useRef<SavedJobItem | undefined>(undefined);
   currentPost.current = visiblePosts[0];
 
-  const contactPost = (post: SavedJobItem, quote = false) => {
-    if (!post.partnerId) return;
+  const contactPost = async (post: SavedJobItem, quote = false) => {
+    if (!post.partnerId) return false;
+    const application = findingJobs ? await applyJob(post) : null;
+    if (findingJobs && !application) return false;
     const partnerId = String(post.partnerId);
     const name = post.employerName || partnerRole;
     const contactRole = findingJobs ? partnerRole : post.roleTag || partnerRole;
-    const initialMessage = findingJobs ? 'I am interested in this job position' : 'Hi! I am interested in hiring you for a service.';
+    const initialMessage = findingJobs ? '' : 'Hi! I am interested in hiring you for a service.';
     const snippet = [post.roleTag || post.title, `${post.price} ${post.unit}`.trim(), post.location, post.termTag].filter(Boolean).join(' • ');
-    chatStore.addOrUpdateChat({ id: partnerId, partnerId, name, badge: contactRole, avatar: post.avatar, time: 'Just now', message: initialMessage });
+    chatStore.addOrUpdateChat({ id: partnerId, partnerId, name, badge: contactRole, avatar: post.avatar, time: 'Just now',
+      message: findingJobs ? 'I am interested in this job position' : initialMessage });
     setSelectedPost(null);
     setActiveChat({ partnerId, name, role: contactRole, avatar: post.avatar, initialMessage,
       initialReplyTo: findingJobs || quote ? { author: findingJobs ? 'Job Post' : 'Service Post', text: snippet } : undefined });
+    return true;
   };
 
   const removeCurrentCard = (interested: boolean) => {
     const post = currentPost.current;
     if (!post) return;
-    if (interested) contactPost(post, true);
-    setItems(previous => previous.filter(item => item.id !== post.id));
+    if (interested) {
+      void contactPost(post, true).then(contacted => {
+        if (contacted) setItems(previous => previous.filter(item => item.id !== post.id));
+        else position.setValue({ x: 0, y: 0 });
+      });
+    } else setItems(previous => previous.filter(item => item.id !== post.id));
   };
   const { position, rotateCard, panHandlers, swipeCard } = useBrowseSwipeDeck(
     subTab === 'explore' && !isLoading && !feedError ? visiblePosts[0]?.id : undefined, removeCurrentCard);
@@ -164,18 +161,18 @@ export function BrowseScreen({ role, avatarUri, onViewProfile, token, onBookings
 
   useEffect(() => {
     setFilters(DEFAULT_FILTERS); setSubTab('explore'); setSelectedPost(null); setProfilePost(null); setActiveChat(null); setFilterVisible(false); setQuickFiltersVisible(true);
-    void fetchFeed(false, DEFAULT_FILTERS);
+    void fetchFeed(true, DEFAULT_FILTERS);
     if (effectiveToken) void refreshSavedFromBackend(effectiveToken);
   }, [role, effectiveToken]);
   useEffect(() => {
-    if (subTab === 'saved' && effectiveToken) void refreshSavedFromBackend(effectiveToken);
+    if ((subTab === 'saved' || subTab === 'applied') && effectiveToken) void refreshSavedFromBackend(effectiveToken);
   }, [subTab, effectiveToken]);
 
   const activeFilterCount = countBrowseFilters(filters);
   const activityPosts = subTab === 'applied' ? appliedJobs : savedJobs;
   const headerCopy = browseHeaderCopy(role, subTab, subTab === 'explore' ? visiblePosts.length : subTab === 'saved' ? savedCount : appliedCount, isLoading, feedError, uiText);
   const [card0, card1, card2] = visiblePosts;
-  const detailsClosed = findingJobs && !!selectedPost && isJobClosed(selectedPost);
+  const detailsClosed = !!selectedPost && (!canUsePost(selectedPost) || (findingJobs && isJobClosed(selectedPost)));
   const openProfile = (post: SavedJobItem) => { if (post.partnerId) setProfilePost(post); };
 
   return <View style={styles.container}>
@@ -196,7 +193,7 @@ export function BrowseScreen({ role, avatarUri, onViewProfile, token, onBookings
             {card2 && <View style={deckStyles.back}><BrowseCardBackdrop avatarUri={card2.avatar} name={card2.employerName} /></View>}
             {card1 && <View style={deckStyles.middle}><BrowseCardBackdrop avatarUri={card1.avatar} name={card1.employerName} /></View>}
             <Animated.View style={[deckStyles.front, { transform: [{ translateX: position.x }, { translateY: position.y }, { rotate: rotateCard }] }]} {...panHandlers}>
-              <BrowsePostCard name={card0.employerName} avatarUri={card0.avatar} authorRole={partnerRole} title={card0.title}
+              <BrowsePostCard startTime={card0.start_time} name={card0.employerName} avatarUri={card0.avatar} authorRole={partnerRole} title={card0.title}
                 location={card0.location} description={card0.aboutText} tags={card0.tags} price={card0.price} unit={card0.unit}
                 saved={isSaved(card0.id)} applied={findingJobs && isApplied(card0.id)} onProfilePress={() => openProfile(card0)}
                 onSave={() => { void toggleSave(card0, effectiveToken); }} onDetails={() => setSelectedPost(card0)} />
@@ -212,12 +209,14 @@ export function BrowseScreen({ role, avatarUri, onViewProfile, token, onBookings
             description={subTab === 'applied' ? 'Jobs you apply to will appear here.' : findingJobs ? 'Save job posts to review and apply when you are ready.' : 'Save service posts to review or message the kasambahay later.'}
             /></View>
           : <View style={styles.activityList}>{activityPosts.map(post => <BrowseActivityCard key={post.id} post={post}
-            applied={findingJobs && (subTab === 'applied' || isApplied(post.id))} closed={findingJobs && isJobClosed(post)}
+            now={now}
+            applied={findingJobs && (subTab === 'applied' || isApplied(post.id))} closed={findingJobs && (isJobClosed(post) || !canUsePost(post))}
             onProfile={() => openProfile(post)} onDetails={() => setSelectedPost(post)}
             onUnsave={subTab === 'saved' ? () => { void toggleSave(post, effectiveToken); } : undefined}
             onMessage={!findingJobs ? () => contactPost(post) : undefined} />)}</View>}
       </View>}
       <JobDetailSheet visible={!!selectedPost} job={selectedPost} onClose={() => setSelectedPost(null)}
+        isApplying={applyingJobId === selectedPost?.id}
         onApply={() => { if (selectedPost) contactPost(selectedPost); }} isApplied={findingJobs && !!selectedPost && isApplied(selectedPost.id)}
         isSaved={!!selectedPost && isSaved(selectedPost.id)} isClosed={detailsClosed}
         onToggleSave={() => { if (selectedPost) void toggleSave(selectedPost, effectiveToken); }}

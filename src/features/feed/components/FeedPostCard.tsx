@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { MapPinIcon } from '../../../shared/components/icons/LucideIcons';
 import THEME from '../../../shared/theme/theme';
 import type { FeedPost } from '../types';
+import { ScheduleBadge } from '../../bookings/components/ScheduleBadge';
 
 export interface FeedPostCardProps {
   post: FeedPost;
@@ -65,6 +66,7 @@ export function FeedPostCard({
         </Pressable>
       </View>
 
+      <ScheduleBadge post={post} />
       {/* Details: Location on row 1, Term & Green Rate Pill on row 2 */}
       <View style={styles.metaColumn}>
         <View style={styles.locationBadge}>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,7 +9,8 @@ import { fetchUserAbout, fetchUserTags, updateUserTags, fetchContactPrivacy, upd
 import type { VerificationStatusResponse } from '../../verification/api/verificationApi';
 import { fetchNotifications } from '../../notifications/api/notificationsApi';
 
-import { BookingItem, fetchMyBookings } from '../../bookings/api/bookingApi';
+import { BookingItem, fetchMyPosts } from '../../bookings/api/bookingApi';
+import { usePostUpdates } from '../../feed/hooks/usePostUpdates';
 
 import { resolveRole, ROLE_CONFIG } from '../../../app/roleConfig';
 import { localizeProfileCopy } from '../profileConfig';
@@ -90,6 +91,9 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
   const [pendingPosts, setPendingPosts] = useState<BookingItem[]>([]);
   const [isLoadingPendingPosts, setIsLoadingPendingPosts] = useState(false);
   const [pendingPostsError, setPendingPostsError] = useState<string | null>(null);
+  const postsRequest = useRef(0);
+  const postsSession = useRef('');
+  postsSession.current = `${user.id}:${user.token}`;
   const [activeProfileTab, setActiveProfileTab] = useState<'posts' | 'reviews'>('posts');
   const [bookingsModalInitialTab, setBookingsModalInitialTab] = useState<'active' | 'pending' | 'completed' | 'cancelled'>('active');
 
@@ -100,19 +104,30 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
 
   const loadPendingPosts = async (silent = false) => {
     if (!user.token) return;
+    const session = postsSession.current;
+    const request = ++postsRequest.current;
+    const isCurrent = () => session === postsSession.current && request === postsRequest.current;
     if (!silent) setIsLoadingPendingPosts(true);
     setPendingPostsError(null);
     try {
-      const data = await fetchMyBookings(user.token, 'pending');
-      setPendingPosts(Array.isArray(data) ? data : []);
+      const data = await fetchMyPosts(user.token);
+      if (isCurrent()) setPendingPosts(Array.isArray(data) ? data : []);
     } catch (err: any) {
-      console.warn('[KasambahayProfile] fetchMyBookings error:', err);
-      setPendingPostsError(err?.message || 'Failed to load pending posts');
+      if (isCurrent()) setPendingPostsError(err?.message || 'Could not load your posts. Please try again.');
     } finally {
-      if (!silent) setIsLoadingPendingPosts(false);
+      if (isCurrent()) setIsLoadingPendingPosts(false);
     }
   };
 
+
+  const { now: postsNow } = usePostUpdates(pendingPosts, () => loadPendingPosts(true), currentView === 'personal_info');
+  useEffect(() => {
+    setPendingPosts([]);
+    setPendingPostsError(null);
+    setIsLoadingPendingPosts(false);
+    if (currentView === 'personal_info') void loadPendingPosts();
+    return () => { postsRequest.current++; };
+  }, [currentView, user.id, user.token]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -265,7 +280,6 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
         .catch((err) => console.warn('[KasambahayProfile] fetch contact privacy error:', err));
 
       loadVerificationStatus();
-      loadPendingPosts(false);
     }
   }, [user.token, user.id]);
 
@@ -370,6 +384,7 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
     isUpdatingPrivacy,
     isRefreshing,
     pendingPosts,
+    postsNow,
     isLoadingPendingPosts,
     pendingPostsError,
     activeProfileTab,

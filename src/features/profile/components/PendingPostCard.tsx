@@ -74,6 +74,7 @@ export function PendingPostCard({
 
     const mappedFeedPost: FeedPost = feedPost || {
       id: post.booking_id,
+      start_time: post.start_time, booking_status: post.booking_status, post_status: post.post_status,
       partnerId: post.recipient_id || post.booking_id,
       kind: isJob ? 'job' : 'service',
       authorRole: isJob ? 'Homeowner' : 'Kasambahay',

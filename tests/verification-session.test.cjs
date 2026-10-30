@@ -62,7 +62,8 @@ function screen(t, role, withProfile = false) {
       fetchUserSocialLinks: async () => ({ social_links: [] }),
     },
     '../../notifications/api/notificationsApi': { fetchNotifications: async () => ({ unread_count: 0 }) },
-    '../../bookings/api/bookingApi': { fetchMyBookings: async () => [] },
+    '../../bookings/api/bookingApi': { fetchMyPosts: async () => [] },
+    '../../feed/hooks/usePostUpdates': { usePostUpdates: () => ({ now: Date.now() }) },
   }).useProfile : null;
   const post = { booking_id: 'post', rate_amount: '800', rate_period: 'day', viewer_proposal: null };
   const { PublicPostsSection } = load('src/features/profile/components/PublicPostsSection.tsx', {

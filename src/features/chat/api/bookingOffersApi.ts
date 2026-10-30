@@ -3,6 +3,7 @@ import type { BookingItem } from '../../bookings/api/bookingApi';
 import type { BookingCardInfo } from '../bookingCards';
 import type { PostingPayload } from '../../posting/api/postingApi';
 import type { ChatMessageItem } from './chatApi';
+import { isAcceptanceExpired, PASSED_SCHEDULE_MESSAGE } from '../../bookings/postAvailability';
 
 export interface ChatOfferPayload extends PostingPayload {
   recipient_id: string;
@@ -36,6 +37,7 @@ export async function sendBookingOffer(token: string, payload: ChatOfferPayload,
 
 export async function respondToBookingOffer(token: string, card: BookingCardInfo, action: 'accept' | 'reject'): Promise<void> {
   if (!card.bookingId || !card.canRespond) throw new Error('This offer is not available for you to confirm.');
+  if (action === 'accept' && isAcceptanceExpired(card)) throw new Error(PASSED_SCHEDULE_MESSAGE);
   const path = card.proposalId ? '/api/v1/booking/proposals/' + card.proposalId + '/respond/'
     : '/api/v1/booking/' + card.bookingId + (action === 'accept' ? '/accept/' : '/cancel/');
   const data = await result<{ booking?: BookingItem; proposal?: { status: string } }>(path, token, 'PATCH', { action, ...(action === 'reject' && !card.proposalId ? { reason: 'Other', expected_points: 0 } : {}) });

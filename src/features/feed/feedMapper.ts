@@ -11,6 +11,7 @@ export function mapBrowsePost(item: BookingFeedDto, role: Role): SavedJobItem & 
   const worker = mapWorkerPreview(item);
   return {
     id: worker.id, partnerId: worker.partnerId, employerName: worker.name, title: worker.role,
+    start_time: item.start_time, booking_status: item.booking_status, post_status: item.post_status,
     avatar: worker.avatar, image: worker.image, location: worker.location, roleTag: worker.role,
     termTag: worker.years, setupTag: worker.setupTag, price: worker.price, unit: worker.unit,
     aboutText: worker.aboutText, tags: Array.from(new Set([worker.years, ...worker.tags])),
@@ -37,6 +38,7 @@ export function mapFeedPost(item: BookingFeedDto, viewerRole: Role): FeedPost {
     : `Available for ${categories.join(' & ')} work in ${location}.`);
   return {
     id: item.booking_id, partnerId: item.poster_id, kind: isJob ? 'job' : 'service', authorRole,
+    start_time: item.start_time, booking_status: item.booking_status, post_status: item.post_status,
     employerName: name, title: categories[0] || (isJob ? 'Household Service' : 'Kasambahay'),
     avatar: item.profile_link || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || authorRole)}&background=FFB43B&color=fff`,
     time: formatTimeAgo(item.createdAt), location, categories,
@@ -108,6 +110,7 @@ export function mapJobPreview(item: BookingFeedDto) {
     id: item.booking_id,
     partnerId: item.poster_id,
     employerName: item.name || 'Homeowner',
+    start_time: item.start_time, booking_status: item.booking_status, post_status: item.post_status,
     title: categories.join(' & ') || 'Household Service',
     location: locShort,
     description,

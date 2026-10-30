@@ -7,6 +7,8 @@ import { useUser } from '../../auth/session/UserContext';
 import { fetchReviewSummary, ReviewSummaryData } from '../../reviews/api/reviewApi';
 import { BottomSheetHandle } from '../../../shared/components/BottomSheetHandle';
 import { StarIcon } from '../../../shared/components/icons/LucideIcons';
+import { POST_UNAVAILABLE } from '../../bookings/postAvailability';
+import { ScheduleBadge } from '../../bookings/components/ScheduleBadge';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SNAP_EXPANDED = 0;
@@ -14,6 +16,7 @@ const SNAP_COLLAPSED = Math.round(SCREEN_HEIGHT * 0.40);
 const SNAP_DISMISSED = SCREEN_HEIGHT;
 
 export interface JobDetailData {
+  start_time?: string;
   id: number | string;
   partnerId?: number | string;
   employerName?: string;
@@ -37,6 +40,7 @@ export interface JobDetailSheetProps {
   onClose: () => void;
   onApply: (job: any) => void;
   isApplied: boolean;
+  isApplying?: boolean;
   isSaved?: boolean;
   isClosed?: boolean;
   onToggleSave?: (job: any) => void;
@@ -52,6 +56,7 @@ export function JobDetailSheet({
   onClose,
   onApply,
   isApplied,
+  isApplying = false,
   isSaved = false,
   isClosed = false,
   onToggleSave,
@@ -385,6 +390,7 @@ export function JobDetailSheet({
               </View>
             </View>
 
+            <ScheduleBadge post={job} />
             {/* About This Role (Clean Squircle Card) */}
             <View style={styles.aboutCard}>
               <Text style={styles.aboutTitle}>{uiText("ABOUT THIS ROLE")}</Text>
@@ -457,7 +463,7 @@ export function JobDetailSheet({
 
             {/* Apply Button & Direct Message Notice */}
             <Pressable
-              disabled={isClosed}
+              disabled={isClosed || isApplying}
               style={({ pressed }) => [
                 styles.applyBtn,
                 isClosed
@@ -467,12 +473,14 @@ export function JobDetailSheet({
                     : null,
                 pressed && !isClosed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
               ]}
-              onPress={() => !isClosed && onApply(job)}
+              onPress={() => !isClosed && !isApplying && onApply(job)}
             >
-              {isClosed ? (
+              {isApplying ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : isClosed ? (
                 <View style={styles.applyBtnInner}>
                   <Ionicons name="lock-closed" size={18} color="#64748B" style={{ marginRight: 6 }} />
-                  <Text style={[styles.applyBtnText, { color: '#64748B' }]}>{uiText("Listing Closed (Position Filled)")}</Text>
+                  <Text style={[styles.applyBtnText, { color: '#64748B' }]}>{uiText('Post unavailable')}</Text>
                 </View>
               ) : isApplied ? (
                 <View style={styles.applyBtnInner}>
@@ -488,7 +496,7 @@ export function JobDetailSheet({
 
             <Text style={styles.applyNotice}>
               {isClosed
-                ? 'This post has been filled and contract made with an applicant.'
+                ? uiText(POST_UNAVAILABLE)
                 : ctaNotice || ((job as any)?.kind === 'service' || (job as any)?.authorRole === 'Kasambahay'
                     ? uiText('Send a direct booking offer to this worker')
                     : uiText('Your application goes directly to the employer'))}

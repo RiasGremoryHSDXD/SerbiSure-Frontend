@@ -32,10 +32,14 @@ export interface BookingParticipant {
 }
 
 export interface BookingItem {
+  schedule_expired?: boolean;
   booking_id: string;
   booking_type: 'short_term' | 'long_term';
   work_setup?: WorkSetup | null;
   booking_status: 'Pending' | 'Accepted' | 'InProgress' | 'Completed' | 'Cancelled';
+  post_status?: 'Available' | 'Expired' | 'Booked' | 'Ongoing' | 'Completed' | 'Cancelled' | 'Unavailable';
+  can_repost?: boolean;
+  application_status?: 'applied' | 'accepted' | 'not_selected' | 'expired' | 'cancelled' | 'withdrawn';
   service_category: string[];
   start_time: string;
   work_days?: string[];
@@ -196,6 +200,24 @@ export async function fetchMyBookings(token: string, statusFilter?: string): Pro
   return bookingList(token, 'mine', statusFilter);
 }
 
+export async function fetchMyPosts(token: string): Promise<BookingItem[]> {
+  const data = await requestJson<unknown>('/api/v1/booking/mine/?public_only=true', { token });
+  if (!Array.isArray(data)) throw new Error('Could not load your posts. Please try again.');
+  return data as BookingItem[];
+}
+
+export async function repostBooking(token: string, bookingId: string, schedule: {
+  start_time: string; end_time: string | null; daily_start_time: string; daily_end_time: string; work_days: string[];
+}, key: string): Promise<BookingItem> {
+  const res = await requestResponse(`/api/v1/booking/${encodeURIComponent(bookingId)}/repost/`, {
+    token, method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(schedule),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(bookingError(data, 'Could not repost. Please try again.'));
+  if (!data?.booking_id) throw new Error('Could not confirm the repost. Please retry with the same details.');
+  return data;
+}
+
 export async function fetchMyAssignedBookings(token: string, statusFilter?: string): Promise<BookingItem[]> {
   return bookingList(token, 'assigned', statusFilter);
 }
@@ -266,7 +288,7 @@ export async function completeBooking(token: string, bookingId: string): Promise
 export async function cancelBooking(
   token: string,
   bookingId: string,
-  payload: { reason: string; expected_points?: number }
+  payload: { reason: string; expected_points?: number; pending_only?: boolean }
 ): Promise<CancellationResult> {
   try {
     const res = await requestResponse(`${API_BASE_URL}/api/v1/booking/${bookingId}/cancel/`, {
@@ -331,6 +353,19 @@ export async function submitBookingProposal(
   message: string | undefined,
   ratePeriod: 'day' | 'month'
 ): Promise<{ success: boolean; error?: string; proposal?: BookingProposal; language_warning?: string | null }> {
+  return sendProposal(token, bookingId, { proposed_rate: proposedRate, rate_period: ratePeriod, message });
+}
+
+export async function applyToJobPost(token: string, bookingId: string) {
+  return sendProposal(token, bookingId, {
+    apply_at_posted_rate: true,
+    message: 'I am interested in this job position',
+  });
+}
+
+async function sendProposal(token: string, bookingId: string, body: Record<string, unknown>): Promise<{
+  success: boolean; error?: string; proposal?: BookingProposal; language_warning?: string | null; already_applied?: boolean;
+}> {
   try {
     const res = await requestResponse(`${API_BASE_URL}/api/v1/booking/${bookingId}/proposals/`, {
       method: 'POST',
@@ -338,15 +373,11 @@ export async function submitBookingProposal(
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        proposed_rate: proposedRate,
-        rate_period: ratePeriod,
-        message,
-      }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     if (!res.ok) return { success: false, error: bookingError(data, 'Could not submit proposal.') };
-    return { success: true, proposal: data.proposal, language_warning: data.language_warning };
+    return { success: true, proposal: data.proposal, language_warning: data.language_warning, already_applied: data.already_applied === true };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error.' };
   }
