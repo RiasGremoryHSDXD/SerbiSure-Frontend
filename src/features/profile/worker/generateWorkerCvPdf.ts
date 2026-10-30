@@ -56,7 +56,7 @@ export function generateWorkerCvPdf(cv: WorkerCv, options?: GenerateCvPdfOptions
 
   const displayName = (cv.name || model?.name || 'Worker').trim().toUpperCase();
   const servicesTitle = (model?.services || details.service_categories?.join(', ') || 'Household Worker').trim().toUpperCase();
-  const locationText = (cv.location || model?.location || 'Cagayan de Oro, Misamis Oriental').trim();
+  const locationText = (cv.location || model?.location || 'Location not provided').trim();
   const phoneText = (cv.contact_number || model?.phone || '').trim();
   const emailText = (options?.email || cv.email || cv.details?.email || model?.email || '').trim();
 
@@ -65,15 +65,15 @@ export function generateWorkerCvPdf(cv: WorkerCv, options?: GenerateCvPdfOptions
   const monthlyRate = details.desired_monthly_rate ? `PHP ${Number(details.desired_monthly_rate).toLocaleString()} / month` : null;
 
   // Work Setup & Engagement
-  const workSetupLabel = details.work_setup === 'stay_in' ? 'Stay-in' : details.work_setup === 'stay_out' ? 'Stay-out' : 'Either (Stay-in / Stay-out)';
-  const engagementLabel = details.engagement_preference === 'short_term' ? 'Short-term' : details.engagement_preference === 'long_term' ? 'Long-term' : 'Both (Short & Long-term)';
+  const workSetupLabel = details.work_setup === 'stay_in' ? 'Stay-in' : details.work_setup === 'stay_out' ? 'Stay-out' : details.work_setup === 'either' ? 'Either (Stay-in / Stay-out)' : 'Not provided';
+  const engagementLabel = details.engagement_preference === 'short_term' ? 'Short-term' : details.engagement_preference === 'long_term' ? 'Long-term' : details.engagement_preference === 'both' ? 'Both (Short & Long-term)' : 'Not provided';
 
   // Experience
   const expLevel = details.experience_level === 'new'
     ? 'First-time Worker'
     : details.experience_level === 'household'
     ? 'Household Experience'
-    : 'Previous Paid Work';
+    : details.experience_level === 'paid' ? 'Previous Paid Work' : 'Not provided';
 
   const expDuration = details.experience_duration === 'under_1'
     ? 'Less than 1 year of experience'
@@ -81,22 +81,18 @@ export function generateWorkerCvPdf(cv: WorkerCv, options?: GenerateCvPdfOptions
     ? '1-3 years of experience'
     : details.experience_duration === 'over_3' || details.experience_duration === '3+'
     ? '3+ years of experience'
-    : (details.experience_level === 'new' ? 'First-time experience' : '3+ years of experience');
+    : (details.experience_level === 'new' ? 'First-time experience' : 'Not provided');
 
   const rawSummary = details.experience_summary?.trim() || '';
-  const isBareDuration = !rawSummary || /^((\d+\+?|\w+)\s*years?(\s+of\s+experience)?|over_\d+|under_\d+)$/i.test(rawSummary) || rawSummary.length < 25;
-  const profileText = isBareDuration
-    ? `Dedicated and reliable household service worker with ${expDuration} in home management, cleaning, and caring tasks. Committed to maintaining safe, clean, and organized households.`
-    : rawSummary;
+  const profileText = rawSummary || 'No experience summary provided.';
 
   // Skills
-  const defaultSkills = ['Meal preparation', 'Deep cleaning', 'Laundry care', 'Ironing', 'Infant care', 'Child supervision'];
   const skills: string[] = (details.practical_skills && details.practical_skills.length > 0)
     ? details.practical_skills.slice(0, 6)
-    : defaultSkills;
+    : [];
 
   // Education & Training
-  const educationText = details.education?.trim() || 'Secondary Education';
+  const educationText = details.education?.trim() || 'Not provided';
   const trainingList: Array<{ name: string; provider?: string; year?: string | number }> = details.training || [];
 
   // Languages
@@ -104,13 +100,13 @@ export function generateWorkerCvPdf(cv: WorkerCv, options?: GenerateCvPdfOptions
     ? cv.languages.split(',').map(s => s.trim()).filter(Boolean)
     : (details.languages && details.languages.length > 0)
     ? details.languages
-    : ['Tagalog', 'English', 'Bisaya'];
+    : [];
 
   // Personal
-  const civilStatus = details.civil_status || 'Single';
+  const civilStatus = details.civil_status || 'Not provided';
   const childrenCount = details.number_of_children != null && details.number_of_children !== ''
     ? String(details.number_of_children)
-    : 'None';
+    : 'Not provided';
 
   // Worker initials for avatar fallback
   const initials = displayName

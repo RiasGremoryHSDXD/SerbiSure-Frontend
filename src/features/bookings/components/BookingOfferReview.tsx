@@ -72,7 +72,7 @@ export function BookingOfferReview(props: Props) {
     : props.salary || uiText('Not provided');
 
   const primaryServiceChoice = SERVICE_CHOICES.find(item => props.serviceCategory.includes(item.id));
-  const primaryServiceName = primaryServiceChoice ? primaryServiceChoice.label : (props.serviceCategory[0] || 'Cleaning');
+  const primaryServiceName = primaryServiceChoice ? primaryServiceChoice.label : (props.serviceCategory[0] || uiText('Service not specified'));
 
   const days = WORK_DAYS.filter(day => props.days.includes(day.value))
     .map(day => uiText(day.label))
@@ -80,19 +80,19 @@ export function BookingOfferReview(props: Props) {
 
   const bookingCode = props.bookingId
     ? `BK-${props.bookingId.slice(0, 8).toUpperCase()}`
-    : `BK-${(props.contactName || 'A1').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || 'A1'}158EEE`;
+    : null;
 
-  const displayName = props.contactName || uiText('Shennie Mae Cabanes');
+  const displayName = props.contactName || uiText('Service Partner');
   const initials = displayName
     .split(' ')
     .filter(Boolean)
     .slice(0, 2)
     .map(part => part[0]?.toUpperCase() || '')
-    .join('') || 'SC';
+    .join('') || '?';
 
   const cleanRegion = props.region
     ? props.region.replace(/ - Region.*$/, '')
-    : uiText("Northern Mindanao");
+    : uiText('Not provided');
 
   return (
     <View style={styles.ticketCard}>
@@ -172,7 +172,7 @@ export function BookingOfferReview(props: Props) {
           <View style={styles.gridCol}>
             <Text style={styles.fieldLabel}>{short ? uiText("Engagement") : uiText("Work setup")}</Text>
             <Text style={styles.fieldValue}>
-              {short ? uiText("Short-term") : uiText(props.workSetup ? workSetupLabel(props.workSetup) : 'Stay-in')}
+              {short ? uiText("Short-term") : uiText(workSetupLabel(props.workSetup))}
             </Text>
           </View>
           <View style={styles.gridCol}>
@@ -186,7 +186,7 @@ export function BookingOfferReview(props: Props) {
         <View style={styles.gridRow}>
           <View style={showDateRange ? styles.gridColFull : styles.gridCol}>
             <Text style={styles.fieldLabel}>{uiText('Work days')}</Text>
-            <Text style={styles.fieldValue}>{days || uiText('Mon - Sun')}</Text>
+            <Text style={styles.fieldValue}>{days || uiText('Not provided')}</Text>
           </View>
           {!showDateRange && <View style={styles.gridCol}>
             <Text style={styles.fieldLabel}>{uiText("Work region")}</Text>
@@ -210,7 +210,7 @@ export function BookingOfferReview(props: Props) {
       {/* 3. Bottom Stub: Barcode & Reference */}
       <View style={styles.stubSection}>
         <View style={styles.barcodeWrapper}>
-          <View style={styles.barcodeRow}>
+          {bookingCode && <View style={styles.barcodeRow}>
             {BARCODE_PATTERN.map((w, idx) => (
               <View
                 key={idx}
@@ -223,8 +223,8 @@ export function BookingOfferReview(props: Props) {
                 }}
               />
             ))}
-          </View>
-          <Text style={styles.barcodeText}>{bookingCode}</Text>
+          </View>}
+          <Text style={styles.barcodeText}>{bookingCode || uiText('Booking code assigned after sending')}</Text>
         </View>
       </View>
     </View>

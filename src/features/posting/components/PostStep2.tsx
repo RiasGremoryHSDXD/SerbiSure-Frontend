@@ -1,5 +1,7 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { WorkLocationFields } from '../../bookings/components/WorkLocationFields';
+import { WorkScheduleFields } from '../../bookings/components/WorkScheduleFields';
+import { WORK_SHIFTS } from '../../bookings/engagementForm';
 import React from 'react';
 import { Text, View, Pressable, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,8 +30,8 @@ export function PostStep2({ form }: { form: PostFormController }) {
   if (step !== 2) return null;
 
   const num = Number(offerAmount.replace(/[^0-9.]/g, ''));
-  const minRate = wagePolicy ? Number(wagePolicy.minimum_rate) : (engagementType === 'short' ? 350 : 6500);
-  const isBelowMin = offerAmount.trim().length > 0 && num > 0 && num < minRate;
+  const minRate = wagePolicy ? Number(wagePolicy.minimum_rate) : null;
+  const isBelowMin = offerAmount.trim().length > 0 && num > 0 && minRate !== null && num < minRate;
 
   return (
     <View style={styles.stepContainer}>
@@ -54,6 +56,20 @@ export function PostStep2({ form }: { form: PostFormController }) {
         disabled={isPosting}
         hideDetailedAddress={config.role === 'kasambahay'}
         errors={fieldErrors}
+      />
+
+      <WorkScheduleFields
+        bookingType={engagementType === 'short' ? 'short_term' : 'long_term'}
+        startDate={form.startDate} endDate={form.endDate} workHours={form.workHours}
+        days={form.workDays} shift={form.selectedTime} ongoing={form.ongoing}
+        onStartDate={form.setStartDate} onEndDate={form.setEndDate}
+        onWorkHours={form.setWorkHours} onDays={form.setWorkDays} onOngoing={form.setOngoing}
+        onShift={value => {
+          form.setSelectedTime(value);
+          const preset = WORK_SHIFTS.find(item => item.value === value);
+          if (preset) form.setWorkHours(preset.hours);
+        }}
+        errors={fieldErrors} disabled={isPosting}
       />
 
       {/* 2. Instructions / About You (Optional) */}
@@ -82,7 +98,7 @@ export function PostStep2({ form }: { form: PostFormController }) {
           value={offerAmount}
           onChangeText={setOfferAmount}
           keyboardType="decimal-pad"
-          placeholder={wagePolicy?.minimum_rate || (engagementType === 'short' ? '350' : '6500')}
+          placeholder={wagePolicy?.minimum_rate || uiText('Enter amount')}
           placeholderTextColor="#9CA3AF"
           editable={!isPosting}
         />

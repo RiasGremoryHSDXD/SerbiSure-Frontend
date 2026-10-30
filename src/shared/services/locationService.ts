@@ -403,7 +403,7 @@ export function getZipCodeForCity(cityCode: string, cityName?: string): string {
 /**
  * Formats a user's registered location into Barangay and City (e.g., "Pagatpat, CDO").
  * Handles street addresses storing the barangay (e.g. "Brgy. Pagatpat, Z4 Blk4 H26"),
- * standardizes "City of Cagayan De Oro" to "CDO", and falls back safely to "Pagatpat, CDO".
+ * Standardizes a supplied Cagayan de Oro city name; never invents missing address parts.
  */
 export function formatRegisteredLocation(
   street?: string | null,
@@ -430,7 +430,7 @@ export function formatRegisteredLocation(
   let cityClean = (city || '').trim();
   if (cityClean.toLowerCase() === 'pagatpat') {
     brgy = 'Pagatpat';
-    cityClean = 'CDO';
+    cityClean = '';
   } else if (cityClean.toLowerCase().includes('cagayan de oro')) {
     cityClean = 'CDO';
   } else if (cityClean) {
@@ -457,10 +457,7 @@ export function formatRegisteredLocation(
     return `${brgy}, ${cityClean}`;
   }
   if (brgy) {
-    return `${brgy}, CDO`;
-  }
-  if (cityClean === 'CDO') {
-    return 'Pagatpat, CDO';
+    return brgy;
   }
   if (cityClean) {
     return cityClean;
@@ -468,5 +465,5 @@ export function formatRegisteredLocation(
   if (province) {
     return province.trim();
   }
-  return 'Pagatpat, CDO';
+  return '';
 }

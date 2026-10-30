@@ -1,3 +1,4 @@
+import { formatRate } from '../../../shared/utils/rate';
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View, ScrollView, Pressable, Modal, ActivityIndicator, Linking, Alert, RefreshControl, Image } from 'react-native';
@@ -111,8 +112,8 @@ export function UserProfileView({
     }
     try {
       const times = details.workHours.split(' - ');
-      const start = bookingSchedule(details.startDate, times[0] || '08:00 AM');
-      const end = bookingSchedule(details.ongoing ? details.startDate : details.endDate, times[1] || '05:00 PM');
+      const start = bookingSchedule(details.startDate, times[0] || '');
+      const end = bookingSchedule(details.ongoing ? details.startDate : details.endDate, times[1] || '');
       const payload: ChatOfferPayload = {
         recipient_id: userId,
         booking_type: details.bookingType,
@@ -162,11 +163,7 @@ export function UserProfileView({
   const positiveSentiment = summary?.sentiment_breakdown?.Positive ?? reviews.filter(r => r.nlp_sentiment === 'Positive').length;
   const positivePercentage = totalReviews > 0 ? Math.round((positiveSentiment / totalReviews) * 100) : 0;
 
-  const displayTags = (profile?.user_tags && profile.user_tags.length > 0)
-    ? profile.user_tags
-    : isWorker
-    ? ['Child Care', 'Cooking', 'Family Driver', 'Either']
-    : ['Pet lover', 'Non-Smoker', 'Respectful'];
+  const displayTags = profile?.user_tags || [];
 
   const handlePostReply = async (post?: PublicPendingPost) => {
     if (!userId || !effectiveToken) return;
@@ -192,10 +189,7 @@ export function UserProfileView({
       : [isJob ? 'Household Service' : 'General Service'];
     const catKey = rawCategories[0];
     const roleName = (catKey && CATEGORY_LABELS[catKey]) || catKey?.replace(/_/g, ' ') || (isJob ? 'Job Position' : 'Service');
-    const num = Number(post.rate_amount);
-    const formattedRate = isNaN(num)
-      ? `Php ${post.rate_amount || '0'}`
-      : `₱${num.toFixed(2)}`;
+    const formattedRate = formatRate(post.rate_amount);
     const period = post.rate_period || (post.booking_type === 'long_term' ? 'month' : 'day');
     const rateStr = isJob ? `${formattedRate} / ${period}` : `${formattedRate} per ${period}`;
     const locStr = formatBookingLocationShort(post, locationText || '');
@@ -311,7 +305,7 @@ export function UserProfileView({
                   style={[
                     styles.sentimentFill,
                     {
-                      width: `${totalReviews > 0 ? Math.min(100, Math.max(10, positivePercentage)) : 0}%`,
+                      width: `${totalReviews > 0 ? Math.min(100, Math.max(0, positivePercentage)) : 0}%`,
                       backgroundColor: totalReviews > 0 ? '#22C55E' : 'transparent',
                     },
                   ]}

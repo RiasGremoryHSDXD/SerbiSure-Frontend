@@ -4,6 +4,7 @@ import { StyleSheet, Text, View, Modal, ScrollView, Pressable, Image } from 'rea
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { ReviewItem, SentimentType } from '../api/reviewApi';
+import { averageReviewRating, validRating } from '../ratings';
 import THEME from '../../../shared/theme/theme';
 
 export interface AllReviewsModalProps {
@@ -49,13 +50,8 @@ export function AllReviewsModal({
   }, [reviews, activeFilter]);
 
   const computedAvg = useMemo(() => {
-    if (averageRating !== undefined && averageRating !== null) {
-      const num = Number(averageRating);
-      if (!isNaN(num)) return num.toFixed(1);
-    }
-    if (!reviews || reviews.length === 0) return '5.0';
-    const sum = reviews.reduce((acc, r) => acc + (Number(r.rating) || 5), 0);
-    return (sum / reviews.length).toFixed(1);
+    if (!reviews?.length) return null;
+    return validRating(averageRating) ?? averageReviewRating(reviews);
   }, [averageRating, reviews]);
 
   const getSentimentStyle = (sentiment?: SentimentType | string) => {
@@ -75,13 +71,14 @@ export function AllReviewsModal({
           icon: 'remove-circle-outline',
         };
       case 'Positive':
-      default:
         return {
           bg: '#ECFDF5',
           text: '#065F46',
           border: '#A7F3D0',
           icon: 'sparkles',
         };
+      default:
+        return { bg: '#F1F5F9', text: '#475569', border: '#E2E8F0', icon: 'help-circle-outline' };
     }
   };
 
@@ -108,18 +105,18 @@ export function AllReviewsModal({
           {/* Summary Card */}
           <View style={styles.summaryCard}>
             <View style={styles.ratingBigWrap}>
-              <Text style={styles.ratingBigText}>{computedAvg}</Text>
-              <View style={styles.starsRow}>
+              <Text style={styles.ratingBigText}>{computedAvg === null ? uiText('No ratings yet') : computedAvg.toFixed(1)}</Text>
+              {computedAvg !== null && <View style={styles.starsRow}>
                 {[1, 2, 3, 4, 5].map((i) => (
                   <Ionicons
                     key={i}
-                    name={i <= Math.round(Number(computedAvg)) ? 'star' : 'star-outline'}
+                    name={i <= Math.round(computedAvg) ? 'star' : 'star-outline'}
                     size={16}
                     color="#FFB43B"
                     style={{ marginRight: 2 }}
                   />
                 ))}
-              </View>
+              </View>}
               <Text style={styles.summarySubText}>{uiText('Based on {count} reviews', { count: reviews.length })}</Text>
             </View>
 
@@ -168,7 +165,8 @@ export function AllReviewsModal({
           ) : (
             filteredReviews.map((r) => {
               const badgeStyle = getSentimentStyle(r.nlp_sentiment);
-              const rawName = (r.reviewer_name || 'Verified Client').trim();
+              const rating = validRating(r.rating);
+              const rawName = (r.reviewer_name || 'Reviewer').trim();
               const nameParts = rawName.split(/\s+/).filter(Boolean);
               const firstChar = nameParts[0]?.charAt(0) || '';
               const secondChar = nameParts[1]?.charAt(0) || '';
@@ -190,12 +188,12 @@ export function AllReviewsModal({
                       )}
                       <View style={{ marginLeft: 10, flex: 1 }}>
                         <Text style={styles.reviewerName} numberOfLines={1}>
-                          {r.reviewer_name || uiText("Verified Client")}
+                          {r.reviewer_name || uiText('Reviewer')}
                         </Text>
                         <Text style={styles.reviewDate}>
                           {r.createdAt
                             ? formatDate(r.createdAt)
-                            : uiText("Verified review")}
+                            : uiText('Date not provided')}
                         </Text>
                       </View>
                     </View>
@@ -214,25 +212,25 @@ export function AllReviewsModal({
                         style={{ marginRight: 3 }}
                       />
                       <Text style={[styles.sentimentBadgeText, { color: badgeStyle.text }]}>
-                        {uiText(r.nlp_sentiment || 'Positive')}
+                        {uiText(r.nlp_sentiment || 'Not analyzed')}
                       </Text>
                     </View>
                   </View>
 
                   {/* Stars Row */}
                   <View style={styles.ratingRow}>
-                    <View style={styles.starsWrap}>
+                    {rating !== null && <View style={styles.starsWrap}>
                       {[1, 2, 3, 4, 5].map((i) => (
                         <Ionicons
                           key={i}
-                          name={i <= (Number(r.rating) || 5) ? 'star' : 'star-outline'}
+                          name={i <= rating ? 'star' : 'star-outline'}
                           size={15}
                           color="#FFB43B"
                           style={{ marginRight: 2 }}
                         />
                       ))}
-                    </View>
-                    <Text style={styles.ratingNumberText}>{Number(r.rating || 5).toFixed(1)}</Text>
+                    </View>}
+                    <Text style={styles.ratingNumberText}>{rating === null ? uiText('No rating provided') : rating.toFixed(1)}</Text>
                   </View>
 
                   {/* Feedback Text */}

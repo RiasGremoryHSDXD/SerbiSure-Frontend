@@ -1,4 +1,5 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
+import { formatRate } from '../../../shared/utils/rate';
 import { realtime } from '../../../shared/realtime';
 import { AppState } from 'react-native';
 import { workSetupLabel } from '../workSetup';
@@ -548,11 +549,11 @@ export function MyBookingsModal({
                 Array.isArray(booking.service_category)
                   ? booking.service_category[0]
                   : booking.service_category
-              ) || 'Cleaning';
+              ) || 'Service not specified';
               const formattedCategory = categoryName.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
 
               const durationLabel = booking.booking_type === 'long_term' ? 'Long-term' : 'Short-term';
-              const setupRaw = booking.work_setup || (booking.booking_type === 'short_term' ? 'stay_out' : 'stay_in');
+              const setupRaw = booking.work_setup;
               const setupLabel = workSetupLabel(setupRaw);
               const combinedTerms = `${durationLabel} · ${setupLabel}`;
 
@@ -608,7 +609,7 @@ export function MyBookingsModal({
                   {/* Middle Row: Rate & Combined Terms Badge */}
                   <View style={styles.cardMiddleRow}>
                     <View style={styles.rateContainer}>
-                      <Text style={styles.rateAmount}>₱{String(booking.rate_amount).replace(/\.00$/, '')}</Text>
+                      <Text style={styles.rateAmount}>{uiText(formatRate(booking.rate_amount).replace(/\.00$/, ''))}</Text>
                       <Text style={styles.ratePeriod}>
                         / {booking.rate_period || (booking.booking_type === 'long_term' ? 'month' : 'day')}
                       </Text>
@@ -818,17 +819,17 @@ export function MyBookingsModal({
         initialDetails={{
           serviceCategory: Array.isArray(selectedBookingForDetails.service_category)
             ? selectedBookingForDetails.service_category
-            : [selectedBookingForDetails.service_category || 'Cleaning'],
-          workSetup: selectedBookingForDetails.work_setup || (selectedBookingForDetails.booking_type === 'short_term' ? 'stay_out' : 'stay_in'),
-          region: selectedBookingForDetails.region || 'Northern Mindanao',
+            : selectedBookingForDetails.service_category ? [selectedBookingForDetails.service_category] : [],
+          workSetup: selectedBookingForDetails.work_setup || null,
+          region: selectedBookingForDetails.region || '',
           startDate: selectedBookingForDetails.start_time || '',
           endDate: selectedBookingForDetails.end_time || '',
           workHours: (selectedBookingForDetails.daily_start_time && selectedBookingForDetails.daily_end_time)
             ? `${selectedBookingForDetails.daily_start_time} - ${selectedBookingForDetails.daily_end_time}`
-            : '08:00 AM - 12:00 PM',
+            : '',
           location: formatBookingAddress(selectedBookingForDetails),
-          days: selectedBookingForDetails.work_days && selectedBookingForDetails.work_days.length > 0 ? selectedBookingForDetails.work_days : ['Mon'],
-          salary: selectedBookingForDetails.rate_amount || '600',
+          days: selectedBookingForDetails.work_days || [],
+          salary: selectedBookingForDetails.rate_amount || '',
           bookingType: selectedBookingForDetails.booking_type,
           bookingId: selectedBookingForDetails.booking_id,
           id: selectedBookingForDetails.booking_id,

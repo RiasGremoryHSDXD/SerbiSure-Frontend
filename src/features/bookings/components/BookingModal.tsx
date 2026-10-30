@@ -396,13 +396,13 @@ export function BookingModal({
   };
 
   const salaryNum = parseFloat(salary.replace(/[^0-9.]/g, '')) || 0;
-  const effectiveMinDaily = minWageInfo?.rate_period === 'day' ? Number(minWageInfo.minimum_rate) : 350;
-  const effectiveMinMonthly = minWageInfo?.rate_period === 'month' ? Number(minWageInfo.minimum_rate) : 6500;
+  const effectiveMinDaily = minWageInfo?.rate_period === 'day' ? Number(minWageInfo.minimum_rate) : null;
+  const effectiveMinMonthly = minWageInfo?.rate_period === 'month' ? Number(minWageInfo.minimum_rate) : null;
   const isBelowMinWage =
     salaryNum > 0 &&
     (selectedBookingType === 'short_term'
-      ? salaryNum < effectiveMinDaily
-      : salaryNum < effectiveMinMonthly);
+      ? effectiveMinDaily !== null && salaryNum < effectiveMinDaily
+      : effectiveMinMonthly !== null && salaryNum < effectiveMinMonthly);
 
 
   const modalContent = (
@@ -719,7 +719,7 @@ export function BookingModal({
                 </View>
                 {isBelowMinWage && (
                   <Text style={[styles.helperText, styles.invalidRateHint]}>
-                    {uiText("Minimum: ₱")}{Number(minWageInfo?.minimum_rate || (selectedBookingType === 'short_term' ? 350 : 6500)).toLocaleString('en-PH')} / {minWageInfo?.rate_period === 'day' || selectedBookingType === 'short_term' ? uiText("day") : uiText("month")}
+                    {uiText("Minimum: ₱")}{Number(minWageInfo?.minimum_rate).toLocaleString('en-PH')} / {minWageInfo?.rate_period === 'day' || selectedBookingType === 'short_term' ? uiText("day") : uiText("month")}
                   </Text>
                 )}
               </View>

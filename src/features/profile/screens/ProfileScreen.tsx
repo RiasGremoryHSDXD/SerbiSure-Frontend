@@ -1,6 +1,6 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState } from 'react';
-import { Text, View, Image, ScrollView, Pressable, Alert, Modal, ActivityIndicator, RefreshControl } from 'react-native';
+import { Text, View, ScrollView, Pressable, Alert, Modal, ActivityIndicator, RefreshControl } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 
@@ -13,6 +13,7 @@ import { ManageTagsModal } from '../components/ManageTagsModal';
 import { ManageSocialLinksModal } from '../components/ManageSocialLinksModal';
 import { AllReviewsModal } from '../../reviews/components/AllReviewsModal';
 import { AppHeader } from '../../../shared/components/AppHeader';
+import { ProfileAvatar } from '../../../shared/ui/ProfileAvatar';
 import { formatRegisteredLocation } from '../../../shared/services/locationService';
 
 import { ROLE_CONFIG } from '../../../app/roleConfig';
@@ -114,10 +115,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
               {/* Top row: Avatar on left, Role pill badge + View CV pill on right */}
               <View style={styles.personalHeroTopRow}>
                 <Pressable style={styles.personalAvatarWrapper} onPress={handlePickImage}>
-                  <Image
-                    source={{ uri: localAvatar || avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }}
-                    style={styles.personalAvatar}
-                  />
+                  <ProfileAvatar uri={localAvatar || avatarUri} name={getFullName()} size={90} />
                   {isVerified ? (
                     <View style={styles.avatarShieldBadgePersonal}>
                       <Ionicons
@@ -216,7 +214,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
                     style={[
                       styles.sentimentFill,
                       {
-                        width: `${totalReviews > 0 ? Math.min(100, Math.max(10, positivePercentage ?? 0)) : 0}%`,
+                        width: `${totalReviews > 0 ? Math.min(100, Math.max(0, positivePercentage ?? 0)) : 0}%`,
                         backgroundColor: totalReviews > 0 ? '#22C55E' : 'transparent',
                       },
                     ]}
@@ -264,10 +262,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
             <View style={styles.settingsHeroCard}>
               <View style={styles.settingsHeroTopRow}>
                 <Pressable style={styles.avatarWrapper} onPress={handlePickImage}>
-                  <Image
-                    source={{ uri: localAvatar || avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }}
-                    style={styles.avatar}
-                  />
+                  <ProfileAvatar uri={localAvatar || avatarUri} name={getFullName()} size={68} />
                   {isVerified ? (
                     <View style={styles.avatarShieldBadge}>
                       <Ionicons
@@ -357,7 +352,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
                 pressed && { opacity: 0.8 },
               ]}
               onPress={async () => {
-                const name = (profile.getFirstNameOnly ? profile.getFirstNameOnly() : profile.user?.firstName || 'Daven').trim().split(' ')[0] || 'Daven';
+                const name = (profile.getFirstNameOnly ? profile.getFirstNameOnly() : profile.user?.firstName || 'User').trim().split(' ')[0] || 'User';
                 const id = profile.user?.email || profile.user?.contactNumber || '';
                 await setRememberedAccount({ firstName: name, identifier: id });
                 onLogout?.();

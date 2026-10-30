@@ -59,64 +59,6 @@ interface NotificationSection {
   items: NotificationItem[];
 }
 
-const AVATAR_MAP: Record<string, string> = {
-  'Shennie Mae Cabanes': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-  'Isabel Angellica Yulo': 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
-  'John Louise Gomez': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-};
-
-// Default preview notifications matching reference design
-const DEFAULT_PREVIEW_NOTIFICATIONS: NotificationItem[] = [
-  {
-    notification_id: 'sys-1',
-    notification_message:
-      'Your National ID (Back) was analyzed and is currently under review by Barangay Pagatpat. We will notify you once we..',
-    notification_state: 'Unread',
-    createdAt: new Date(Date.now() - 24 * 60 * 1000).toISOString(),
-    sender_name: 'Daven Austhine Sumagang',
-  },
-  {
-    notification_id: 'sys-2',
-    notification_message:
-      'Your National ID (Back) has been submitted and is queued for verification',
-    notification_state: 'Unread',
-    createdAt: new Date(Date.now() - 24 * 60 * 1000).toISOString(),
-    sender_name: 'Verification',
-  },
-  {
-    notification_id: 'sys-3',
-    notification_message:
-      'Your National ID (Front) was analyzed and is currently under review by Barangay Pagatpat. We will notify you once we..',
-    notification_state: 'Unread',
-    createdAt: new Date(Date.now() - 24 * 60 * 1000).toISOString(),
-    sender_name: 'Daven Austhine Sumagang',
-  },
-  {
-    notification_id: 'msg-1',
-    notification_message:
-      'Good morning po! Nakita ko po ang job posting ninyo at interesado po akong mag-apply. May experience po ako sa..',
-    notification_state: 'Unread',
-    createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-    sender_name: 'Shennie Mae Cabanes',
-  },
-  {
-    notification_id: 'msg-2',
-    notification_message:
-      'Hello po! Confirm ko lang po ang interview natin bukas ng 10 AM. Dadalhin ko po ang valid ID at iba pang requirements...',
-    notification_state: 'Unread',
-    createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-    sender_name: 'Isabel Angellica Yulo',
-  },
-  {
-    notification_id: 'msg-3',
-    notification_message:
-      'Hello po! Pasensya na po, medyo traffic lang po ngayon kaya baka ma-late ako nang mga 15 minutes. Papunta na po ako...',
-    notification_state: 'Unread',
-    createdAt: new Date(Date.now() - 120 * 60 * 1000).toISOString(),
-    sender_name: 'John Louise Gomez',
-  },
-];
-
 function formatShortTime(dateString: string): string {
   try {
     if (!dateString) return '';
@@ -167,14 +109,10 @@ function formatRelativeTime(dateString: string): string {
 
 function getItemCategory(item: NotificationItem): 'Messages' | 'System' | 'Bookings' {
   const rawMessage = item.notification_message || '';
-  const sender = item.sender_name?.trim() || '';
   const lower = rawMessage.toLowerCase();
 
   if (
     rawMessage.startsWith('New message from') ||
-    sender === 'Shennie Mae Cabanes' ||
-    sender === 'Isabel Angellica Yulo' ||
-    sender === 'John Louise Gomez' ||
     item.notification_id.startsWith('msg-')
   ) {
     return 'Messages';
@@ -199,14 +137,10 @@ function getItemVisual(item: NotificationItem) {
   const lower = rawMessage.toLowerCase();
 
   if (
-    sender === 'Shennie Mae Cabanes' ||
-    sender === 'Isabel Angellica Yulo' ||
-    sender === 'John Louise Gomez' ||
     rawMessage.startsWith('New message from') ||
     item.notification_id.startsWith('msg-')
   ) {
     const avatar =
-      AVATAR_MAP[sender] ||
       `https://ui-avatars.com/api/?name=${encodeURIComponent(sender || 'User')}&background=FFAA77&color=0D0D11`;
     return { type: 'avatar' as const, avatar };
   }

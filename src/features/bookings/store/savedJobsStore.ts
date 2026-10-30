@@ -1,3 +1,4 @@
+import { formatRate } from '../../../shared/utils/rate';
 import { workSetupLabel } from '../workSetup';
 import { useState, useEffect } from 'react';
 import { toggleSavePostApi, fetchSavedPostsApi, fetchMyProposalPosts, formatBookingLocationShort, applyToJobPost } from '../api/bookingApi';
@@ -104,7 +105,7 @@ class SavedJobsStore {
             roleTag: categories.join(', '),
             termTag: termTag,
             setupTag: workSetupLabel(item.work_setup),
-            price: `₱${item.rate_amount || '0'}`,
+            price: formatRate(item.rate_amount),
             unit: unit,
             aboutText: item.special_instruction || undefined,
             tags: [...categories, ...(item.work_setup ? [workSetupLabel(item.work_setup)] : [])],
@@ -122,7 +123,7 @@ class SavedJobsStore {
             roleTag: (item.service_category || []).join(', '), title: (item.service_category || []).join(', '),
             location: formatBookingLocationShort(item, 'Location not provided'),
             termTag: item.booking_type === 'long_term' ? 'Long-term' : 'Short-term',
-            price: 'PHP ' + item.rate_amount, unit: '/ ' + item.rate_period,
+            price: formatRate(item.rate_amount, 'PHP '), unit: '/ ' + item.rate_period,
             aboutText: item.special_instruction || '', tags: item.service_category || [],
             start_time: item.start_time, booking_status: item.booking_status, post_status: item.post_status,
             application_status: item.application_status,

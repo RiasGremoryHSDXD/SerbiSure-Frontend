@@ -1,3 +1,4 @@
+import { formatRate } from '../../../shared/utils/rate';
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, Pressable, Image, ActivityIndicator } from 'react-native';
@@ -86,7 +87,7 @@ export function RecommendationsSection({
                     onSelectJob?.({
                       id: item.booking_id,
                       title: nameOrTitle,
-                      rate: item.rate_amount || '0',
+                      rate: item.rate_amount || '',
                     });
                   }
                 }}
@@ -114,7 +115,7 @@ export function RecommendationsSection({
                   </View>
                 ) : (
                   <View style={styles.metaRow}>
-                    <Text style={styles.rateText}>₱{item.rate_amount}/{item.rate_period || (item.booking_type === 'long_term' ? 'month' : 'day')}</Text>
+                    <Text style={styles.rateText}>{uiText(formatRate(item.rate_amount))}/{item.rate_period || (item.booking_type === 'long_term' ? 'month' : 'day')}</Text>
                   </View>
                 )}
               </Pressable>

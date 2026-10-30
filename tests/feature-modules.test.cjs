@@ -355,14 +355,11 @@ test('Browse quick filters work identically for jobs and services and preserve a
   assert.equal(browse.activeBrowseChip({ ...category, bookingType: 'short_term' }), '');
 });
 
-test('posting defaults switch with engagement while preserving a custom rate', () => {
-  assert.equal(posting.POSTING_CONFIG.job.dailyDefault, '800');
-  assert.equal(posting.POSTING_CONFIG.service.dailyDefault, '600');
-  assert.equal(posting.engagementRate('job', '800', 'long'), '8000');
-  assert.equal(posting.engagementRate('service', '600', 'long'), '6500');
-  assert.equal(posting.engagementRate('job', '8000', 'short'), '800');
-  assert.equal(posting.engagementRate('service', '6500', 'short'), '600');
-  assert.equal(posting.engagementRate('service', '900', 'long'), '900');
+test('posting does not invent amounts when engagement changes', () => {
+  for (const config of Object.values(posting.POSTING_CONFIG)) {
+    assert.equal(config.dailyDefault, undefined);
+    assert.equal(config.monthlyDefault, undefined);
+  }
 });
 
 test('generated descriptions preserve role and engagement wording', () => {

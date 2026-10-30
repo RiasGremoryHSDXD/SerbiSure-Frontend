@@ -31,6 +31,7 @@ function load(relative, mocks = {}) {
   new Function('require', 'module', 'exports', source)(name => {
     if (name === 'react') return { ...React, default: React };
     if (name in mocks) return mocks[name];
+    if (name.endsWith('.png')) return 1;
     throw new Error('Unexpected dependency: ' + name);
   }, module, module.exports);
   return module.exports;
@@ -81,6 +82,8 @@ function postingScreen(t, mode = 'service') {
     'react-native': native, '@expo/vector-icons': { Ionicons: 'Icon' },
     '../../../shared/localization/LanguageContext': language, '../styles': { postingStyles: {} },
     '../../bookings/components/WorkLocationFields': { WorkLocationFields: () => null },
+    '../../bookings/components/WorkScheduleFields': { WorkScheduleFields: 'WorkScheduleFields' },
+    '../../bookings/engagementForm': engagement,
   });
   const step3 = load('src/features/posting/components/PostStep3.tsx', {
     'react-native': native, '@expo/vector-icons': { Ionicons: 'Icon' },
@@ -154,6 +157,9 @@ test(`${mode}: short-term replaces a previous Stay-in choice with Stay-out`, asy
   screen.press('Short-term');
   assert.equal(screen.form.setupPreference, 'stay-out');
   await screen.next(); await screen.next();
+  assert.equal(screen.form.step, 2); // Changing engagement must not invent replacement work hours.
+  screen.set(form => form.setSelectedTime('morning'));
+  await screen.next();
   assert.equal(screen.form.step, 3);
   await screen.submit(403, { code: 'booking_restricted' });
   assert.equal(screen.requests[0].args[1].work_setup, 'stay_out');

@@ -122,7 +122,7 @@ export function formatBookingLocationShort(
     city?: string | null;
     full_address?: string | null;
   } | null,
-  fallback = 'Cagayan de Oro'
+  fallback = 'Location not provided'
 ): string {
   if (!booking) return fallback;
   const parts = [booking.barangay, booking.city]

@@ -39,7 +39,7 @@ export function ProfileAvatar({ uri, name, size = 48 }: Readonly<{ uri?: string 
     );
   }
 
-  if (photoUri && failedUri !== photoUri) {
+  if (hasCustomPhoto && photoUri && failedUri !== photoUri) {
     return <Image source={{ uri: photoUri }} style={[styles.photo, shape]} resizeMode="cover" accessibilityLabel={`${name}'s profile photo`} onError={() => setFailedUri(photoUri)} />;
   }
 

@@ -3,7 +3,7 @@ export type PostingMode = 'job' | 'service';
 export const POSTING_CONFIG = {
   job: {
     role: 'homeowner', title: 'Post a Job', submitLabel: 'Post Job', successTitle: 'Job posted!',
-    dailyDefault: '800', monthlyDefault: '8000', defaultService: 'Household Help',
+    defaultService: 'Household Help',
     roleWord: 'role', questionSuffix: 'do you need?', rateHeading: 'offer rate', postHeading: 'job post',
     addressLabel: 'JOB ADDRESS', instructionsLabel: 'SPECIFIC INSTRUCTIONS ABOUT ROLE (OPTIONAL)',
     instructionsPlaceholder: 'e.g. Must be comfortable with large dogs, gentle with infants, or experienced with laundry care.',
@@ -18,7 +18,7 @@ export const POSTING_CONFIG = {
   },
   service: {
     role: 'kasambahay', title: 'Post a Service', submitLabel: 'Post Service', successTitle: 'Service posted!',
-    dailyDefault: '600', monthlyDefault: '6500', defaultService: 'Household Service',
+    defaultService: 'Household Service',
     roleWord: 'service', questionSuffix: 'do you offer?', rateHeading: 'expected rate', postHeading: 'service post',
     addressLabel: 'SERVICE ADDRESS', instructionsLabel: 'SPECIFIC INSTRUCTIONS / SKILLS (OPTIONAL)',
     instructionsPlaceholder: 'e.g. 5+ years experience in housekeeping, gentle with kids, pet-friendly and trustworthy.',
@@ -33,22 +33,13 @@ export const POSTING_CONFIG = {
   },
 } as const;
 
-export function engagementRate(mode: PostingMode, currentRate: string, type: 'short' | 'long'): string {
-  const config = POSTING_CONFIG[mode];
-  const dailyDefaults = mode === 'job' ? ['800', '1500'] : ['500', '600', '800'];
-  const monthlyDefaults = mode === 'job' ? ['8000'] : ['6500', '8000'];
-  if (type === 'long' && dailyDefaults.includes(currentRate)) return config.monthlyDefault;
-  if (type === 'short' && monthlyDefaults.includes(currentRate)) return config.dailyDefault;
-  return currentRate;
-}
-
 export function buildPostLocation(input: {
   street?: string | null;
   floorUnit?: string | null;
   barangay?: string | null;
   city?: string | null;
   zipcode?: string | null;
-}, fallback = 'Cagayan de Oro'): string {
+}, fallback = 'Location not provided'): string {
   const street = input.street?.trim();
   const floorUnit = input.floorUnit?.trim();
   const barangay = input.barangay?.trim();

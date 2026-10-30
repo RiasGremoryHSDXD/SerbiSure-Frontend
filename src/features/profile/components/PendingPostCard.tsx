@@ -1,3 +1,4 @@
+import { formatRate } from '../../../shared/utils/rate';
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { workSetupLabel } from '../../bookings/workSetup';
 import React from 'react';
@@ -131,7 +132,7 @@ export function PendingPostCard({
         </View>
       </View>
       <View style={styles.pendingPostRateRow}>
-        <Text style={styles.pendingPostRate}>₱{Number(post.rate_amount || 0).toLocaleString()}</Text>
+        <Text style={styles.pendingPostRate}>{uiText(formatRate(post.rate_amount))}</Text>
         <Text style={styles.pendingPostRateUnit}>
           {' '}
           {post.rate_needs_review ? '(unit needs confirmation)' : '/ ' + post.rate_period} ·{' '}

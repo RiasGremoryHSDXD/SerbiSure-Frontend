@@ -1,3 +1,5 @@
+import { formatRate } from '../../../shared/utils/rate';
+import { validRating } from '../../reviews/ratings';
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { realtime } from '../../../shared/realtime';
 import React, { useState, useEffect } from 'react';
@@ -166,7 +168,7 @@ export function ProposalsModal({
             </View> : null}
             <View style={styles.rateBanner}>
             <Text style={styles.rateBannerLabel}>{uiText("LISTED RATE")}</Text>
-            <Text style={styles.rateBannerVal}>₱{currentRate || '0.00'} / {ratePeriod}</Text>
+            <Text style={styles.rateBannerVal}>{uiText(formatRate(currentRate))} / {ratePeriod}</Text>
           </View>
 
           {/* Offer Form for Worker */}
@@ -236,8 +238,8 @@ export function ProposalsModal({
                       <View style={styles.roleRatingRow}>
                         <Text style={styles.proposerRole}>{item.proposer_role}</Text>
                         <View style={styles.ratingPill}>
-                          <Ionicons name="star" size={11} color="#FFB43B" />
-                          <Text style={styles.ratingText}>{item.proposer_rating}</Text>
+                          {validRating(item.proposer_rating) !== null && <Ionicons name="star" size={11} color="#FFB43B" />}
+                          <Text style={styles.ratingText}>{validRating(item.proposer_rating)?.toFixed(1) || uiText('New')}</Text>
                         </View>
                       </View>
                     </View>

@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { profileStyles as styles } from '../styles';
 import type { ProfileController } from '../hooks/useProfile';
 import { ProfileAvatar } from '../../../shared/ui/ProfileAvatar';
+import { validRating } from '../../reviews/ratings';
 
 export function ReviewsSection({
   profile,
@@ -18,7 +19,6 @@ export function ReviewsSection({
   const { tr: uiText, formatDate } = useUiLanguage();
   const {
     t,
-    copy,
     reviews,
     isReviewsExpanded,
     setIsReviewsExpanded,
@@ -73,12 +73,13 @@ export function ReviewsSection({
       {reviews.length > 0 ? (
         <View style={styles.reviewsList}>
           {visibleReviews.map((r, index) => {
-            const reviewerName = r.reviewer_name || uiText(copy.reviewer);
+            const rating = validRating(r.rating);
+            const reviewerName = r.reviewer_name || uiText('Reviewer');
             const sentimentColor = r.nlp_sentiment === 'Negative'
               ? '#BE123C'
               : r.nlp_sentiment === 'Neutral'
                 ? '#64748B'
-                : '#059669';
+                : r.nlp_sentiment === 'Positive' ? '#059669' : '#64748B';
 
             return (
               <View
@@ -99,15 +100,15 @@ export function ReviewsSection({
                         <View style={styles.sentimentInline}>
                           <View style={[styles.sentimentDot, { backgroundColor: sentimentColor }]} />
                           <Text style={[styles.sentimentInlineText, { color: sentimentColor }]}>
-                            {uiText(r.nlp_sentiment || 'Positive')}
+                          {uiText(r.nlp_sentiment || 'Not analyzed')}
                           </Text>
                         </View>
                       </View>
                     </View>
                   </View>
                   <View style={styles.reviewRatingTop}>
-                    <Ionicons name="star" size={16} color="#F2A66F" />
-                    <Text style={styles.reviewRatingValue}>{Number(r.rating || 5).toFixed(1)}</Text>
+                    {rating !== null && <Ionicons name="star" size={16} color="#F2A66F" />}
+                    <Text style={styles.reviewRatingValue}>{rating === null ? uiText('No rating provided') : rating.toFixed(1)}</Text>
                   </View>
                 </View>
                 <Text style={styles.reviewText}>{r.unstructured_feedback}</Text>

@@ -26,7 +26,7 @@ const SENTIMENT_COLORS = {
 export function ReviewModal({ visible, onClose, bookingId, revieweeName = 'Service Partner', token, onSuccess, isMandatory = false }: ReviewModalProps) {
   const { tr: uiText } = useUiLanguage();
   const insets = useSafeAreaInsets();
-  const [rating, setRating] = useState(5);
+  const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [stillWaiting, setStillWaiting] = useState(false);
@@ -46,7 +46,7 @@ export function ReviewModal({ visible, onClose, bookingId, revieweeName = 'Servi
     setAnalysisUnavailable(false);
     setSavedReview(null);
     setFeedback('');
-    setRating(5);
+    setRating(0);
     submission.current = null;
     return () => { session.current += 1; };
   }, [visible, bookingId]);
@@ -65,6 +65,10 @@ export function ReviewModal({ visible, onClose, bookingId, revieweeName = 'Servi
       return;
     }
     const trimmed = feedback.trim();
+    if (rating < 1 || rating > 5) {
+      setErrorMsg('Please select a star rating.');
+      return;
+    }
     if (trimmed.length < 10) {
       setErrorMsg('Please write at least 10 characters about your experience.');
       return;
@@ -125,7 +129,7 @@ export function ReviewModal({ visible, onClose, bookingId, revieweeName = 'Servi
                 </Pressable>
               ))}
             </View>
-            <Text style={styles.ratingScoreText}>{rating}.0 — {uiText(RATING_LABELS[rating] || '')}</Text>
+            <Text style={styles.ratingScoreText}>{rating ? `${rating}.0 — ${uiText(RATING_LABELS[rating] || '')}` : uiText('Select a star rating')}</Text>
             <Text style={styles.revieweeText}>{uiText("Your star rating is separate from feedback sentiment.")}</Text>
           </View>
           <View style={styles.inputCard}>
