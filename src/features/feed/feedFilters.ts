@@ -1,9 +1,11 @@
 export const HOME_FEED_CATEGORIES = [
-  { key: null, label: 'All', icon: 'view-grid-outline', matchKeys: [] },
-  { key: 'Child Care', label: 'Child Care', icon: 'face-woman-outline', matchKeys: ['child care', 'babysitter', 'baby sitter', 'nanny'] },
-  { key: 'Cooking', label: 'Cooking', icon: 'silverware-fork-knife', matchKeys: ['cooking', 'cook', 'chef', 'kitchen'] },
-  { key: 'Cleaning', label: 'Cleaning', icon: 'broom', matchKeys: ['cleaning', 'cleaner', 'clean', 'housekeeping', 'maid'] },
-  { key: 'Laundry', label: 'Laundry', icon: 'washing-machine', matchKeys: ['laundry', 'wash', 'labada', 'ironing'] },
+  { key: null, label: 'All', icon: 'grid-outline', matchKeys: [] },
+  { key: 'Cleaning', label: 'Cleaning', icon: 'sparkles-outline', matchKeys: ['cleaning', 'cleaner', 'clean', 'housekeeping', 'maid'] },
+  { key: 'Child Care', label: 'Child Care', icon: 'happy-outline', matchKeys: ['child care', 'babysitter', 'baby sitter', 'nanny'] },
+  { key: 'Cooking', label: 'Cooking', icon: 'restaurant-outline', matchKeys: ['cooking', 'cook', 'chef', 'kitchen'] },
+  { key: 'Caregiver', label: 'Caregiver', icon: 'heart-outline', matchKeys: ['caregiver', 'caregiving', 'elderly care', 'elder care', 'senior', 'special needs'] },
+  { key: 'Laundry', label: 'Laundry', icon: 'shirt-outline', matchKeys: ['laundry', 'wash', 'labada', 'ironing'] },
+  { key: 'All-around', label: 'All-around', icon: 'home-outline', matchKeys: ['all around', 'all-around', 'general'] },
 ] as const;
 
 export type HomeFeedCategory = Exclude<typeof HOME_FEED_CATEGORIES[number]['key'], null>;

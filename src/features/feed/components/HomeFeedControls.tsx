@@ -1,7 +1,7 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useEffect, useRef } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { SearchIcon } from '../../../shared/components/icons/LucideIcons';
 import THEME from '../../../shared/theme/theme';
 import { useLanguage } from '../../../shared/localization/LanguageContext';
@@ -53,7 +53,7 @@ export function HomeFeedFilters({ placeholder, searchQuery, selectedCategory, on
               onPress={() => onCategoryChange(isSelected ? null : category.key)}
               style={[styles.chip, isSelected && styles.chipSelected]}
             >
-              <MaterialCommunityIcons name={category.icon} size={18} color={THEME.colors.ink} />
+              <Ionicons name={category.icon} size={18} color={THEME.colors.ink} />
               <Text style={[styles.chipLabel, isSelected && styles.chipLabelSelected]}>{uiText(category.label)}</Text>
             </Pressable>
           );
