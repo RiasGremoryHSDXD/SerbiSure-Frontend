@@ -6,7 +6,7 @@ import { useLanguage } from '../../../shared/localization/LanguageContext';
 import { useUser } from '../../auth/session/UserContext';
 import { fetchReceivedReviews, fetchReviewSummary, ReviewItem, ReviewSummaryData } from '../../reviews/api/reviewApi';
 import { fetchUserAbout, fetchUserTags, updateUserTags, fetchContactPrivacy, updateContactPrivacy, fetchUserSocialLinks, type SocialLinkItem } from '../api/accountApi';
-import { fetchVerificationStatus, type VerificationStatusResponse } from '../../verification/api/verificationApi';
+import type { VerificationStatusResponse } from '../../verification/api/verificationApi';
 import { fetchNotifications } from '../../notifications/api/notificationsApi';
 
 import { BookingItem, fetchMyBookings } from '../../bookings/api/bookingApi';
@@ -19,7 +19,7 @@ import { useWorkerProfile } from '../worker/useWorkerProfile';
 export function useProfile({ role: requestedRole, avatarUri, initialView = 'main', onViewChange, onUpdateAvatar, onBack, onLogout, onBookingsPress }: ProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const { language, setLanguage, t, tr } = useLanguage();
-  const { getFullName, getFirstNameOnly, user, updateUser } = useUser();
+  const { getFullName, getFirstNameOnly, user, updateUser, refreshUserProfile } = useUser();
   const role = requestedRole || resolveRole(user.accountType);
   const isWorker = ROLE_CONFIG[role].workerProfile;
   const requiredDocuments = ROLE_CONFIG[role].requiredDocuments;
@@ -121,11 +121,8 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
       promises.push(refreshWorkerProfile());
       if (user.token) {
         promises.push(
-          fetchVerificationStatus(user.token).then((data) => {
-            setVerificationData(data);
-            if (data?.overall_status) {
-              updateUser({ verificationStatus: data.overall_status });
-            }
+          refreshUserProfile().then((data) => {
+            if (data) setVerificationData(data);
           }).catch(() => { })
         );
         promises.push(
@@ -182,23 +179,9 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
   const loadVerificationStatus = () => {
     if (user.token) {
       setIsLoadingVerification(true);
-      fetchVerificationStatus(user.token)
+      refreshUserProfile()
         .then((data) => {
-          setVerificationData(data);
-          if (data) {
-            let derivedStatus = data.overall_status;
-            if (data.documents && data.documents.length > 0) {
-              const verifiedTypes = new Set(
-                data.documents.filter((d) => d.verification_status === 'Verified').map((d) => d.document_type)
-              );
-              if (requiredDocuments.every((type) => verifiedTypes.has(type))) {
-                derivedStatus = 'Verified';
-              }
-            }
-            if (derivedStatus) {
-              updateUser({ verificationStatus: derivedStatus });
-            }
-          }
+          if (data) setVerificationData(data);
         })
         .catch((err) => console.warn('[KasambahayProfile] verification status error:', err))
         .finally(() => setIsLoadingVerification(false));

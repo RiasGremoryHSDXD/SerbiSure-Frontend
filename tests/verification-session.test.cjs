@@ -37,7 +37,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 const tick = async () => { await new Promise(resolve => setImmediate(resolve)); renderer.flushPassiveEffects(); };
 const jwt = (role, status, version = 1, id = role) => `header.${Buffer.from(JSON.stringify({ user_id: id, account_type: role, verification_status: status, version })).toString('base64url')}.signature`;
 const content = node => node.text || node.children.map(content).join('');
-function screen(t, role) {
+function screen(t, role, withProfile = false) {
   const requests = [], alerts = [], submissions = [], listeners = new Set();
   const native = { StyleSheet: { create: value => value }, Platform: { OS: 'android' }, Alert: { alert: (...args) => alerts.push(args) },
     AppState: { addEventListener: (_event, callback) => { listeners.add(callback); return { remove: () => listeners.delete(callback) }; } } };
@@ -47,7 +47,23 @@ function screen(t, role) {
     'react-native': native, '../../bookings/store/savedJobsStore': { savedJobsStore: { initForUser() {}, clearStore() {} } },
     '../../verification/api/verificationApi': { fetchVerificationStatus: token => { const request = { ...deferred(), token }; requests.push(request); return request.promise; } },
   });
-  let session;
+  let session, profile;
+  const useProfile = withProfile ? load('src/features/profile/hooks/useProfile.ts', {
+    'react-native': native,
+    'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
+    '../../../shared/localization/LanguageContext': { useLanguage: () => ({ tr: text => text }) },
+    '../../auth/session/UserContext': context,
+    '../../../app/roleConfig': load('src/app/roleConfig.ts'),
+    '../profileConfig': { localizeProfileCopy: () => ({}) },
+    '../worker/useWorkerProfile': { useWorkerProfile: () => ({ refreshWorkerProfile: async () => {} }) },
+    '../../reviews/api/reviewApi': { fetchReceivedReviews: async () => [], fetchReviewSummary: async () => null },
+    '../api/accountApi': {
+      fetchUserAbout: async () => '', fetchUserTags: async () => [], fetchContactPrivacy: async () => false,
+      fetchUserSocialLinks: async () => ({ social_links: [] }),
+    },
+    '../../notifications/api/notificationsApi': { fetchNotifications: async () => ({ unread_count: 0 }) },
+    '../../bookings/api/bookingApi': { fetchMyBookings: async () => [] },
+  }).useProfile : null;
   const post = { booking_id: 'post', rate_amount: '800', rate_period: 'day', viewer_proposal: null };
   const { PublicPostsSection } = load('src/features/profile/components/PublicPostsSection.tsx', {
     'react-native': native, 'react-native-safe-area-context': { useSafeAreaInsets: () => ({ bottom: 0 }) }, '@expo/vector-icons': { Ionicons: 'Icon' },
@@ -57,6 +73,10 @@ function screen(t, role) {
   });
   function Entry() {
     session = context.useUser();
+    if (useProfile) {
+      profile = useProfile({});
+      return React.createElement('Text', {}, profile.getFullName());
+    }
     return React.createElement(PublicPostsSection, { posts: [post], loading: false, error: null, token: session.user.token,
       ownerId: 'other', ownerRole: role === 'Homeowner' ? 'Kasambahay' : 'Homeowner', onRefresh() {}, onSubmitted() {} });
   }
@@ -71,8 +91,65 @@ function screen(t, role) {
   return { render, unmount, act, nodes, press, requests, alerts, submissions,
     apply: () => press(role === 'Homeowner' ? 'Offer to Hire' : 'Apply'),
     foreground: () => act(() => listeners.forEach(callback => callback('active'))),
-    get context() { return session; }, get listenerCount() { return listeners.size; } };
+    get context() { return session; }, get profile() { return profile; }, get listenerCount() { return listeners.size; } };
 }
+
+const namedJwt = (role, version = 1) => `header.${Buffer.from(JSON.stringify({
+  user_id: role, account_type: role, verification_status: 'Verified', version,
+  first_name: 'Jerry', middle_name: 'Testing', last_name: 'Doloriel', date_of_birth: '1988-06-22',
+})).toString('base64url')}.signature`;
+
+for (const role of ['Homeowner', 'Kasambahay']) {
+  test(`${role}: pull-to-refresh updates the displayed name and birthdate without logging out`, async t => {
+    const app = screen(t, role, true);
+    app.render(namedJwt(role));
+    assert.equal(app.context.getFullName(), 'Jerry Testing Doloriel');
+    assert.equal(app.requests.length, 1, 'Profile shares the startup request');
+    app.requests[0].resolve({ overall_status: 'Verified', user_info: {
+      first_name: 'Jerry', middle_name: 'Testing', last_name: 'Doloriel', date_of_birth: '1988-06-22',
+    } }); await tick();
+
+    const refresh = app.profile.handleRefresh();
+    assert.equal(app.requests.length, 2);
+    app.requests[1].resolve({ overall_status: 'Verified', user_info: {
+      first_name: 'Jeremiah', middle_name: '123', last_name: 'Doloriel', date_of_birth: '1988-06-23',
+    } });
+    await refresh; await tick();
+    assert.equal(content(app.nodes().find(node => node.type === 'Text')), 'Jeremiah 123 Doloriel');
+    assert.equal(app.context.user.dateOfBirth, '1988-06-23');
+    assert.equal(app.profile.isRefreshing, false);
+
+    app.render(namedJwt(role, 2));
+    assert.equal(app.context.getFullName(), 'Jeremiah 123 Doloriel', 'Token renewal cannot restore stale login names');
+    assert.equal(app.context.user.dateOfBirth, '1988-06-23');
+    app.requests[2].reject(new Error('offline')); await tick();
+    assert.equal(app.context.getFullName(), 'Jeremiah 123 Doloriel');
+
+    app.foreground();
+    app.requests[3].resolve({ overall_status: 'Verified', user_info: {
+      first_name: 'Jeremiah', middle_name: null, last_name: 'Doloriel', date_of_birth: null,
+    } }); await tick();
+    assert.equal(app.context.getFullName(), 'Jeremiah Doloriel');
+    assert.equal(app.context.user.dateOfBirth, undefined);
+
+    app.foreground();
+    app.requests[4].resolve({ overall_status: 'Verified' }); await tick();
+    assert.equal(app.context.getFullName(), 'Jeremiah Doloriel', 'Missing identity data preserves the current name');
+  });
+}
+
+test('late identity refresh cannot restore the old account after switching accounts or logging out', async t => {
+  const app = screen(t, 'Homeowner', true);
+  app.render(namedJwt('Homeowner'));
+  app.render(jwt('Homeowner', 'Pending', 1, 'another-owner'));
+  app.requests[0].resolve({ overall_status: 'Verified', user_info: { first_name: 'Old account' } }); await tick();
+  assert.equal(app.context.user.id, 'another-owner');
+  assert.equal(app.context.user.firstName, '');
+  app.render(null);
+  app.requests[1].resolve({ overall_status: 'Verified', user_info: { first_name: 'Logged out account' } }); await tick();
+  assert.equal(app.context.user.token, null);
+  assert.equal(app.context.user.firstName, '');
+});
 
 for (const role of ['Homeowner', 'Kasambahay']) {
   test(`${role}: fresh login keeps the token verification claim and immediate action waits for the live status`, async t => {

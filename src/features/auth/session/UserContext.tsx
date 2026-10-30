@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { AppState } from 'react-native';
 import { savedJobsStore } from '../../bookings/store/savedJobsStore';
-import { fetchVerificationStatus } from '../../verification/api/verificationApi';
+import { fetchVerificationStatus, type VerificationStatusResponse } from '../../verification/api/verificationApi';
 
 type UserData = {
   id?: string;
@@ -40,6 +40,7 @@ type UserContextType = {
   user: UserData;
   setUser: React.Dispatch<React.SetStateAction<UserData>>;
   updateUser: (data: Partial<UserData>) => void;
+  refreshUserProfile: () => Promise<VerificationStatusResponse | null>;
   refreshVerificationStatus: () => Promise<string | null>;
   getFirstNameOnly: () => string;
   getFullName: () => string;
@@ -104,23 +105,36 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
   }, [token]);
   const activeSession = useRef<typeof session | null>(session);
   activeSession.current = session;
-  const verificationRequest = useRef<{ session: typeof session; promise: Promise<string | null> } | null>(null);
+  const verificationRequest = useRef<{ session: typeof session; promise: Promise<VerificationStatusResponse | null> } | null>(null);
 
-  const refreshVerificationStatus = useCallback((): Promise<string | null> => {
+  const refreshUserProfile = useCallback((): Promise<VerificationStatusResponse | null> => {
     if (!session.token || !session.userId || activeSession.current !== session) return Promise.resolve(null);
     if (verificationRequest.current?.session === session) return verificationRequest.current.promise;
     const promise = fetchVerificationStatus(session.token).then(data => {
       if (activeSession.current !== session) return null;
       const status = data?.overall_status;
       if (!['Verified', 'Pending', 'Rejected', 'Unverified'].includes(status)) return null;
-      setUser(previous => previous.id === session.userId ? { ...previous, verificationStatus: status } : previous);
-      return status;
+      const info = data.user_info;
+      setUser(previous => previous.id === session.userId ? {
+        ...previous,
+        verificationStatus: status,
+        ...(info?.first_name !== undefined ? { firstName: info.first_name ?? '' } : {}),
+        ...(info?.middle_name !== undefined ? { middleName: info.middle_name ?? '' } : {}),
+        ...(info?.last_name !== undefined ? { lastName: info.last_name ?? '' } : {}),
+        ...(info?.date_of_birth !== undefined ? { dateOfBirth: info.date_of_birth || undefined } : {}),
+      } : previous);
+      return data;
     }).catch(() => null).finally(() => {
       if (verificationRequest.current?.session === session) verificationRequest.current = null;
     });
     verificationRequest.current = { session, promise };
     return promise;
   }, [session]);
+
+  const refreshVerificationStatus = useCallback(async (): Promise<string | null> => {
+    const data = await refreshUserProfile();
+    return data?.overall_status ?? null;
+  }, [refreshUserProfile]);
 
   useEffect(() => {
     if (token) {
@@ -131,9 +145,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
         setUser((previous) => ({
           id: userId,
           token: token,
-          firstName: decoded.first_name || '',
-          middleName: decoded.middle_name || '',
-          lastName: decoded.last_name || '',
+          firstName: previous.id === userId ? previous.firstName : decoded.first_name || '',
+          middleName: previous.id === userId ? previous.middleName : decoded.middle_name || '',
+          lastName: previous.id === userId ? previous.lastName : decoded.last_name || '',
           email: decoded.email || '',
           contactNumber: decoded.contact_number || '',
           showContactNumber: decoded.show_contact_number ?? false,
@@ -149,7 +163,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
           street: decoded.street || '',
           zipcode: decoded.zipcode || '',
           country: decoded.country || 'Philippines',
-          dateOfBirth: decoded.date_of_birth || undefined,
+          dateOfBirth: previous.id === userId ? previous.dateOfBirth : decoded.date_of_birth || undefined,
           gender: decoded.gender || undefined,
           nationality: decoded.nationality || 'Filipino',
           religion: decoded.religion || undefined,
@@ -209,7 +223,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
   };
 
   return (
-    <UserContext.Provider value={{ user, setUser, updateUser, refreshVerificationStatus, getFirstNameOnly, getFullName }}>
+    <UserContext.Provider value={{ user, setUser, updateUser, refreshUserProfile, refreshVerificationStatus, getFirstNameOnly, getFullName }}>
       {children}
     </UserContext.Provider>
   );
