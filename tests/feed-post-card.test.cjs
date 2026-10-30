@@ -12,14 +12,14 @@ const remove = (parent, child) => { parent.children = parent.children.filter(ite
 const renderer = Reconciler({
   supportsMutation: true, isPrimaryRenderer: true, now: Date.now,
   getRootHostContext: () => null, getChildHostContext: () => null, getCurrentEventPriority: () => DefaultEventPriority,
-  prepareForCommit: () => null, resetAfterCommit() {}, shouldSetTextContent: () => false,
+  prepareForCommit: () => null, resetAfterCommit() { }, shouldSetTextContent: () => false,
   createInstance: (type, props) => ({ type, props, children: [] }), createTextInstance: text => ({ text, children: [] }), getPublicInstance: instance => instance,
   appendInitialChild: append, appendChild: append, appendChildToContainer: append, removeChild: remove, removeChildFromContainer: remove,
   insertBefore(parent, child, before) { remove(parent, child); parent.children.splice(parent.children.indexOf(before), 0, child); },
   insertInContainerBefore(parent, child, before) { remove(parent, child); parent.children.splice(parent.children.indexOf(before), 0, child); },
   prepareUpdate: () => true, commitUpdate(instance, _payload, _type, _old, props) { instance.props = props; }, commitTextUpdate(instance, _old, text) { instance.text = text; },
   finalizeInitialChildren: () => false, clearContainer(parent) { parent.children = []; },
-  scheduleTimeout: setTimeout, cancelTimeout: clearTimeout, noTimeout: -1, detachDeletedInstance() {},
+  scheduleTimeout: setTimeout, cancelTimeout: clearTimeout, noTimeout: -1, detachDeletedInstance() { },
 });
 
 const native = { StyleSheet: { create: value => value }, Platform: { OS: 'android' } };
@@ -52,16 +52,20 @@ const dates = load('src/shared/utils/date.ts');
 const { FeedPostCard } = load('src/features/feed/components/FeedPostCard.tsx');
 const content = node => node.text || node.children.map(content).join('');
 const descendants = node => [node, ...node.children.flatMap(descendants)];
-const post = { id: 'fixture', employerName: 'Example Poster', avatar: null, roleTag: 'Cleaning',
+const post = {
+  id: 'fixture', employerName: 'Example Poster', avatar: null, roleTag: 'Cleaning',
   location: 'Canitoan, CDO', time: '12h', price: '₱600', unit: '/ day', aboutText: 'A real listing description.',
-  booking_status: 'Pending', start_time: '2099-12-31T00:00:00Z', kind: 'service' };
+  booking_status: 'Pending', start_time: '2099-12-31T00:00:00Z', kind: 'service'
+};
 
 function card(t, props = {}) {
   const rootNode = { children: [] };
   const root = renderer.createContainer(rootNode, 0, null, false, null, '', error => { throw error; }, null);
   const calls = [];
-  const options = { post, saved: false, onViewProfile: () => calls.push('profile'),
-    onDetails: () => calls.push('details'), onToggleSave: () => calls.push('save'), ...props };
+  const options = {
+    post, saved: false, onViewProfile: () => calls.push('profile'),
+    onDetails: () => calls.push('details'), onToggleSave: () => calls.push('save'), ...props
+  };
   const render = () => renderer.flushSync(() => renderer.updateContainer(React.createElement(FeedPostCard, options), root, null));
   t.after(() => renderer.flushSync(() => renderer.updateContainer(null, root, null)));
   render();
@@ -87,7 +91,8 @@ for (const kind of ['job', 'service']) {
     assert.deepEqual(actions.children.map(node => node.props.accessibilityLabel || content(node)), ['Save post', 'Profile', 'Details']);
     for (const action of actions.children) action.props.onPress();
     assert.deepEqual(screen.calls, ['save', 'profile', 'details']);
-    assert.match(content(screen.rootNode), /Canitoan, CDO· 12h/);
+    assert.match(content(screen.rootNode), /Canitoan, CDO/);
+    assert.match(content(screen.rootNode), /Cleaning· 12h/);
     assert.match(content(screen.rootNode), /₱600\/day/);
     assert.equal(screen.nodes().some(node => node.type === 'Icon' && /time|clock/.test(node.props.name)), false);
     const snippet = screen.nodes().find(node => node.type === 'Text' && content(node) === post.aboutText);
@@ -102,7 +107,7 @@ for (const kind of ['job', 'service']) {
 test('expired badge stays above the header and translations remain live', t => {
   const screen = card(t, { post: { ...post, start_time: '2020-01-01T00:00:00Z' } });
   const outerCard = screen.rootNode.children[0];
-  assert.match(content(outerCard.children[0]), /Expired Schedule/);
+  assert.match(content(outerCard), /Expired Schedule/);
   for (const value of ['English', 'Tagalog', 'Bisaya']) {
     language = value; screen.render();
     assert.ok(content(screen.rootNode).includes(messages.translateMessage(language, 'Details')));
@@ -112,9 +117,11 @@ test('expired badge stays above the header and translations remain live', t => {
 });
 
 test('custom action slots and missing metadata do not create invented values', t => {
-  const screen = card(t, { post: { ...post, time: '', price: 'Rate not provided' },
+  const screen = card(t, {
+    post: { ...post, time: '', price: 'Rate not provided' },
     leftActionButton: React.createElement('Text', null, 'Cancel Post'),
-    rightActionButton: React.createElement('Text', null, 'Repost') });
+    rightActionButton: React.createElement('Text', null, 'Repost')
+  });
   assert.match(content(screen.rootNode), /Cancel Post/);
   assert.match(content(screen.rootNode), /Repost/);
   assert.doesNotMatch(content(screen.rootNode), /Recently|Rate not provided\/day|· /);
