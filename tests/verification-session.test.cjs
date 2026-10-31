@@ -88,7 +88,7 @@ function screen(t, role, withProfile = false) {
   const unmount = () => { act(() => renderer.updateContainer(null, root, null)); renderer.flushPassiveEffects(); };
   t.after(unmount);
   const nodes = () => { const result = []; const visit = node => { result.push(node); node.children.forEach(visit); }; visit(container); return result; };
-  const press = label => act(() => nodes().find(node => node.type === 'Pressable' && content(node) === label).props.onPress());
+  const press = label => act(() => nodes().find(node => node.type === 'Pressable' && (node.props.accessibilityLabel === label || content(node) === label)).props.onPress());
   return { render, unmount, act, nodes, press, requests, alerts, submissions,
     apply: () => press(role === 'Homeowner' ? 'Offer to Hire' : 'Apply'),
     foreground: () => act(() => listeners.forEach(callback => callback('active'))),

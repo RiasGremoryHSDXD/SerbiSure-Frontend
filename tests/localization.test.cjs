@@ -77,20 +77,20 @@ test('job and service feed cards share the full layout, actions and live transla
     for (const language of ['English', 'Tagalog', 'Bisaya']) {
       renderer.flushSync(() => changeLanguage(language));
       const text = content(container);
-      for (const source of ['Profile', 'Details']) assert.ok(text.includes(translateMessage(language, source)), `${kind}: ${language}: ${source}`);
-      for (const value of ['Poster Name', 'Agusan, Cagayan de Oro', '₱8000', 'Original listing description.']) assert.ok(text.includes(value));
+      for (const source of ['Profile', 'Details']) assert.ok(nodes().some(node => node.props?.accessibilityLabel === translateMessage(language, source)), `${kind}: ${language}: ${source}`);
+      for (const value of ['Poster Name', 'Agusan, Cagayan de Oro', '₱ 8,000.00', 'Original listing description.']) assert.ok(text.includes(value));
     }
     renderer.flushSync(() => changeLanguage('English'));
     const layout = nodes().map(node => node.type || node.text);
     if (kind === 'service') serviceLayout = layout;
     else assert.deepEqual(layout, serviceLayout);
-    const press = label => nodes().find(node => node.type === 'Pressable' && content(node) === label).props.onPress();
+    const press = label => nodes().find(node => node.type === 'Pressable' && node.props.accessibilityLabel === label).props.onPress();
     press('Profile'); press('Details');
     nodes().find(node => node.type === 'Pressable' && node.children.some(child => child.type === 'Icon' && child.props.name === 'bookmark-outline')).props.onPress();
   }
   assert.deepEqual(calls, ['profile', 'details', 'save', 'profile', 'details', 'save']);
   show('job', true, true);
-  assert.ok(content(container).includes('Applied'));
+  assert.ok(nodes().some(node => node.type === 'Pressable' && node.props.accessibilityLabel === 'Details' && node.children.some(child => child.type === 'Icon' && child.props.name === 'checkmark-circle')));
   assert.ok(nodes().some(node => node.type === 'Icon' && node.props.name === 'bookmark'));
 });
 

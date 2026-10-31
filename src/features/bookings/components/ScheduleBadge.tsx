@@ -21,7 +21,7 @@ export function ScheduleBadge({
   if (!isScheduleExpired(post, now)) return null;
   return (
     <Text style={[styles.expiredText, style]}>
-      {prefix ? `${prefix} ` : ''}{tr('Expired Schedule')}
+      {prefix ? `${prefix} ` : ''}{tr('Expired')}
     </Text>
   );
 }

@@ -175,6 +175,11 @@ export function PublicPostsSection({
           {posts.map((post) => {
             const status = post.viewer_proposal?.status;
             const pending = status === 'Pending' || status === 'Accepted';
+            const actionLabel = pending ? status === 'Accepted' ? 'Accepted' : isJob ? 'Application Sent' : 'Offer Sent'
+              : !isJob && onMessage ? 'Message Now' : action;
+            const actionIcon = pending ? 'checkmark-circle'
+              : !isJob && onMessage ? 'chatbubble-outline' : 'paper-plane-outline';
+            const actionDisabled = pending || checkingPostId !== null;
             const note =
               status === 'Pending'
                 ? isJob
@@ -201,15 +206,16 @@ export function PublicPostsSection({
                 {canRespond && token ? (
                   <Pressable
                     accessibilityRole="button"
+                    accessibilityLabel={uiText(actionLabel)}
+                    accessibilityState={{ disabled: actionDisabled, busy: checkingPostId === post.booking_id }}
+                    hitSlop={6}
                     style={{
-                      backgroundColor: isJob && pending ? '#F3F4F6' : '#ECECEC',
-                      borderRadius: 10,
-                      minHeight: 36,
-                      paddingHorizontal: 16,
+                      width: 36,
+                      height: 36,
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
-                    disabled={!isJob && onMessage ? false : isJob && onApplyJob ? false : pending || checkingPostId !== null}
+                    disabled={actionDisabled}
                     onPress={() => {
                       if (!isJob && onMessage) {
                         onMessage(post);
@@ -223,23 +229,8 @@ export function PublicPostsSection({
                     {checkingPostId === post.booking_id ? (
                       <ActivityIndicator color="#0D0D11" />
                     ) : (
-                      <Text
-                        style={{
-                          color: '#0D0D11',
-                          fontWeight: '700',
-                          fontSize: 13,
-                        }}
-                      >
-                        {!isJob && onMessage
-                          ? uiText('Message Now')
-                          : pending
-                          ? status === 'Accepted'
-                            ? uiText('Accepted')
-                            : isJob
-                            ? uiText('Application Sent')
-                            : uiText('Offer Sent')
-                          : action}
-                      </Text>
+                      <Ionicons name={actionIcon} size={pending ? 20 : 18}
+                        color={pending ? '#10B981' : '#0D0D11'} accessible={false} />
                     )}
                   </Pressable>
                 ) : null}

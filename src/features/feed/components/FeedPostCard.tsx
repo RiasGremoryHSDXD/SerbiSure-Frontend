@@ -31,7 +31,12 @@ export function FeedPostCard({
 }: Readonly<FeedPostCardProps>): React.JSX.Element {
   const { tr: uiText } = useUiLanguage();
   const unit = (post.unit || '').replace(/^(?:\/|per\s+)\s*/i, '').trim();
-  const hasPrice = /^(?:₱|PHP?\s*)\d/i.test(post.price || '');
+  const priceMatch = String(post.price || '').trim().match(/^(?:₱|PHP?)\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)$/i);
+  const amount = Number(priceMatch?.[1]?.replace(/,/g, ''));
+  const formattedPrice = priceMatch && Number.isFinite(amount)
+    ? amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : null;
+  const [whole, decimals] = formattedPrice?.split('.') || [];
 
   return (
     <View style={styles.workerCard}>
@@ -41,7 +46,7 @@ export function FeedPostCard({
           disabled={!onViewProfile}
           accessibilityRole="button"
           accessibilityLabel={uiText('Profile')}
-          hitSlop={4}
+          hitSlop={6}
         >
           <ProfileAvatar uri={post.avatar} name={post.employerName} size={50} />
         </Pressable>
@@ -50,20 +55,18 @@ export function FeedPostCard({
             <Text style={styles.workerName} numberOfLines={1} ellipsizeMode="tail">
               {post.employerName}
             </Text>
-            <Text
-              style={styles.rateAmount}
-              numberOfLines={unit === 'month' ? 2 : 1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.75}
-            >
-              {post.price}
-              {unit && hasPrice ? (
-                <Text style={styles.rateUnit}>
-                  {unit === 'month' ? '\n/' : '/'}
-                  {uiText(unit)}
+            {formattedPrice ? (
+              <View style={styles.rateGroup} accessible accessibilityLabel={`₱ ${formattedPrice}${unit ? `/${uiText(unit)}` : ''}`}>
+                <Text style={styles.rateMainNumber} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                  ₱ {whole}
                 </Text>
-              ) : null}
-            </Text>
+                <Text style={styles.rateDecimalsAndUnit} numberOfLines={1}>
+                  .{decimals}{unit ? `/${uiText(unit)}` : ''}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.rateAmount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{post.price}</Text>
+            )}
           </View>
           <View style={styles.roleRow}>
             <Text style={styles.serviceText}>{uiText(post.roleTag)}</Text>
@@ -100,13 +103,14 @@ export function FeedPostCard({
             accessibilityState={{ selected: saved, disabled: !onToggleSave }}
             disabled={!onToggleSave}
             onPress={onToggleSave}
-            hitSlop={4}
+            hitSlop={6}
             style={({ pressed }) => [styles.bookmarkBtn, pressed && styles.actionPressed]}
           >
             <Ionicons
               name={saved ? 'bookmark' : 'bookmark-outline'}
               size={22}
               color={saved ? '#FFA135' : '#4B5563'}
+              accessible={false}
             />
           </Pressable>
           {leftActionButton !== undefined ? (
@@ -114,11 +118,14 @@ export function FeedPostCard({
           ) : (
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel={uiText('Profile')}
+              accessibilityState={{ disabled: !onViewProfile }}
               disabled={!onViewProfile}
               onPress={onViewProfile}
+              hitSlop={6}
               style={({ pressed }) => [styles.viewProfileBtn, pressed && styles.actionPressed]}
             >
-              <Text style={styles.viewProfileText}>{uiText('Profile')}</Text>
+              <Ionicons name="person-outline" size={20} color="#4B5563" accessible={false} />
             </Pressable>
           )}
           {rightActionButton !== undefined ? (
@@ -126,13 +133,14 @@ export function FeedPostCard({
           ) : (
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel={uiText('Details')}
+              accessibilityState={{ disabled: !onDetails }}
               disabled={!onDetails}
               onPress={onDetails}
+              hitSlop={6}
               style={({ pressed }) => [styles.seeDetailsBtn, pressed && styles.actionPressed]}
             >
-              <Text style={styles.seeDetailsBtnText}>
-                {uiText(applied ? 'Applied' : 'Details')}
-              </Text>
+              <Ionicons name={applied ? 'checkmark-circle' : 'eye-outline'} size={20} color={applied ? '#10B981' : '#4B5563'} accessible={false} />
             </Pressable>
           )}
         </View>
@@ -178,18 +186,39 @@ const styles = StyleSheet.create({
     fontFamily: THEME.typography.fontFamily.display,
     color: THEME.colors.ink,
   },
+  rateGroup: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexShrink: 1,
+    maxWidth: '65%',
+    minHeight: 28,
+  },
   rateAmount: {
     flexShrink: 1,
-    maxWidth: '48%',
+    maxWidth: '65%',
     fontSize: 17,
-    lineHeight: 22,
+    lineHeight: 26,
+    includeFontPadding: true,
     textAlign: 'right',
     fontFamily: THEME.typography.fontFamily.secondaryBold,
     color: '#176B3A',
   },
-  rateUnit: {
-    fontSize: 12,
+  rateMainNumber: {
+    flexShrink: 1,
+    minWidth: 0,
+    fontSize: 17,
+    lineHeight: 26,
+    includeFontPadding: true,
+    fontFamily: THEME.typography.fontFamily.secondaryBold,
+    color: '#176B3A',
+  },
+  rateDecimalsAndUnit: {
+    flexShrink: 0,
+    fontSize: 11.5,
+    lineHeight: 20,
+    includeFontPadding: true,
     fontFamily: THEME.typography.fontFamily.secondaryMedium,
+    color: '#176B3A',
   },
   roleRow: {
     flexDirection: 'row',
@@ -239,7 +268,6 @@ const styles = StyleSheet.create({
   },
   cardActionsLeft: {
     justifyContent: 'center',
-    paddingRight: 8,
     flexShrink: 0,
   },
   cardActionsRight: {
@@ -250,34 +278,23 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
   },
   bookmarkBtn: {
-    width: 34,
+    flexShrink: 0,
+    width: 36,
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   viewProfileBtn: {
-    minHeight: 36,
-    paddingHorizontal: 10,
-    justifyContent: 'center',
-    borderRadius: 8,
-  },
-  viewProfileText: {
-    fontSize: 13,
-    color: '#4B5563',
-    fontFamily: THEME.typography.fontFamily.secondaryMedium,
-  },
-  seeDetailsBtn: {
-    minHeight: 36,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    backgroundColor: '#FFA135',
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  seeDetailsBtnText: {
-    fontSize: 13,
-    color: '#35220D',
-    fontFamily: THEME.typography.fontFamily.secondaryBold,
+  seeDetailsBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   actionPressed: {
     opacity: 0.75,

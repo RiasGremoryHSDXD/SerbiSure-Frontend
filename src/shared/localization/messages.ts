@@ -24,6 +24,7 @@ export const UI_MESSAGES = {
   'We received your renewed document. You can apply and post again once your required documents are approved and valid.': ['Natanggap namin ang bago mong dokumento. Makakapag-apply at makakapag-post ka muli kapag aprubado at balido na ang lahat ng kailangang dokumento.', 'Nadawat namo ang imong bag-ong dokumento. Maka-apply ug maka-post ka pag-usab kung aprobahan ug balido na ang tanan nimong gikinahanglang dokumento.'],
   'This document is already submitted. Please check its latest status before uploading again.': ['Naipasa na ang dokumentong ito. Tingnan muna ang pinakabagong katayuan nito bago mag-upload muli.', 'Napasa na kini nga dokumento. Susiha una ang pinakabag-ong kahimtang niini sa dili pa mag-upload pag-usab.'],
   'Profile': ['Profile', 'Profile'],
+  'Sent': ['Naipadala', 'Napadala'],
   'Details': ['Mga detalye', 'Mga detalye'],
   'Now': ['Ngayon', 'Karon'],
   'Verification check unavailable': ['Hindi masuri ang beripikasyon', 'Dili masusi ang beripikasyon'],

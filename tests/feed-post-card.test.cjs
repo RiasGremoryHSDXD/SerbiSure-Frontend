@@ -88,12 +88,21 @@ for (const kind of ['job', 'service']) {
     const actions = screen.nodes().filter(node => node.type === 'View').find(node =>
       node.children.some(child => child.props?.accessibilityLabel === 'Save post'));
     assert.ok(actions);
-    assert.deepEqual(actions.children.map(node => node.props.accessibilityLabel || content(node)), ['Save post', 'Profile', 'Details']);
-    for (const action of actions.children) action.props.onPress();
+    const buttons = descendants(actions).filter(node => node.type === 'Pressable');
+    assert.deepEqual(buttons.map(node => node.props.accessibilityLabel || content(node)), ['Save post', 'Profile', 'Details']);
+    assert.ok(descendants(buttons[1]).some(node => node.type === 'Icon' && node.props.name === 'person-outline' && node.props.size === 20));
+    assert.ok(buttons.every(button => content(button) === ''));
+    assert.ok(buttons.every(button => {
+      const style = button.props.style({ pressed: false })[0];
+      return style.width === 36 && style.height === 36 && !style.backgroundColor && !style.borderRadius;
+    }));
+    assert.ok(descendants(buttons[2]).some(node => node.type === 'Icon' && node.props.name === 'eye-outline'));
+    assert.ok(buttons.every(button => button.props.hitSlop === 6));
+    for (const action of buttons) action.props.onPress();
     assert.deepEqual(screen.calls, ['save', 'profile', 'details']);
     assert.match(content(screen.rootNode), /Canitoan, CDO/);
     assert.match(content(screen.rootNode), /Cleaning· 12h/);
-    assert.match(content(screen.rootNode), /₱600\/day/);
+    assert.match(content(screen.rootNode), /₱ 600\.00\/day/);
     assert.equal(screen.nodes().some(node => node.type === 'Icon' && /time|clock/.test(node.props.name)), false);
     const snippet = screen.nodes().find(node => node.type === 'Text' && content(node) === post.aboutText);
     assert.equal(snippet.props.numberOfLines, 2);
@@ -104,13 +113,18 @@ for (const kind of ['job', 'service']) {
   });
 }
 
-test('expired badge stays above the header and translations remain live', t => {
+test('expired notice shares the action row and translations remain live', t => {
   const screen = card(t, { post: { ...post, start_time: '2020-01-01T00:00:00Z' } });
   const outerCard = screen.rootNode.children[0];
-  assert.match(content(outerCard), /Expired Schedule/);
+  assert.match(content(outerCard), /Expired/);
+  const actions = outerCard.children.find(node => descendants(node).some(child => child.props?.accessibilityLabel === 'Save post'));
+  assert.equal(actions.children.length, 2);
+  assert.equal(content(actions.children[0]), 'Expired');
+  assert.equal(descendants(actions.children[1]).some(node => node.props?.accessibilityLabel === 'Save post'), true);
   for (const value of ['English', 'Tagalog', 'Bisaya']) {
     language = value; screen.render();
-    assert.ok(content(screen.rootNode).includes(messages.translateMessage(language, 'Details')));
+    assert.ok(screen.nodes().some(node => node.props?.accessibilityLabel === messages.translateMessage(language, 'Details')));
+    assert.ok(content(screen.rootNode).includes(messages.translateMessage(language, 'Expired')));
     assert.ok(content(screen.rootNode).includes('12h'));
   }
   language = 'English';
