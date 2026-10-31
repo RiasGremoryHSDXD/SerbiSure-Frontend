@@ -1,5 +1,5 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { WorkHoursPickerModal } from '../../../shared/ui/WorkHoursPickerModal';
@@ -33,6 +33,22 @@ export function WorkScheduleFields(props: Props) {
   const short = bookingType === 'short_term';
   const locked = readOnly || disabled;
   const ongoing = !short && !!props.ongoing;
+  const availableDays = useMemo(() => {
+    if (ongoing) return WORK_DAYS.map(day => day.value);
+    if (!startDate || (!short && !endDate)) return null;
+    try {
+      // Noon in Philippine time keeps the calendar day stable in every device timezone.
+      const start = Date.parse(bookingSchedule(startDate, '12:00 PM').iso);
+      const end = Date.parse(bookingSchedule(endDate || startDate, '12:00 PM').iso);
+      if (end < start) return null;
+      const span = Math.min(Math.round((end - start) / 86400000) + 1, 7);
+      const first = (new Date(start).getUTCDay() + 6) % 7; // WORK_DAYS starts on Monday.
+      return Array.from({ length: span }, (_, offset) => WORK_DAYS[(first + offset) % 7]!.value);
+    } catch {
+      // Keep selections while the dates are incomplete or being corrected.
+      return null;
+    }
+  }, [startDate, endDate, ongoing, short]);
   const earliestEnd = startDate ? (short ? startDate : earliestLongTermEnd(startDate)) : '';
   const earliestEndStamp = earliestEnd ? bookingSchedule(earliestEnd, '12:00 PM').iso : '';
   const [target, setTarget] = useState<'start' | 'end' | null>(null);
@@ -40,6 +56,15 @@ export function WorkScheduleFields(props: Props) {
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [showTime, setShowTime] = useState(false);
   useEffect(() => { if (locked) { setTarget(null); setShowTime(false); } }, [locked]);
+  useEffect(() => {
+    if (locked || !availableDays) return;
+    const next = availableDays.length === 1
+      ? [...availableDays]
+      : days.filter(day => availableDays.some(value => value === day));
+    if (next.length !== days.length || next.some((day, index) => day !== days[index])) {
+      props.onDays(next);
+    }
+  }, [availableDays, days, locked, props.onDays]);
 
   const openDate = (field: 'start' | 'end') => {
     if (locked) return;
@@ -169,21 +194,24 @@ export function WorkScheduleFields(props: Props) {
         <View style={styles.daysRow}>
           {WORK_DAYS.map(day => {
             const selected = days.includes(day.value);
+            const dayDisabled = locked || (availableDays !== null && !availableDays.includes(day.value));
             return (
               <Pressable
                 key={day.value}
                 accessibilityRole="button"
-                disabled={locked}
-                accessibilityState={{ selected }}
+                accessibilityLabel={uiText(day.label)}
+                disabled={dayDisabled}
+                accessibilityState={{ selected, disabled: dayDisabled }}
                 onPress={() => {
+                  if (dayDisabled || (availableDays?.length === 1 && selected)) return;
                   const nextDays = selected
                     ? days.filter(d => d !== day.value)
                     : [...days, day.value];
                   props.onDays(nextDays);
                 }}
-                style={[styles.dayPill, selected && styles.dayPillActive, errors.days && styles.fieldError]}
+                style={[styles.dayPill, selected && styles.dayPillActive, errors.days && !dayDisabled && styles.fieldError, dayDisabled && styles.dayPillDisabled]}
               >
-                <Text style={[styles.dayPillText, selected && styles.dayPillTextActive]}>
+                <Text style={[styles.dayPillText, selected && styles.dayPillTextActive, dayDisabled && styles.dayPillTextDisabled]}>
                   {uiText(day.label)}
                 </Text>
               </Pressable>
@@ -429,6 +457,12 @@ const styles = StyleSheet.create({
   dayPillActive: {
     backgroundColor: ACCENT_PEACH,
   },
+  dayPillDisabled: {
+    backgroundColor: '#E5E7EB',
+    opacity: 0.45,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   dayPillText: {
     color: '#1A1A1A',
     fontSize: 12.5,
@@ -436,6 +470,9 @@ const styles = StyleSheet.create({
   },
   dayPillTextActive: {
     fontWeight: '800',
+  },
+  dayPillTextDisabled: {
+    color: '#6B7280',
   },
   fieldError: {
     borderColor: '#EF4444',
