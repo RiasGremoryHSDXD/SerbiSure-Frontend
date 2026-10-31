@@ -72,16 +72,11 @@ export interface BookingItem {
   assigned_partner?: BookingParticipant | null;
   has_reviewed?: boolean;
   proposals_count?: number;
-  cancel_requested_by?: { id: string; name: string; account_type: string } | null;
-  cancel_requested_at?: string | null;
   cancellation_reason?: string | null;
   cancellation_penalty_points?: number;
   cancelled_at?: string | null;
   can_cancel?: boolean;
   cancellation_deadline?: string | null;
-  is_cancel_requested?: boolean;
-  cancel_requested_by_me?: boolean;
-  pending_cancel_approval?: boolean;
 }
 
 /**
