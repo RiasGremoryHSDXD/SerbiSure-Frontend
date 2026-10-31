@@ -188,15 +188,10 @@ export function faceLandmarkerResultToLandmarkFrame(
   }
 
   const points = faceLandmarks.map((landmark) => mediaPipeLandmarkToPoint(landmark, frameWidth, frameHeight, mirrored));
-
-  let yawAngle: number | undefined;
-  const p234 = points[234];
-  const p454 = points[454];
-  if (p234 && p454 && typeof p234.z === 'number' && typeof p454.z === 'number') {
-    const dx = Math.abs(p454.x - p234.x);
-    const dz = p454.z - p234.z;
-    yawAngle = Math.atan2(dz, Math.max(dx, 1)) * (180 / Math.PI) * (mirrored ? 1 : -1);
-  }
+  const imageWidth = resultBundle.inputImageWidth;
+  const imageHeight = resultBundle.inputImageHeight;
+  const landmarkYScale = imageWidth > 0 && imageHeight > 0 && frameWidth > 0 && frameHeight > 0
+    ? (imageHeight / imageWidth) * (frameWidth / frameHeight) : 1;
 
   return {
     face: {
@@ -204,7 +199,7 @@ export function faceLandmarkerResultToLandmarkFrame(
       points,
       signals: {
         mirrored,
-        yawAngle,
+        landmarkYScale,
       },
       timestamp,
     },

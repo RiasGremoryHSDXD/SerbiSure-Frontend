@@ -1,6 +1,7 @@
+import { formatRate } from '../../../shared/utils/rate';
 import { workSetupLabel } from '../workSetup';
 import { useState, useEffect } from 'react';
-import { toggleSavePostApi, fetchSavedPostsApi, fetchMyProposalPosts, formatBookingLocationShort } from '../api/bookingApi';
+import { toggleSavePostApi, fetchSavedPostsApi, fetchMyProposalPosts, formatBookingLocationShort, applyToJobPost } from '../api/bookingApi';
 
 export interface SavedJobItem {
   id: string | number;
@@ -18,6 +19,15 @@ export interface SavedJobItem {
   aboutText?: string;
   tags?: string[];
   image?: string;
+  start_time?: string;
+  end_time?: string | null;
+  booking_type?: 'short_term' | 'long_term';
+  daily_start_time?: string | null;
+  daily_end_time?: string | null;
+  work_days?: string[];
+  booking_status?: string;
+  post_status?: string;
+  application_status?: string;
 }
 
 type StoreListener = () => void;
@@ -30,6 +40,8 @@ class SavedJobsStore {
   private currentUserId: string | null = null;
   private isSyncing: boolean = false;
   private sessionVersion = 0;
+  private applicationRevision = 0;
+  private applying = new Set<string | number>();
   loadError: string | null = null;
   get loading() { return this.isSyncing; }
 
@@ -67,6 +79,7 @@ class SavedJobsStore {
   async refreshFromBackend(token: string | null) {
     if (!token || this.isSyncing) return;
     const version = this.sessionVersion;
+    const applicationRevision = this.applicationRevision;
     this.isSyncing = true; this.loadError = null; this.notify();
     try {
       const [data, applications] = await Promise.all([fetchSavedPostsApi(token), fetchMyProposalPosts(token)]);
@@ -97,15 +110,19 @@ class SavedJobsStore {
             roleTag: categories.join(', '),
             termTag: termTag,
             setupTag: workSetupLabel(item.work_setup),
-            price: `₱${item.rate_amount || '0'}`,
+            price: formatRate(item.rate_amount),
             unit: unit,
             aboutText: item.special_instruction || undefined,
             tags: [...categories, ...(item.work_setup ? [workSetupLabel(item.work_setup)] : [])],
             image: avatarUrl,
+            start_time: item.start_time, booking_status: item.booking_status, post_status: item.post_status,
+            end_time: item.end_time, booking_type: item.booking_type,
+            daily_start_time: item.daily_start_time, daily_end_time: item.daily_end_time, work_days: item.work_days,
           };
           this.savedMap.set(jobItem.id, jobItem);
         }
-        this.appliedMap.clear();
+        // A refresh started before an application must not erase the new entry.
+        if (applicationRevision === this.applicationRevision) this.appliedMap.clear();
         for (const item of applications) {
           this.appliedMap.set(item.booking_id, {
             id: item.booking_id, partnerId: item.poster_id, employerName: item.name || 'User',
@@ -113,8 +130,12 @@ class SavedJobsStore {
             roleTag: (item.service_category || []).join(', '), title: (item.service_category || []).join(', '),
             location: formatBookingLocationShort(item, 'Location not provided'),
             termTag: item.booking_type === 'long_term' ? 'Long-term' : 'Short-term',
-            price: 'PHP ' + item.rate_amount, unit: '/ ' + item.rate_period,
+            price: formatRate(item.rate_amount, 'PHP '), unit: '/ ' + item.rate_period,
             aboutText: item.special_instruction || '', tags: item.service_category || [],
+            start_time: item.start_time, booking_status: item.booking_status, post_status: item.post_status,
+            end_time: item.end_time, booking_type: item.booking_type,
+            daily_start_time: item.daily_start_time, daily_end_time: item.daily_end_time, work_days: item.work_days,
+            application_status: item.application_status,
           });
         }
         this.notify();
@@ -133,6 +154,8 @@ class SavedJobsStore {
    */
   clearStore() {
     this.sessionVersion++; this.isSyncing = false;
+    this.applying.clear();
+    this.applicationRevision++;
     this.loadError = null;
     this.savedMap.clear();
     this.appliedMap.clear();
@@ -175,6 +198,27 @@ class SavedJobsStore {
 
   isApplied(id: string | number): boolean {
     return this.appliedMap.has(id);
+  }
+
+  async applyToJob(job: SavedJobItem, token?: string | null): Promise<{ created: boolean } | null> {
+    if (!token) throw new Error('Please sign in to apply for this job.');
+    if (this.applying.has(job.id)) return null;
+    const wasApplied = this.appliedMap.has(job.id);
+    const version = this.sessionVersion;
+    this.applying.add(job.id);
+    try {
+      const result = await applyToJobPost(token, String(job.id));
+      if (version !== this.sessionVersion) return null;
+      if (!result.success || !result.proposal?.proposal_id) {
+        throw new Error(result.error || 'Your application could not be confirmed. Please try again.');
+      }
+      this.applicationRevision++;
+      this.appliedMap.set(job.id, { ...job, application_status: 'applied' });
+      this.notify();
+      return { created: !wasApplied && !result.already_applied };
+    } finally {
+      if (version === this.sessionVersion) this.applying.delete(job.id);
+    }
   }
 
   markJobClosed(id?: string | number | null, ...extraKeys: (string | number | undefined | null)[]) {

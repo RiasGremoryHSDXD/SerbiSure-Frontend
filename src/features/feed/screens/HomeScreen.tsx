@@ -11,12 +11,14 @@ import { GreetingCard } from '../../../shared/components/GreetingCard';
 import { ScreenLayout } from '../../../shared/components/ScreenLayout';
 import { NotificationBell } from '../../notifications/NotificationContext';
 import { useJobsActivity } from '../../bookings/store/savedJobsStore';
+import { useJobApplication } from '../../bookings/hooks/useJobApplication';
 import { UserProfileModal } from '../../profile/components/UserProfileModal';
 import { ChatDetailScreen } from '../../chat/components/ChatDetailScreen';
 import { JobDetailSheet } from '../components/JobDetailSheet';
 import { HomeFeedFilters, HomeFeedHeader, HomeFeedEmptyState, HomeFeedLoadingState } from '../components/HomeFeedControls';
 import { FeedPostCard } from '../components/FeedPostCard';
 import { useFeed } from '../hooks/useFeed';
+import { usePostUpdates } from '../hooks/usePostUpdates';
 import { matchesHomeFeedFilters, type HomeFeedCategory } from '../feedFilters';
 import type { FeedPost } from '../types';
 import THEME from '../../../shared/theme/theme';
@@ -43,6 +45,8 @@ export function HomeScreen({ role: requestedRole, avatarUri, onAvatarPress, onVi
   const role = requestedRole || resolveRole(user.accountType);
   const authToken = token || user.token;
   const { posts, isLoading, isRefreshing, error, refresh } = useFeed(role, authToken, user.id);
+  const { applyJob, applyingJobId } = useJobApplication(authToken, () => { void handleRefresh(); });
+  const { canUsePost } = usePostUpdates(posts, () => { void handleRefresh(); });
   const { isSaved, isApplied, isClosed, toggleSave, refreshSavedFromBackend } = useJobsActivity();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<HomeFeedCategory | null>(null);
@@ -56,6 +60,7 @@ export function HomeScreen({ role: requestedRole, avatarUri, onAvatarPress, onVi
   }, [authToken, user.id, role]);
 
   const visiblePosts = posts.filter((post) => {
+    if (!canUsePost(post)) return false;
     if (isClosed(post.id) || isClosed(post.partnerId) || (post.kind === 'job' && isClosed(post.employerName))) return false;
     return matchesHomeFeedFilters(post.categories, [post.employerName, post.location, post.aboutText, post.termTag, ...post.tags], selectedCategory, searchQuery);
   });
@@ -63,11 +68,13 @@ export function HomeScreen({ role: requestedRole, avatarUri, onAvatarPress, onVi
   const resetFilters = () => { setSearchQuery(''); setSelectedCategory(null); };
   const handleRefresh = async () => { await Promise.all([refresh(), authToken ? refreshSavedFromBackend(authToken) : Promise.resolve()]); };
 
-  const contactPoster = (post: FeedPost) => {
+  const contactPoster = async (post: FeedPost) => {
+    const application = post.kind === 'job' ? await applyJob(post) : null;
+    if (post.kind === 'job' && !application) return;
     setSelectedPost(null);
     if (post.kind === 'job') {
       setActiveChat({
-        post, initialMessage: 'I am interested in this job position', initialReplyTo: {
+        post, initialMessage: '', initialReplyTo: {
           author: 'Job Post', text: `${post.roleTag} • ${post.price} ${post.unit} • ${post.location} • ${post.termTag}`,
         }
       });
@@ -112,8 +119,9 @@ export function HomeScreen({ role: requestedRole, avatarUri, onAvatarPress, onVi
         visible={!!selectedPost} job={selectedPost} onClose={() => setSelectedPost(null)}
         onApply={() => selectedPost && contactPoster(selectedPost)}
         isApplied={selectedPost?.kind === 'job' ? isApplied(selectedPost.id) : false}
+        isApplying={applyingJobId === selectedPost?.id}
         isSaved={selectedPost ? isSaved(selectedPost.id) : false}
-        isClosed={selectedPost ? isClosed(selectedPost.id) || isClosed(selectedPost.partnerId) || (selectedPost.kind === 'job' && isClosed(selectedPost.employerName)) : false}
+        isClosed={selectedPost ? !canUsePost(selectedPost) || isClosed(selectedPost.id) || isClosed(selectedPost.partnerId) || (selectedPost.kind === 'job' && isClosed(selectedPost.employerName)) : false}
         onToggleSave={() => { if (selectedPost) void toggleSave(selectedPost, authToken); }}
         onViewProfile={() => selectedPost && setProfilePost(selectedPost)}
         ctaText={role === 'homeowner' ? uiText("Message Kasambahay") : undefined}

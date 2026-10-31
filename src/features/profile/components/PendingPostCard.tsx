@@ -1,3 +1,4 @@
+import { formatRate } from '../../../shared/utils/rate';
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import { workSetupLabel } from '../../bookings/workSetup';
 import React from 'react';
@@ -7,7 +8,7 @@ import { formatBookingAddress, formatBookingLocationShort, type BookingItem } fr
 import { profileStyles as styles } from '../styles';
 import { FeedPostCard } from '../../feed/components/FeedPostCard';
 import { useJobsActivity } from '../../bookings/store/savedJobsStore';
-import { formatTimeAgo } from '../../../shared/utils/date';
+import { formatCompactTimeAgo } from '../../../shared/utils/date';
 import type { FeedPost } from '../../feed/types';
 
 export const CATEGORY_LABELS: Record<string, string> = {
@@ -64,7 +65,10 @@ export function PendingPostCard({
     const termTag = longTerm ? 'Long-term' : 'Short-term';
     const setupTag = workSetupLabel(post.work_setup);
     const location = formatBookingLocationShort(post, authorLocation || 'Location not provided');
-    const rawPrice = post.rate_amount ? `Php ${Number(post.rate_amount).toLocaleString()}` : 'Php 0';
+    const numRate = Number(post.rate_amount) || 0;
+    const rawPrice = post.rate_amount
+      ? `₱ ${numRate.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : '₱ 0.00';
     const unit = post.rate_period ? `/${post.rate_period}` : longTerm ? '/month' : '/day';
     const description =
       post.special_instruction?.trim() ||
@@ -74,6 +78,9 @@ export function PendingPostCard({
 
     const mappedFeedPost: FeedPost = feedPost || {
       id: post.booking_id,
+      start_time: post.start_time, booking_status: post.booking_status, post_status: post.post_status,
+      end_time: post.end_time, booking_type: post.booking_type,
+      daily_start_time: post.daily_start_time, daily_end_time: post.daily_end_time, work_days: post.work_days,
       partnerId: post.recipient_id || post.booking_id,
       kind: isJob ? 'job' : 'service',
       authorRole: isJob ? 'Homeowner' : 'Kasambahay',
@@ -82,7 +89,7 @@ export function PendingPostCard({
       avatar:
         authorAvatar ||
         `https://ui-avatars.com/api/?name=${encodeURIComponent(authorName || authorRole || 'User')}&background=FFB43B&color=fff`,
-      time: post.createdAt ? formatTimeAgo(post.createdAt) : 'Recently',
+      time: formatCompactTimeAgo(post.createdAt),
       location,
       categories,
       roleTag: categories[0] || (isJob ? 'Household Service' : 'Kasambahay'),
@@ -130,7 +137,7 @@ export function PendingPostCard({
         </View>
       </View>
       <View style={styles.pendingPostRateRow}>
-        <Text style={styles.pendingPostRate}>₱{Number(post.rate_amount || 0).toLocaleString()}</Text>
+        <Text style={styles.pendingPostRate}>{uiText(formatRate(post.rate_amount))}</Text>
         <Text style={styles.pendingPostRateUnit}>
           {' '}
           {post.rate_needs_review ? '(unit needs confirmation)' : '/ ' + post.rate_period} ·{' '}

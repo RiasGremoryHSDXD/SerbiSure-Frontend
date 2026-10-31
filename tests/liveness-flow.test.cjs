@@ -46,6 +46,7 @@ function harness(t, extraMocks = {}) {
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
     '@expo/vector-icons': { Ionicons: 'Icon' },
     '@shopify/react-native-skia': { Canvas: 'Canvas', Circle: 'Circle', Path: 'Path', Skia: { Path: { Make: () => ({ addArc() {} }) } } },
+    '../quality/assessSelfie': { assessSelfie: async () => 'pass' },
     'expo-file-system': { deleteAsync: async uri => { deletedPhotos.push(uri); } },
     '../../../shared/theme/theme': { default: { colors: {}, roundness: {}, typography: { fontFamily: {}, tracking: {} } } },
     '../../auth/components/RegistrationStepper': { RegistrationStepper: () => null },
@@ -107,14 +108,14 @@ test('capture pauses for photo review and only confirmation submits the selfie o
     renderer.flushPassiveEffects();
     h.nodes().filter(node => node.type === 'Text').forEach(node => instructions.add(node.children.map(child => child.text || '').join('')));
   }
-  for (const prompt of ['Look Left', 'Look Right', 'Face forward and hold for a moment']) assert.ok(instructions.has(prompt), prompt);
+  for (const prompt of ['Slowly turn your head a little to your right', 'Great! Now turn a little to your left', 'Well done! Look at the camera for your photo']) assert.ok(instructions.has(prompt), prompt);
   assert.equal([...instructions].some(prompt => /^[123]$/.test(prompt)), false);
   assert.equal([...instructions].some(prompt => /blink|open your eyes/i.test(prompt)), false);
   assert.equal(h.nodes().find(node => node.type === 'FaceCamera').props.detecting, false);
   assert.equal(verified.length, 0);
   photo.resolve('file:///selfie.jpg'); await tick();
   assert.equal(verified.length, 0);
-  assert.equal(h.nodes().some(node => node.type === 'FaceCamera'), false);
+  assert.equal(h.nodes().find(node => node.type === 'FaceCamera').props.isActive, false);
   const preview = h.nodes().find(node => node.type === 'Image' && node.props.source?.uri);
   assert.equal(preview.props.source.uri, 'file:///selfie.jpg');
   assert.equal(preview.props.resizeMode, 'cover');
@@ -320,10 +321,12 @@ test('native capture errors show friendly guidance and Retry retakes the photo w
   assert.equal(completed, 1);
 });
 
-test('retake discards the rejected photo and requires the entire liveness sequence again', async t => {
+test('retake discards the rejected photo and requires a fresh forward-facing hold without repeating turns', async t => {
   let captures = 0;
+  let cameraMounts = 0;
   const verified = [];
   const FaceCamera = React.forwardRef((props, ref) => {
+    React.useEffect(() => { cameraMounts++; }, []);
     React.useImperativeHandle(ref, () => ({ captureSelfie: async () => `file:///selfie-${++captures}.jpg` }));
     return React.createElement('FaceCamera', props);
   });
@@ -331,13 +334,25 @@ test('retake discards the rejected photo and requires the entire liveness sequen
   const { LivenessScreen } = h.load('src/features/verification/components/LivenessScreen.tsx');
   const act = callback => { renderer.flushSync(callback); renderer.flushPassiveEffects(); };
   h.render(React.createElement(LivenessScreen, { onVerified: result => verified.push(result) }));
+  renderer.flushPassiveEffects();
+  const warmingCamera = h.nodes().find(node => node.type === 'FaceCamera');
+  assert.equal(cameraMounts, 1);
+  assert.equal(warmingCamera.props.detecting, false);
+  assert.equal(warmingCamera.props.isActive, true);
+  // Warmup callbacks must never advance challenges before the user starts.
+  for (const frame of successfulFrames()) act(() => warmingCamera.props.onLandmarks(frame));
+  assert.equal(captures, 0);
   act(() => h.button('Continue').props.onPress());
   for (const frame of successfulFrames()) act(() => h.nodes().find(node => node.type === 'FaceCamera').props.onLandmarks(frame));
   await tick();
+  assert.equal(cameraMounts, 1);
+  assert.equal(h.nodes().find(node => node.type === 'FaceCamera').props.isActive, false);
   act(() => h.button('Retake Photo').props.onPress());
   assert.deepEqual(h.deletedPhotos, ['file:///selfie-1.jpg']);
   assert.equal(h.nodes().some(node => node.type === 'Image' && node.props.source?.uri), false);
   assert.ok(h.nodes().find(node => node.type === 'FaceCamera').props.detecting);
+  assert.equal(h.nodes().find(node => node.type === 'FaceCamera').props.isActive, true);
+  assert.equal(cameraMounts, 1, 'review and retake reuse the initialized native detector');
   assert.equal(verified.length, 0);
   assert.equal(captures, 1);
   const prompts = new Set();
@@ -346,7 +361,9 @@ test('retake discards the rejected photo and requires the entire liveness sequen
     h.nodes().filter(node => node.type === 'Text').forEach(node => prompts.add(node.children.map(child => child.text || '').join('')));
   }
   await tick();
-  for (const prompt of ['Look Left', 'Look Right', 'Face forward and hold for a moment']) assert.ok(prompts.has(prompt));
+  assert.ok(prompts.has('Well done! Look at the camera for your photo'));
+  assert.equal(prompts.has('Slowly turn your head a little to your right'), false);
+  assert.equal(prompts.has('Great! Now turn a little to your left'), false);
   assert.equal(captures, 2);
   assert.equal(verified.length, 0);
   const preview = h.nodes().find(node => node.type === 'Image' && node.props.source?.uri);
@@ -354,6 +371,44 @@ test('retake discards the rejected photo and requires the entire liveness sequen
   act(() => preview.props.onLoad());
   act(() => h.button('Use This Photo').props.onPress());
   assert.equal(verified[0].selfiePath, 'file:///selfie-2.jpg');
+});
+
+test('first entry and retake each get a fresh startup notice timer', async t => {
+  let now = 1000;
+  let watchdog;
+  t.mock.method(Date, 'now', () => now);
+  t.mock.method(global, 'setInterval', callback => { watchdog = callback; return 123; });
+  t.mock.method(global, 'clearInterval', () => {});
+  const FaceCamera = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({ captureSelfie: async () => 'file:///timer-selfie.jpg' }));
+    return React.createElement('FaceCamera', props);
+  });
+  const h = harness(t, { '../camera/FaceCamera': { FaceCamera } });
+  const { LivenessScreen } = h.load('src/features/verification/components/LivenessScreen.tsx');
+  const act = callback => { renderer.flushSync(callback); renderer.flushPassiveEffects(); };
+  const messages = () => h.nodes().map(node => node.text || '').join(' ');
+  h.render(React.createElement(LivenessScreen));
+  act(() => h.nodes().find(node => node.type === 'FaceCamera').props.onReady());
+  act(() => h.button('Continue').props.onPress());
+  now = 3000;
+  act(() => watchdog());
+  assert.doesNotMatch(messages(), /The camera may need a moment/);
+  now = 3800;
+  act(() => watchdog());
+  assert.match(messages(), /The camera may need a moment/);
+  for (const frame of successfulFrames()) {
+    now = 4000 + frame.timestamp;
+    act(() => h.nodes().find(node => node.type === 'FaceCamera').props.onLandmarks(frame));
+  }
+  await tick();
+  now = 20000;
+  act(() => h.button('Retake Photo').props.onPress());
+  now = 21000;
+  act(() => watchdog());
+  assert.doesNotMatch(messages(), /The camera may need a moment|a little more light/);
+  now = 22800;
+  act(() => watchdog());
+  assert.match(messages(), /The camera may need a moment/);
 });
 
 test('a photo that cannot be displayed cannot be confirmed, and leaving review discards it', async t => {
@@ -424,32 +479,130 @@ for (const role of ['homeowner', 'kasambahay']) {
 }
 
 test('pausing landmark results keeps Android camera outputs attached through photo capture', async t => {
+  let now = 1000;
+  t.mock.method(Date, 'now', () => now);
   const frameProcessor = { frameProcessor() {} };
   const detector = { frameProcessor, cameraDeviceChangeHandler() {}, cameraViewLayoutChangeHandler() {}, cameraOrientationChangedHandler() {} };
   const device = { id: 'front', position: 'front' };
   const format = { minFps: 15, maxFps: 30 };
   let trackingError;
+  let trackingResults;
   const Camera = React.forwardRef((props, ref) => {
     React.useImperativeHandle(ref, () => ({ takePhoto: async () => ({ path: '/selfie.jpg', width: 1280, height: 960 }) }));
     return React.createElement('VisionCamera', props);
   });
   const h = harness(t, {
     'react-native-vision-camera': { Camera, useCameraDevice: () => device, useCameraFormat: () => format,
+      useFrameProcessor: (processor, dependencies) => React.useMemo(() => ({ frameProcessor: processor }), dependencies),
+      runAtTargetFps: (_fps, process) => process(),
       useCameraPermission: () => ({ hasPermission: true }) },
     'react-native-mediapipe': { Delegate: { CPU: 0 }, RunningMode: { LIVE_STREAM: 2 },
-      useFaceLandmarkDetection: (_onResults, onError) => { trackingError = onError; return detector; } },
+      useFaceLandmarkDetection: (_onResults, onError) => { trackingResults = _onResults; trackingError = onError; return detector; } },
   });
   const { FaceCamera } = h.load('src/features/verification/camera/FaceCamera.tsx');
   const ref = React.createRef();
-  const onLandmarks = () => {};
+  let received = 0;
+  const onLandmarks = () => { received++; };
   h.render(React.createElement(FaceCamera, { ref, onLandmarks, detecting: true }));
-  assert.equal(h.nodes().find(node => node.type === 'VisionCamera').props.frameProcessor, frameProcessor);
+  const originalResults = trackingResults;
+  originalResults({ results: [] }, { width: 200, height: 200 }, true);
+  assert.equal(received, 1);
+  const attachedProcessor = h.nodes().find(node => node.type === 'VisionCamera').props.frameProcessor;
+  assert.equal(typeof attachedProcessor.frameProcessor, 'function');
   renderer.flushSync(() => trackingError({ code: 1, message: 'Native failure private-id' }));
   assert.doesNotMatch(h.nodes().map(node => node.text || '').join(' '), /Native failure|private-id/);
   h.render(React.createElement(FaceCamera, { ref, onLandmarks, detecting: false }));
   const nativeCamera = h.nodes().find(node => node.type === 'VisionCamera');
-  assert.equal(nativeCamera.props.frameProcessor, frameProcessor);
+  assert.equal(nativeCamera.props.frameProcessor, attachedProcessor);
+  assert.equal(nativeCamera.props.photoQualityBalance, 'balanced');
+  assert.equal(nativeCamera.props.pixelFormat, 'rgb', 'the native Bitmap adapter requires RGBA frames');
   assert.equal(nativeCamera.props.photo, true);
   assert.equal(nativeCamera.props.isActive, true);
   assert.equal(await ref.current.captureSelfie(), 'file:///selfie.jpg');
+  let initialized = 0;
+  h.render(React.createElement(FaceCamera, { ref, onLandmarks, detecting: true, isActive: false, onReady: () => { initialized++; } }));
+  const paused = h.nodes().find(node => node.type === 'VisionCamera');
+  assert.equal(paused.props.isActive, false);
+  assert.equal(paused.props.frameProcessor, attachedProcessor);
+  paused.props.onInitialized();
+  assert.equal(initialized, 1);
+  now = 2000;
+  originalResults({ results: [] }, { width: 200, height: 200 }, true);
+  assert.equal(received, 1, 'queued callbacks from a paused camera cannot advance photo review');
+  h.render(React.createElement(FaceCamera, { ref, onLandmarks: () => { received += 2; }, detecting: true, isActive: true }));
+  assert.equal(trackingResults, originalResults, 'changing callback/active state must not churn detector listeners');
+  now = 2100;
+  originalResults({ results: [] }, { width: 1, height: 1 }, true);
+  assert.equal(received, 1, 'startup layout measurements must not calibrate the face pose');
+  originalResults({ results: [] }, { width: 200, height: 200 }, true);
+  assert.equal(received, 3, 'resuming uses the latest callback');
+  h.unmount();
+  now = 3000;
+  originalResults({ results: [] }, { width: 200, height: 200 }, true);
+  assert.equal(received, 3, 'late frames from an unmounted camera cannot contribute to a retake');
+});
+
+test('obviously dark photos cannot be submitted, and a retake keeps completed turns', async t => {
+  let captures = 0, submitted = 0;
+  const FaceCamera = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({ captureSelfie: async () => `file:///quality-${++captures}.jpg` }));
+    return React.createElement('FaceCamera', props);
+  });
+  const h = harness(t, {
+    '../camera/FaceCamera': { FaceCamera },
+    '../quality/assessSelfie': { assessSelfie: async uri => uri.endsWith('quality-1.jpg') ? 'too-dark' : 'pass' },
+  });
+  const { LivenessScreen } = h.load('src/features/verification/components/LivenessScreen.tsx');
+  const act = fn => { renderer.flushSync(fn); renderer.flushPassiveEffects(); };
+  h.render(React.createElement(LivenessScreen, { onVerified: () => submitted++ }));
+  act(() => h.button('Continue').props.onPress());
+  for (const frame of successfulFrames()) act(() => h.nodes().find(n => n.type === 'FaceCamera').props.onLandmarks(frame));
+  await tick();
+  act(() => h.nodes().find(n => n.type === 'Image' && n.props.source?.uri).props.onLoad());
+  assert.equal(h.button('Use This Photo').props.disabled, true);
+  act(() => h.button('Use This Photo').props.onPress());
+  assert.equal(submitted, 0);
+  assert.match(h.nodes().map(n => n.text || '').join(' '), /very dark/);
+  act(() => h.button('Retake Photo').props.onPress());
+  assert.deepEqual(h.deletedPhotos, ['file:///quality-1.jpg']);
+  const { faceFrame } = require('./fixtures/liveness.cjs');
+  for (let now = 4000; now <= 5100; now += 100) {
+    act(() => h.nodes().find(n => n.type === 'FaceCamera').props.onLandmarks(faceFrame(0, now)));
+  }
+  await tick();
+  assert.equal(captures, 2);
+  act(() => h.nodes().find(n => n.type === 'Image' && n.props.source?.uri).props.onLoad());
+  assert.equal(h.button('Use This Photo').props.disabled, false);
+  act(() => h.button('Use This Photo').props.onPress());
+  assert.equal(submitted, 1);
+});
+
+test('photo checking must finish before confirmation and stale results cannot affect a retake', async t => {
+  const first = deferred();
+  let captures = 0, submitted = 0;
+  const FaceCamera = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({ captureSelfie: async () => `file:///pending-${++captures}.jpg` }));
+    return React.createElement('FaceCamera', props);
+  });
+  const h = harness(t, {
+    '../camera/FaceCamera': { FaceCamera },
+    '../quality/assessSelfie': { assessSelfie: uri => uri.endsWith('pending-1.jpg') ? first.promise : Promise.resolve('pass') },
+  });
+  const { LivenessScreen } = h.load('src/features/verification/components/LivenessScreen.tsx');
+  const act = fn => { renderer.flushSync(fn); renderer.flushPassiveEffects(); };
+  h.render(React.createElement(LivenessScreen, { onVerified: () => submitted++ }));
+  act(() => h.button('Continue').props.onPress());
+  for (const frame of successfulFrames()) act(() => h.nodes().find(n => n.type === 'FaceCamera').props.onLandmarks(frame));
+  await tick();
+  act(() => h.nodes().find(n => n.type === 'Image' && n.props.source?.uri).props.onLoad());
+  assert.equal(h.button('Use This Photo').props.disabled, true);
+  act(() => h.button('Use This Photo').props.onPress());
+  assert.equal(submitted, 0);
+  act(() => h.button('Retake Photo').props.onPress());
+  first.resolve('too-blurry'); await tick();
+  const { faceFrame } = require('./fixtures/liveness.cjs');
+  for (let now = 4000; now <= 5100; now += 100) act(() => h.nodes().find(n => n.type === 'FaceCamera').props.onLandmarks(faceFrame(0, now)));
+  await tick();
+  act(() => h.nodes().find(n => n.type === 'Image' && n.props.source?.uri).props.onLoad());
+  assert.equal(h.button('Use This Photo').props.disabled, false);
 });

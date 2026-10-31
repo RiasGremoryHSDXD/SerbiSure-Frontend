@@ -3,8 +3,10 @@ import React, { useState } from 'react';
 import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import THEME from '../../../shared/theme/theme';
+import { ScheduleBadge } from '../../bookings/components/ScheduleBadge';
 
 interface CardProps {
+  readonly startTime?: string;
   readonly name: string;
   readonly avatarUri?: string | null;
   readonly authorRole: 'Homeowner' | 'Kasambahay';
@@ -41,7 +43,7 @@ function formatCardUnit(rawUnit: string): string {
   return trimmed;
 }
 
-export function BrowsePostCard({ name, avatarUri, authorRole, title, location, description, tags, price, unit, saved, applied, onProfilePress, onSave, onDetails }: CardProps) {
+export function BrowsePostCard({ name, avatarUri, authorRole, title, location, description, tags, price, unit, saved, applied, startTime, onProfilePress, onSave, onDetails }: CardProps) {
   const { tr: uiText } = useUiLanguage();
   const displayTags = Array.from(new Set(tags.filter((tag) => !tag.startsWith('Verified')))).slice(0, 3);
   const workerPost = authorRole === 'Kasambahay';
@@ -68,6 +70,7 @@ export function BrowsePostCard({ name, avatarUri, authorRole, title, location, d
             </View>
             {workerPost && <Text style={styles.serviceTitle} numberOfLines={1}>{title}</Text>}
             <Text style={styles.description} numberOfLines={2}>{description}</Text>
+            <ScheduleBadge post={{ start_time: startTime }} />
             <View style={styles.tags}>
               {displayTags.map((tag) => (
                 <View key={tag} style={styles.tag}>

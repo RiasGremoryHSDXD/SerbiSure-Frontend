@@ -1,6 +1,6 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
 import React, { useState } from 'react';
-import { Text, View, Image, ScrollView, Pressable, Alert, Modal, ActivityIndicator, RefreshControl } from 'react-native';
+import { Text, View, ScrollView, Pressable, Alert, Modal, ActivityIndicator, RefreshControl } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 
@@ -13,6 +13,7 @@ import { ManageTagsModal } from '../components/ManageTagsModal';
 import { ManageSocialLinksModal } from '../components/ManageSocialLinksModal';
 import { AllReviewsModal } from '../../reviews/components/AllReviewsModal';
 import { AppHeader } from '../../../shared/components/AppHeader';
+import { ProfileAvatar } from '../../../shared/ui/ProfileAvatar';
 import { formatRegisteredLocation } from '../../../shared/services/locationService';
 
 import { ROLE_CONFIG } from '../../../app/roleConfig';
@@ -29,6 +30,8 @@ import { SettingsSection } from '../components/SettingsSection';
 import { ReviewsSection } from '../components/ReviewsSection';
 import { SocialIconsRow } from '../components/SocialIconsRow';
 import { WorkerCvModal } from '../worker/WorkerCvModal';
+import { ProfileTabs } from '../components/ProfileTabs';
+import { OwnPostsSection } from '../components/OwnPostsSection';
 
 export function ProfileScreen(props: ProfileScreenProps) {
   const { tr: uiText } = useUiLanguage();
@@ -112,10 +115,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
               {/* Top row: Avatar on left, Role pill badge + View CV pill on right */}
               <View style={styles.personalHeroTopRow}>
                 <Pressable style={styles.personalAvatarWrapper} onPress={handlePickImage}>
-                  <Image
-                    source={{ uri: localAvatar || avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }}
-                    style={styles.personalAvatar}
-                  />
+                  <ProfileAvatar uri={localAvatar || avatarUri} name={getFullName()} size={90} />
                   {isVerified ? (
                     <View style={styles.avatarShieldBadgePersonal}>
                       <Ionicons
@@ -214,7 +214,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
                     style={[
                       styles.sentimentFill,
                       {
-                        width: `${totalReviews > 0 ? Math.min(100, Math.max(10, positivePercentage ?? 0)) : 0}%`,
+                        width: `${totalReviews > 0 ? Math.min(100, Math.max(0, positivePercentage ?? 0)) : 0}%`,
                         backgroundColor: totalReviews > 0 ? '#22C55E' : 'transparent',
                       },
                     ]}
@@ -246,7 +246,12 @@ export function ProfileScreen(props: ProfileScreenProps) {
 
             <BioSection profile={profile} />
             {isWorker && <ReputationSection profile={profile} />}
-            <ReviewsSection profile={profile} showHeader />
+            <ProfileTabs activeTab={profile.activeProfileTab} onChange={profile.setActiveProfileTab}
+              postsCount={profile.pendingPosts.length} reviewsCount={totalReviews} />
+            {profile.activeProfileTab === 'posts'
+              ? <OwnPostsSection posts={profile.pendingPosts} loading={profile.isLoadingPendingPosts} error={profile.pendingPostsError}
+                  token={user.token} now={profile.postsNow} onRefresh={() => { void profile.loadPendingPosts(true); }} />
+              : <ReviewsSection profile={profile} showHeader={false} />}
 
             {/* Bottom padding */}
             <View style={{ height: 90 }} />
@@ -257,10 +262,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
             <View style={styles.settingsHeroCard}>
               <View style={styles.settingsHeroTopRow}>
                 <Pressable style={styles.avatarWrapper} onPress={handlePickImage}>
-                  <Image
-                    source={{ uri: localAvatar || avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }}
-                    style={styles.avatar}
-                  />
+                  <ProfileAvatar uri={localAvatar || avatarUri} name={getFullName()} size={68} />
                   {isVerified ? (
                     <View style={styles.avatarShieldBadge}>
                       <Ionicons
@@ -309,7 +311,18 @@ export function ProfileScreen(props: ProfileScreenProps) {
             </View>
 
             {/* Verification Notice Banner */}
-            {(isWorker ? verificationData?.overall_status : effectiveVerificationStatus) === 'Pending' ? (
+            {profile.renewalRequired ? (
+              <Pressable style={styles.verificationNoticeBanner} onPress={() => setIsVerificationModalVisible(true)}>
+                <View style={styles.verificationNoticeIconBox}>
+                  <Ionicons name="refresh-circle" size={22} color="#B45309" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.verificationNoticeTitle}>{uiText('Renewal needed')}</Text>
+                  <Text style={styles.verificationNoticeSub}>{uiText('A required document has expired. Tap to upload your renewed document so you can apply and post again.')}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#B45309" />
+              </Pressable>
+            ) : effectiveVerificationStatus === 'Pending' ? (
               <Pressable
                 style={styles.verificationNoticeBanner}
                 onPress={() => setIsVerificationModalVisible(true)}
@@ -318,14 +331,14 @@ export function ProfileScreen(props: ProfileScreenProps) {
                   <Ionicons name="time" size={18} color="#B45309" />
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.verificationNoticeTitle}>{copy.pendingTitle}</Text>
+                  <Text style={styles.verificationNoticeTitle}>{profile.renewalPending ? uiText('Renewal under review') : copy.pendingTitle}</Text>
                   <Text style={styles.verificationNoticeSub}>
-                    {copy.pendingDescription}
+                    {profile.renewalPending ? uiText('We received your renewed document. You can apply and post again once your required documents are approved and valid.') : copy.pendingDescription}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#B45309" />
               </Pressable>
-            ) : (isWorker ? verificationData?.overall_status : effectiveVerificationStatus) === 'Rejected' ? (
+            ) : effectiveVerificationStatus === 'Rejected' ? (
               <Pressable
                 style={[styles.verificationNoticeBanner, styles.verificationNoticeBannerRejected]}
                 onPress={() => setIsVerificationModalVisible(true)}
@@ -350,7 +363,7 @@ export function ProfileScreen(props: ProfileScreenProps) {
                 pressed && { opacity: 0.8 },
               ]}
               onPress={async () => {
-                const name = (profile.getFirstNameOnly ? profile.getFirstNameOnly() : profile.user?.firstName || 'Daven').trim().split(' ')[0] || 'Daven';
+                const name = (profile.getFirstNameOnly ? profile.getFirstNameOnly() : profile.user?.firstName || 'User').trim().split(' ')[0] || 'User';
                 const id = profile.user?.email || profile.user?.contactNumber || '';
                 await setRememberedAccount({ firstName: name, identifier: id });
                 onLogout?.();

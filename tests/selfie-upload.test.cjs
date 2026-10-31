@@ -109,20 +109,21 @@ test('selfie request keeps native multipart boundaries and rejects HTTP failures
 const root = 'src/features/verification/';
 const geometry = load(root + 'face/geometry.ts');
 const indexes = load(root + 'face/landmarkIndexes.ts');
-const rules = load(root + 'liveness/livenessRules.ts', { '../face/landmarkIndexes': indexes, '../face/geometry': geometry });
-const { initialLivenessState, advanceLiveness, retryCurrentStep } = load(root + 'liveness/livenessMachine.ts', { './livenessRules': rules });
+const config = load(root + 'liveness/livenessConfig.ts');
+const rules = load(root + 'liveness/livenessRules.ts', { '../face/landmarkIndexes': indexes, '../face/geometry': geometry, './livenessConfig': config });
+const { initialLivenessState, advanceLiveness, retryCurrentStep } = load(root + 'liveness/livenessMachine.ts', { './livenessRules': rules, './livenessConfig': config });
 const runFrames = frames => frames.reduce(advanceLiveness, initialLivenessState);
 
-test('liveness requires both sustained turns and one observed second facing center in order', () => {
+test('liveness requires both sustained turns and one observed second in a reviewable photo pose in order', () => {
   let state = initialLivenessState;
   const transitions = [];
   for (const frame of successfulFrames()) {
     const next = advanceLiveness(state, frame);
     if (next.step !== state.step) transitions.push([next.step, frame.timestamp]);
     state = next;
-    if (frame.timestamp < 3100) assert.equal(state.verified, false);
+    if (frame.timestamp < 2600) assert.equal(state.verified, false);
   }
-  assert.deepEqual(transitions, [['turnRight', 0], ['turnLeft', 1000], ['still', 2000], ['verified', 3100]]);
+  assert.deepEqual(transitions, [['turnRight', 200], ['turnLeft', 700], ['still', 1500], ['verified', 2600]]);
   assert.deepEqual(state.completedSteps, ['face', 'turnRight', 'turnLeft', 'still']);
   assert.equal(state.verified, true);
 });
@@ -149,7 +150,8 @@ test('single-frame turns and interrupted tracking cannot complete an action', ()
   assert.equal(advanceLiveness(state, faceFrame(15, 2500)), old);
   state = advanceLiveness(state, faceFrame(15, 5000));
   assert.equal(state.step, 'turnRight');
-  assert.equal(state.actionSince, null);
+  assert.equal(state.actionSince, 5000);
+  assert.equal(state.actionProgressMs, 0);
   assert.equal(retryCurrentStep(state).actionSince, null);
 });
 
@@ -170,25 +172,25 @@ test('natural handheld movement and focus changes do not reset the final hold', 
 });
 
 test('a brief wobble, lost face, or head turn pauses progress and resumes without counting the interruption', () => {
-  const ready = runFrames(successfulFrames().filter(frame => frame.timestamp <= 2500));
+  const ready = runFrames(successfulFrames().filter(frame => frame.timestamp <= 2000));
   assert.equal(ready.step, 'still');
   assert.ok(ready.stillnessProgress > 0);
-  const moved = faceFrame(0, 2600);
-  moved.face.bounds.x += 8;
-  const missing = { ...faceFrame(0, 2600), face: null };
-  const offCenter = faceFrame(0, 2600);
-  offCenter.face.bounds.x = 60;
-  for (const frame of [faceFrame(15, 2600), moved, missing, offCenter]) {
+  const moved = faceFrame(0, 2100);
+  moved.face.bounds.x += 12;
+  const missing = { ...faceFrame(0, 2100), face: null };
+  const offCenter = faceFrame(0, 2100);
+  offCenter.face.bounds.x = 70;
+  for (const frame of [faceFrame(15, 2100), moved, missing, offCenter]) {
     let state = advanceLiveness(ready, frame);
     assert.equal(state.verified, false);
     assert.equal(state.stillnessProgress, ready.stillnessProgress);
-    state = advanceLiveness(state, faceFrame(0, 2700));
+    state = advanceLiveness(state, faceFrame(0, 2200));
     assert.equal(state.stillnessProgress, ready.stillnessProgress);
-    for (let time = 2800; time <= 3200; time += 100) {
+    for (let time = 2300; time <= 2700; time += 100) {
       state = advanceLiveness(state, faceFrame(0, time));
       assert.equal(state.verified, false);
     }
-    state = advanceLiveness(state, faceFrame(0, 3300));
+    state = advanceLiveness(state, faceFrame(0, 2800));
     assert.equal(state.verified, true);
   }
 });
@@ -200,7 +202,7 @@ test('long tracking interruptions restart only the final hold and never count th
     for (let time = 2600; time <= 3200; time += 100) {
       const frame = faceFrame(kind === 'turned' ? 15 : 0, time);
       if (kind === 'missing') frame.face = null;
-      if (kind === 'moved') frame.face.bounds.x += 8;
+      if (kind === 'moved') frame.face.bounds.x += 12;
       state = advanceLiveness(state, frame);
       assert.equal(state.verified, false);
     }
@@ -221,7 +223,7 @@ test('mirrored MediaPipe coordinates preserve turn direction', () => {
   const { FACE_LANDMARKS: idx } = indexes;
   face.points[idx.leftCheek] = { x: 30, y: 50 };
   face.points[idx.rightCheek] = { x: 70, y: 50 };
-  for (const [nose, expected] of [[55, 'right'], [45, 'left'], [50, 'center']]) {
+  for (const [nose, expected] of [[55, 'left'], [45, 'right'], [50, 'center']]) {
     face.points[idx.noseTip] = { x: nose, y: 50 };
     face.signals.mirrored = false;
     assert.equal(rules.getHeadPoseDirection(face), expected);

@@ -7,6 +7,9 @@ import { useUser } from '../../auth/session/UserContext';
 import { fetchReviewSummary, ReviewSummaryData } from '../../reviews/api/reviewApi';
 import { BottomSheetHandle } from '../../../shared/components/BottomSheetHandle';
 import { StarIcon } from '../../../shared/components/icons/LucideIcons';
+import { POST_UNAVAILABLE } from '../../bookings/postAvailability';
+import { ScheduleBadge } from '../../bookings/components/ScheduleBadge';
+import { WORK_DAYS } from '../../bookings/engagementForm';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SNAP_EXPANDED = 0;
@@ -14,6 +17,12 @@ const SNAP_COLLAPSED = Math.round(SCREEN_HEIGHT * 0.40);
 const SNAP_DISMISSED = SCREEN_HEIGHT;
 
 export interface JobDetailData {
+  start_time?: string;
+  end_time?: string | null;
+  booking_type?: 'short_term' | 'long_term';
+  daily_start_time?: string | null;
+  daily_end_time?: string | null;
+  work_days?: string[];
   id: number | string;
   partnerId?: number | string;
   employerName?: string;
@@ -37,6 +46,7 @@ export interface JobDetailSheetProps {
   onClose: () => void;
   onApply: (job: any) => void;
   isApplied: boolean;
+  isApplying?: boolean;
   isSaved?: boolean;
   isClosed?: boolean;
   onToggleSave?: (job: any) => void;
@@ -52,6 +62,7 @@ export function JobDetailSheet({
   onClose,
   onApply,
   isApplied,
+  isApplying = false,
   isSaved = false,
   isClosed = false,
   onToggleSave,
@@ -60,7 +71,7 @@ export function JobDetailSheet({
   ctaNotice,
   token,
 }: JobDetailSheetProps) {
-  const { tr: uiText } = useUiLanguage();
+  const { tr: uiText, formatDate } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const effectiveToken = token || user?.token;
@@ -273,6 +284,28 @@ export function JobDetailSheet({
     job.description ||
     'No description provided.';
 
+  const calendarDate = (value?: string | null) => {
+    const stamp = Date.parse(value || '');
+    return Number.isFinite(stamp) ? new Date(stamp + 8 * 3600000).toISOString().slice(0, 10) : '';
+  };
+  const start = calendarDate(job.start_time);
+  const end = calendarDate(job.end_time);
+  const startLabel = start ? formatDate(start, 'compact') : uiText('Date unavailable');
+  const workDates = !start ? startLabel
+    : job.booking_type === 'long_term' && job.end_time === null ? `${startLabel} – ${uiText('Ongoing (No end date)')}`
+    : end === start ? `${startLabel} (${uiText('Same day')})`
+    : `${startLabel} – ${end ? formatDate(end, 'compact') : uiText('Date unavailable')}`;
+  const clock = (value?: string | null) => {
+    const match = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(value || '');
+    if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) return '';
+    const hour = Number(match[1]);
+    return `${String(hour % 12 || 12).padStart(2, '0')}:${match[2]} ${hour < 12 ? 'AM' : 'PM'}`;
+  };
+  const startsAt = clock(job.daily_start_time);
+  const endsAt = clock(job.daily_end_time);
+  const workHours = startsAt && endsAt ? `${startsAt} – ${endsAt}` : uiText('Not provided');
+  const workDays = WORK_DAYS.filter(day => job.work_days?.includes(day.value)).map(day => uiText(day.label)).join(', ');
+
   const backdropOpacity = panY.interpolate({
     inputRange: [SNAP_EXPANDED, SNAP_COLLAPSED, SNAP_DISMISSED],
     outputRange: [1, 0.75, 0],
@@ -385,6 +418,21 @@ export function JobDetailSheet({
               </View>
             </View>
 
+            <View style={styles.scheduleSection}>
+              <View style={styles.scheduleRow}>
+                <Text style={styles.scheduleLabel}>{uiText('Work Dates')}</Text>
+                <Text style={styles.scheduleValue}>{workDates}</Text>
+              </View>
+              <View style={styles.scheduleRow}>
+                <Text style={styles.scheduleLabel}>{uiText('Work hours')}</Text>
+                <Text style={styles.scheduleValue}>{workHours}</Text>
+              </View>
+              <View style={styles.scheduleRow}>
+                <Text style={styles.scheduleLabel}>{uiText('Work days')}</Text>
+                <Text style={styles.scheduleValue}>{workDays || uiText('Not provided')}</Text>
+              </View>
+              <ScheduleBadge post={job} />
+            </View>
             {/* About This Role (Clean Squircle Card) */}
             <View style={styles.aboutCard}>
               <Text style={styles.aboutTitle}>{uiText("ABOUT THIS ROLE")}</Text>
@@ -457,7 +505,7 @@ export function JobDetailSheet({
 
             {/* Apply Button & Direct Message Notice */}
             <Pressable
-              disabled={isClosed}
+              disabled={isClosed || isApplying}
               style={({ pressed }) => [
                 styles.applyBtn,
                 isClosed
@@ -467,12 +515,14 @@ export function JobDetailSheet({
                     : null,
                 pressed && !isClosed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
               ]}
-              onPress={() => !isClosed && onApply(job)}
+              onPress={() => !isClosed && !isApplying && onApply(job)}
             >
-              {isClosed ? (
+              {isApplying ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : isClosed ? (
                 <View style={styles.applyBtnInner}>
                   <Ionicons name="lock-closed" size={18} color="#64748B" style={{ marginRight: 6 }} />
-                  <Text style={[styles.applyBtnText, { color: '#64748B' }]}>{uiText("Listing Closed (Position Filled)")}</Text>
+                  <Text style={[styles.applyBtnText, { color: '#64748B' }]}>{uiText('Post unavailable')}</Text>
                 </View>
               ) : isApplied ? (
                 <View style={styles.applyBtnInner}>
@@ -488,7 +538,7 @@ export function JobDetailSheet({
 
             <Text style={styles.applyNotice}>
               {isClosed
-                ? 'This post has been filled and contract made with an applicant.'
+                ? uiText(POST_UNAVAILABLE)
                 : ctaNotice || ((job as any)?.kind === 'service' || (job as any)?.authorRole === 'Kasambahay'
                     ? uiText('Send a direct booking offer to this worker')
                     : uiText('Your application goes directly to the employer'))}
@@ -663,6 +713,27 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     marginBottom: 16,
+  },
+  scheduleSection: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  scheduleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  scheduleLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  scheduleValue: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'right',
+    color: '#0D0D11',
+    fontWeight: '600',
   },
   aboutHeader: {
     flexDirection: 'row',

@@ -16,6 +16,8 @@ export type FaceLandmarks = {
   signals?: {
     leftEyeOpenProbability?: number;
     mirrored?: boolean;
+    /** Converts view-space Y into the same original-image scale as X. */
+    landmarkYScale?: number;
     rightEyeOpenProbability?: number;
     yawAngle?: number;
     pitchAngle?: number;

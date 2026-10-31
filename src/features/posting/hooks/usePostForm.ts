@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Animated, Easing, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { POSTING_CONFIG, engagementRate, buildPostDescription, buildPostLocation } from '../postingConfig';
+import { POSTING_CONFIG, buildPostDescription, buildPostLocation } from '../postingConfig';
 import { submitPost, type PostingPayload } from '../api/postingApi';
 
 import { useUser } from '../../auth/session/UserContext';
@@ -206,26 +206,23 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
   };
 
   const scheduleTerms = () => {
-    const today = new Date();
-    const tomorrow = new Date(today.getTime() + 86400000);
-    const formattedTomorrow = `${String(tomorrow.getMonth() + 1).padStart(2, '0')}/${String(tomorrow.getDate()).padStart(2, '0')}/${tomorrow.getFullYear()}`;
-    const effectiveStart = startDate || formattedTomorrow;
+    const effectiveStart = startDate;
     const isShort = engagementType === 'short';
     const effectiveHours = isShort && selectedTime && selectedTime !== 'custom'
-      ? (WORK_SHIFTS.find(s => s.value === selectedTime)?.hours || '08:00 AM - 12:00 PM')
-      : (workHours || '08:00 AM - 05:00 PM');
+      ? (WORK_SHIFTS.find(s => s.value === selectedTime)?.hours || workHours)
+      : workHours;
     const effectiveDays = workDays.length > 0
       ? workDays
-      : (isShort ? [dayForDate(effectiveStart)] : ['M', 'T', 'W', 'Th', 'F', 'S']);
+      : (isShort && effectiveStart ? [dayForDate(effectiveStart)] : []);
 
     return buildEngagementSchedule({
       bookingType: isShort ? 'short_term' : 'long_term',
       startDate: effectiveStart,
-      endDate: isShort ? effectiveStart : (endDate || ''),
+      endDate: endDate || (isShort ? effectiveStart : ''),
       workHours: effectiveHours,
       days: effectiveDays,
-      shift: selectedTime || (isShort ? 'morning' : null),
-      ongoing: isShort ? false : (ongoing || !endDate),
+      shift: selectedTime,
+      ongoing: isShort ? false : ongoing,
     });
   };
 
@@ -286,9 +283,17 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
       }
 
       const num = Number(offerAmount.replace(/[^0-9.]/g, ''));
-      const minRate = wagePolicy ? Number(wagePolicy.minimum_rate) : (engagementType === 'short' ? 350 : 6500);
-      if (!offerAmount.trim() || num < minRate) {
+      const minRate = wagePolicy ? Number(wagePolicy.minimum_rate) : null;
+      if (!offerAmount.trim() || !Number.isFinite(num) || num <= 0 || (minRate !== null && num < minRate)) {
         errors.rate = true;
+      }
+      try {
+        scheduleTerms();
+      } catch (error) {
+        errors.schedule = true;
+        setFieldErrors(errors);
+        Alert.alert('Invalid Schedule', error instanceof Error ? error.message : 'Please check your schedule.');
+        return;
       }
 
       if (Object.keys(errors).length > 0) {
@@ -326,7 +331,7 @@ export function usePostForm({ visible, onClose, mode = 'job', token, onOpenVerif
           barangay: selectedBarangay?.name,
           street: config.role === 'kasambahay' ? '' : streetAddress.trim(),
           floor_number: config.role === 'kasambahay' ? undefined : (floorUnit.trim() || undefined),
-          zip_code: config.role === 'kasambahay' ? '9000' : (zipcode.trim() || '9000'),
+          zip_code: zipcode.trim(),
           special_instruction: autoMessage,
           rate_amount: offerAmount.trim(),
           rate_period: engagementType === 'long' ? 'month' : 'day',

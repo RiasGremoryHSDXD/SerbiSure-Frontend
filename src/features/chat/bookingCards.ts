@@ -1,4 +1,4 @@
-import type { BookingItem } from '../bookings/api/bookingApi';
+import { formatBookingAddress, type BookingItem } from '../bookings/api/bookingApi';
 import type { WorkSetup } from '../bookings/workSetup';
 
 export interface PersistedChatOffer {
@@ -14,9 +14,11 @@ export interface BookingCardInfo {
   title: string;
   bookedByName: string;
   bookingId: string;
+  passUrl?: string | null;
   proposalId?: string;
   canRespond: boolean;
   startDate: string;
+  startTime?: string;
   endDate: string;
   workHours: string;
   location: string;
@@ -58,9 +60,9 @@ export function mapBookingCard(offer?: PersistedChatOffer | null): BookingCardIn
   const rate = offer.proposed_rate || b.rate_amount;
   return {
     title: confirmed ? 'BOOKING CONFIRMED' : declined ? 'BOOKING DECLINED' : unavailable ? 'OFFER UNAVAILABLE' : 'BOOKING OFFER',
-    bookedByName: offer.sender_name, bookingId: b.booking_id, proposalId: offer.proposal_id || undefined,
-    canRespond: offer.can_respond, startDate: philippinesDate(b.start_time), endDate: philippinesDate(b.end_time),
-    workHours: hours, location: b.full_address || '', region: b.region || '', days: b.work_days || [],
+    bookedByName: offer.sender_name, bookingId: b.booking_id, passUrl: b.pass_url, proposalId: offer.proposal_id || undefined,
+    canRespond: offer.can_respond, startTime: b.start_time, startDate: philippinesDate(b.start_time), endDate: philippinesDate(b.end_time),
+    workHours: hours, location: formatBookingAddress(b, ''), region: b.region || '', days: b.work_days || [],
     salary: rate, bookingType: b.booking_type, serviceCategory: b.service_category, workSetup: b.work_setup || null,
     jobRole: b.service_category.map(value => value.replace(/_/g, ' ')).join(', '),
     details: 'PHP ' + rate + '/' + b.rate_period + (hours ? ' · ' + hours : ''),

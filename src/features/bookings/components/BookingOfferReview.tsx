@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import THEME from '../../../shared/theme/theme';
 import { SERVICE_CHOICES, WORK_DAYS } from '../engagementForm';
 import { workSetupLabel, type WorkSetup } from '../workSetup';
+import { BookingPassQRCode } from './BookingPassQRCode';
 
 export type BookingOfferStep = 1 | 2 | 3 | 4;
 
@@ -29,12 +30,8 @@ interface Props {
   isDeclined?: boolean;
   isAcquired?: boolean;
   bookingId?: string | null;
+  passUrl?: string | null;
 }
-
-// Realistic barcode stripe widths (dp)
-const BARCODE_PATTERN = [
-  3, 1, 2, 4, 1, 2, 1, 3, 2, 1, 4, 1, 2, 3, 1, 2, 1, 4, 2, 1, 3, 1, 1, 2, 4, 1, 2, 1, 3, 2, 1, 4, 1, 2, 3, 1, 2, 1, 4, 2, 1, 3, 2, 1, 1, 4, 2, 1, 3, 1, 2, 4
-];
 
 function TicketPerforation() {
   return (
@@ -46,36 +43,49 @@ function TicketPerforation() {
   );
 }
 
-/** A ticket-style visual summary of booking terms with cutouts, 2-column grid, and barcode stub. */
+/** Booking terms with a locally generated QR linking to live pass verification. */
 export function BookingOfferReview(props: Props) {
   const { tr: uiText, formatDate } = useUiLanguage();
   const short = props.bookingType === 'short_term';
+  const displayDate = (value: string) => {
+    let calendarDate = value.trim();
+    // API timestamps are instants; show their Philippine calendar date.
+    // Form values such as MM/DD/YYYY are already calendar dates.
+    if (/^\d{4}-\d{2}-\d{2}T/.test(calendarDate)) {
+      const stamp = Date.parse(calendarDate);
+      if (Number.isFinite(stamp)) {
+        const ph = new Date(stamp + 8 * 3600000);
+        calendarDate = `${ph.getUTCMonth() + 1}/${ph.getUTCDate()}/${ph.getUTCFullYear()}`;
+      }
+    }
+    return calendarDate ? (formatDate?.(calendarDate, 'compact') || calendarDate) : uiText('Not set');
+  };
+  const startDate = displayDate(props.startDate);
+  const endDate = displayDate(props.endDate);
+  const showDateRange = !short || (!!props.endDate.trim() && startDate !== endDate);
+  const openEnded = !short && (props.ongoing || !props.endDate.trim());
   const amount = props.salary.trim() && Number.isFinite(Number(props.salary))
     ? `₱${Number(props.salary).toLocaleString('en-PH', { maximumFractionDigits: 2 })}`
     : props.salary || uiText('Not provided');
 
   const primaryServiceChoice = SERVICE_CHOICES.find(item => props.serviceCategory.includes(item.id));
-  const primaryServiceName = primaryServiceChoice ? primaryServiceChoice.label : (props.serviceCategory[0] || 'Cleaning');
+  const primaryServiceName = primaryServiceChoice ? primaryServiceChoice.label : (props.serviceCategory[0] || uiText('Service not specified'));
 
   const days = WORK_DAYS.filter(day => props.days.includes(day.value))
     .map(day => uiText(day.label))
     .join(', ');
 
-  const bookingCode = props.bookingId
-    ? `BK-${props.bookingId.slice(0, 8).toUpperCase()}`
-    : `BK-${(props.contactName || 'A1').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || 'A1'}158EEE`;
-
-  const displayName = props.contactName || uiText('Shennie Mae Cabanes');
+  const displayName = props.contactName || uiText('Service Partner');
   const initials = displayName
     .split(' ')
     .filter(Boolean)
     .slice(0, 2)
     .map(part => part[0]?.toUpperCase() || '')
-    .join('') || 'SC';
+    .join('') || '?';
 
   const cleanRegion = props.region
     ? props.region.replace(/ - Region.*$/, '')
-    : uiText("Northern Mindanao");
+    : uiText('Not provided');
 
   return (
     <View style={styles.ticketCard}>
@@ -129,22 +139,33 @@ export function BookingOfferReview(props: Props) {
         {/* 2-Column Key-Value Grid */}
         <View style={styles.gridRow}>
           <View style={styles.gridCol}>
-            <Text style={styles.fieldLabel}>{short ? uiText("Service date") : uiText("Start date")}</Text>
-            <Text style={styles.fieldValue}>
-              {props.startDate ? (formatDate ? (formatDate(props.startDate, 'compact') || props.startDate) : props.startDate) : uiText("Not set")}
-            </Text>
+            <Text style={styles.fieldLabel}>{showDateRange ? uiText("Start date") : uiText("Service date")}</Text>
+            <Text style={styles.fieldValue}>{startDate}</Text>
           </View>
           <View style={styles.gridCol}>
-            <Text style={styles.fieldLabel}>{uiText("Work hours")}</Text>
-            <Text style={styles.fieldValue}>{props.workHours || uiText("Not set")}</Text>
+            <Text style={styles.fieldLabel}>{showDateRange ? uiText("End date") : uiText("Work hours")}</Text>
+            <Text style={styles.fieldValue}>{showDateRange
+              ? (openEnded ? uiText('Ongoing (No end date)') : endDate)
+              : props.workHours || uiText('Not set')}</Text>
           </View>
         </View>
+
+        {showDateRange && <View style={styles.gridRow}>
+          <View style={styles.gridCol}>
+            <Text style={styles.fieldLabel}>{uiText('Work hours')}</Text>
+            <Text style={styles.fieldValue}>{props.workHours || uiText('Not set')}</Text>
+          </View>
+          <View style={styles.gridCol}>
+            <Text style={styles.fieldLabel}>{uiText('Work region')}</Text>
+            <Text style={styles.fieldValue}>{cleanRegion}</Text>
+          </View>
+        </View>}
 
         <View style={styles.gridRow}>
           <View style={styles.gridCol}>
             <Text style={styles.fieldLabel}>{short ? uiText("Engagement") : uiText("Work setup")}</Text>
             <Text style={styles.fieldValue}>
-              {short ? uiText("Short-term") : uiText(props.workSetup ? workSetupLabel(props.workSetup) : 'Stay-in')}
+              {short ? uiText("Short-term") : uiText(workSetupLabel(props.workSetup))}
             </Text>
           </View>
           <View style={styles.gridCol}>
@@ -156,35 +177,15 @@ export function BookingOfferReview(props: Props) {
         </View>
 
         <View style={styles.gridRow}>
-          <View style={styles.gridCol}>
-            {short ? (
-              <>
-                <Text style={styles.fieldLabel}>{uiText("Work days")}</Text>
-                <Text style={styles.fieldValue}>{days || uiText("Mon - Sun")}</Text>
-              </>
-            ) : (
-              <>
-                <Text style={styles.fieldLabel}>{uiText("Ends")}</Text>
-                <Text style={styles.fieldValue}>
-                  {props.ongoing ? uiText("No end date") : (props.endDate ? (formatDate ? (formatDate(props.endDate, 'compact') || props.endDate) : props.endDate) : uiText("Not set"))}
-                </Text>
-              </>
-            )}
+          <View style={showDateRange ? styles.gridColFull : styles.gridCol}>
+            <Text style={styles.fieldLabel}>{uiText('Work days')}</Text>
+            <Text style={styles.fieldValue}>{days || uiText('Not provided')}</Text>
           </View>
-          <View style={styles.gridCol}>
+          {!showDateRange && <View style={styles.gridCol}>
             <Text style={styles.fieldLabel}>{uiText("Work region")}</Text>
             <Text style={styles.fieldValue}>{cleanRegion}</Text>
-          </View>
+          </View>}
         </View>
-
-        {!short && days ? (
-          <View style={styles.gridRow}>
-            <View style={styles.gridColFull}>
-              <Text style={styles.fieldLabel}>{uiText("Work days")}</Text>
-              <Text style={styles.fieldValue}>{days}</Text>
-            </View>
-          </View>
-        ) : null}
 
         {/* Address Box */}
         <View style={styles.addressBlock}>
@@ -199,25 +200,9 @@ export function BookingOfferReview(props: Props) {
       {/* Perforation 2 with cutouts */}
       <TicketPerforation />
 
-      {/* 3. Bottom Stub: Barcode & Reference */}
+      {/* 3. Locally rendered pass; drafts never generate a verification link. */}
       <View style={styles.stubSection}>
-        <View style={styles.barcodeWrapper}>
-          <View style={styles.barcodeRow}>
-            {BARCODE_PATTERN.map((w, idx) => (
-              <View
-                key={idx}
-                style={{
-                  width: w,
-                  height: 42,
-                  backgroundColor: '#0D0D11',
-                  marginRight: idx % 5 === 0 ? 3 : 1.5,
-                  borderRadius: 0.5,
-                }}
-              />
-            ))}
-          </View>
-          <Text style={styles.barcodeText}>{bookingCode}</Text>
-        </View>
+        <BookingPassQRCode bookingId={props.bookingId} passUrl={props.passUrl} />
       </View>
     </View>
   );
@@ -422,23 +407,5 @@ const styles = StyleSheet.create({
     paddingBottom: 22,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
-  },
-  barcodeWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  barcodeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 2,
-  },
-  barcodeText: {
-    fontFamily: THEME.typography.fontFamily.mainBold,
-    fontSize: 11,
-    color: '#000000',
-    letterSpacing: 3.5,
-    marginTop: 9,
   },
 });

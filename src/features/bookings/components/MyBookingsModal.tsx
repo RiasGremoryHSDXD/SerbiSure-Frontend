@@ -1,4 +1,5 @@
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
+import { formatRate } from '../../../shared/utils/rate';
 import { realtime } from '../../../shared/realtime';
 import { AppState } from 'react-native';
 import { workSetupLabel } from '../workSetup';
@@ -31,11 +32,12 @@ export interface MyBookingsModalProps {
   initialTab?: TabType;
 }
 
-type TabType = 'active' | 'pending' | 'completed' | 'cancelled';
+type TabType = 'active' | 'pending' | 'ongoing' | 'completed' | 'cancelled';
 
 const TABS: { key: TabType; label: string }[] = [
   { key: 'active', label: 'Active' },
   { key: 'pending', label: 'Pending' },
+  { key: 'ongoing', label: 'Ongoing' },
   { key: 'completed', label: 'Completed' },
   { key: 'cancelled', label: 'Cancelled' },
 ];
@@ -124,12 +126,13 @@ export function MyBookingsModal({
     setErrorMessage(null);
 
     const currentTab = activeTab;
+    const statusFilter = currentTab === 'active' ? 'Accepted' : currentTab === 'ongoing' ? 'InProgress' : currentTab;
 
     try {
       let data: BookingItem[] = [];
 
       const [posted, assigned, penaltyState] = await Promise.all([
-        fetchMyBookings(token, currentTab), fetchMyAssignedBookings(token, currentTab), fetchBookingPenaltyStatus(token),
+        fetchMyBookings(token, statusFilter), fetchMyAssignedBookings(token, statusFilter), fetchBookingPenaltyStatus(token),
       ]);
       data = Array.from(new Map([...posted, ...assigned].map(item => [item.booking_id, item])).values());
 
@@ -479,7 +482,7 @@ export function MyBookingsModal({
         })()}
 
         {/* Tab Switcher */}
-        <View style={styles.tabsRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.tabsRow}>
           {TABS.map((tab) => {
             const isCurrent = activeTab === tab.key;
             return (
@@ -494,7 +497,7 @@ export function MyBookingsModal({
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
 
         {/* Content List */}
         <ScrollView
@@ -537,9 +540,8 @@ export function MyBookingsModal({
               const partnerInfo = counterparty || (booking.poster?.id !== user.id ? booking.poster : null);
               const displayName = partnerInfo?.name || uiText("Waiting for Kasambahay");
               const displayRole = partnerInfo?.account_type || uiText("Kasambahay");
-              const displayRating = (partnerInfo?.rating && partnerInfo.rating > 0)
-                ? `${partnerInfo.rating} Rating`
-                : '3.7 Rating';
+              const rating = partnerInfo?.rating;
+              const hasRating = typeof rating === 'number' && Number.isFinite(rating) && rating >= 1 && rating <= 5;
               const avatarUri = partnerInfo?.profile_link ||
                 `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=FFB380&color=fff`;
 
@@ -547,11 +549,11 @@ export function MyBookingsModal({
                 Array.isArray(booking.service_category)
                   ? booking.service_category[0]
                   : booking.service_category
-              ) || 'Cleaning';
+              ) || 'Service not specified';
               const formattedCategory = categoryName.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
 
               const durationLabel = booking.booking_type === 'long_term' ? 'Long-term' : 'Short-term';
-              const setupRaw = booking.work_setup || (booking.booking_type === 'short_term' ? 'stay_out' : 'stay_in');
+              const setupRaw = booking.work_setup;
               const setupLabel = workSetupLabel(setupRaw);
               const combinedTerms = `${durationLabel} · ${setupLabel}`;
 
@@ -589,8 +591,17 @@ export function MyBookingsModal({
                       </View>
                       <View style={styles.cardSubRow}>
                         <Text style={styles.cardRoleText}>{displayRole}</Text>
-                        <Ionicons name="star-outline" size={13.5} color="#FFB380" style={styles.starIcon} />
-                        <Text style={styles.cardRatingText}>{displayRating}</Text>
+                        {partnerInfo && (hasRating ? (
+                          <>
+                            <Text style={styles.ratingSeparator}>·</Text>
+                            <Ionicons name="star-outline" size={13.5} color="#FFB380" style={styles.starIcon} />
+                            <Text style={styles.cardRatingText}>{rating.toFixed(1)}</Text>
+                          </>
+                        ) : (
+                          <View style={styles.newBadge}>
+                            <Text style={styles.newBadgeText}>{uiText('New')}</Text>
+                          </View>
+                        ))}
                       </View>
                     </View>
                   </Pressable>
@@ -598,7 +609,7 @@ export function MyBookingsModal({
                   {/* Middle Row: Rate & Combined Terms Badge */}
                   <View style={styles.cardMiddleRow}>
                     <View style={styles.rateContainer}>
-                      <Text style={styles.rateAmount}>₱{String(booking.rate_amount).replace(/\.00$/, '')}</Text>
+                      <Text style={styles.rateAmount}>{uiText(formatRate(booking.rate_amount).replace(/\.00$/, ''))}</Text>
                       <Text style={styles.ratePeriod}>
                         / {booking.rate_period || (booking.booking_type === 'long_term' ? 'month' : 'day')}
                       </Text>
@@ -694,11 +705,13 @@ export function MyBookingsModal({
                 name={
                   activeTab === 'active'
                     ? 'briefcase-outline'
-                    : activeTab === 'pending'
-                      ? 'hourglass-outline'
-                      : activeTab === 'completed'
-                        ? 'checkmark-done-circle-outline'
-                        : 'close-circle-outline'
+                    : activeTab === 'ongoing'
+                      ? 'time-outline'
+                      : activeTab === 'pending'
+                        ? 'hourglass-outline'
+                        : activeTab === 'completed'
+                          ? 'checkmark-done-circle-outline'
+                          : 'close-circle-outline'
                 }
                 size={52}
                 color="#0D0D11"
@@ -706,20 +719,24 @@ export function MyBookingsModal({
               <Text style={styles.emptyTitle}>
                 {activeTab === 'active'
                   ? 'No Active Contracts'
-                  : activeTab === 'pending'
-                    ? 'No Pending Postings'
-                    : activeTab === 'completed'
-                      ? 'No Completed Bookings'
-                      : 'No Cancelled Bookings'}
+                  : activeTab === 'ongoing'
+                    ? 'No Ongoing Contracts'
+                    : activeTab === 'pending'
+                      ? 'No Pending Postings'
+                      : activeTab === 'completed'
+                        ? 'No Completed Bookings'
+                        : 'No Cancelled Bookings'}
               </Text>
               <Text style={styles.emptySubtitle}>
                 {activeTab === 'active'
-                  ? 'Confirmed bookings and ongoing domestic work contracts will appear here.'
-                  : activeTab === 'pending'
-                    ? 'Open postings waiting for worker assignment, acceptance, or counter-offers will appear here.'
-                    : activeTab === 'completed'
-                      ? 'Domestic work contracts that have reached completion will appear here.'
-                      : 'Bookings that were cancelled or withdrawn will appear here.'}
+                  ? 'Accepted bookings waiting to start will appear here.'
+                  : activeTab === 'ongoing'
+                    ? 'Jobs that have started and are still in progress will appear here.'
+                    : activeTab === 'pending'
+                      ? 'Open postings waiting for worker assignment, acceptance, or counter-offers will appear here.'
+                      : activeTab === 'completed'
+                        ? 'Domestic work contracts that have reached completion will appear here.'
+                        : 'Bookings that were cancelled or withdrawn will appear here.'}
               </Text>
             </View>
           )}
@@ -802,19 +819,20 @@ export function MyBookingsModal({
         initialDetails={{
           serviceCategory: Array.isArray(selectedBookingForDetails.service_category)
             ? selectedBookingForDetails.service_category
-            : [selectedBookingForDetails.service_category || 'Cleaning'],
-          workSetup: selectedBookingForDetails.work_setup || (selectedBookingForDetails.booking_type === 'short_term' ? 'stay_out' : 'stay_in'),
-          region: selectedBookingForDetails.region || 'Northern Mindanao',
+            : selectedBookingForDetails.service_category ? [selectedBookingForDetails.service_category] : [],
+          workSetup: selectedBookingForDetails.work_setup || null,
+          region: selectedBookingForDetails.region || '',
           startDate: selectedBookingForDetails.start_time || '',
-          endDate: selectedBookingForDetails.end_time || selectedBookingForDetails.start_time || '',
+          endDate: selectedBookingForDetails.end_time || '',
           workHours: (selectedBookingForDetails.daily_start_time && selectedBookingForDetails.daily_end_time)
             ? `${selectedBookingForDetails.daily_start_time} - ${selectedBookingForDetails.daily_end_time}`
-            : '08:00 AM - 12:00 PM',
+            : '',
           location: formatBookingAddress(selectedBookingForDetails),
-          days: selectedBookingForDetails.work_days && selectedBookingForDetails.work_days.length > 0 ? selectedBookingForDetails.work_days : ['Mon'],
-          salary: selectedBookingForDetails.rate_amount || '600',
+          days: selectedBookingForDetails.work_days || [],
+          salary: selectedBookingForDetails.rate_amount || '',
           bookingType: selectedBookingForDetails.booking_type,
           bookingId: selectedBookingForDetails.booking_id,
+          passUrl: selectedBookingForDetails.pass_url,
           id: selectedBookingForDetails.booking_id,
         }}
         token={token}
@@ -862,13 +880,15 @@ const styles = StyleSheet.create({
     color: '#0D0D11',
   },
   tabsRow: {
+    flexGrow: 1,
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingBottom: 14,
     gap: 8,
   },
   tabItem: {
-    flex: 1,
+    flexGrow: 1,
+    paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: THEME.roundness.pill,
     alignItems: 'center',
@@ -957,7 +977,23 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   starIcon: {
-    marginHorizontal: 5,
+    marginRight: 4,
+  },
+  ratingSeparator: {
+    marginHorizontal: 6,
+    color: '#6B7280',
+  },
+  newBadge: {
+    marginLeft: 8,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: '#F1F5F9',
+  },
+  newBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
   },
   cardRatingText: {
     fontSize: 13,

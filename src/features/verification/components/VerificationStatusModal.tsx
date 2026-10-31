@@ -8,6 +8,7 @@ import { DocumentStatusItem, VerificationStatusResponse, deleteRejectedDocument 
 import { IDPhotoModal } from './IDPhotoModal';
 import { API_BASE_URL } from '../../../shared/api/config';
 import { fetchWithTimeout } from '../../../shared/api/httpClient';
+import { canReplaceDocument, currentDocuments, documentIsExpired } from '../documentStatus';
 
 const logoSource = require('../../../../assets/serbisure-icon.png');
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -131,6 +132,7 @@ export function VerificationStatusModal({
   const [nationalFrontImage, setNationalFrontImage] = useState<string | null>(null);
   const [nationalBackImage, setNationalBackImage] = useState<string | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
+  const uploading = useRef(false);
   const [expandedDocIds, setExpandedDocIds] = useState<Record<string, boolean>>({});
   const [expandedRawDocIds, setExpandedRawDocIds] = useState<Record<string, boolean>>({});
 
@@ -228,11 +230,12 @@ export function VerificationStatusModal({
     );
   };
 
-  // Active documents (Pending or Verified) don't need re-upload
+  // Old approvals remain history; only the latest submission controls renewal.
+  const documents = currentDocuments(statusData?.documents);
+  const renewalRequired = documents.some(doc => documentIsExpired(doc) && canReplaceDocument(doc));
+  const renewalPending = statusData?.renewal_pending === true;
   const activeTypes = new Set(
-    statusData?.documents
-      ?.filter((d) => d.verification_status === 'Pending' || d.verification_status === 'Verified')
-      .map((d) => d.document_type) ?? []
+    documents.filter(d => !canReplaceDocument(d)).map(d => d.document_type)
   );
 
   const needsNbi = effectiveRole === 'kasambahay' && (!activeTypes.has('nbi_clearance') || !!nbiImage);
@@ -244,6 +247,7 @@ export function VerificationStatusModal({
   const hasAnySelected = !!(nbiImage || policeImage || nationalFrontImage || nationalBackImage);
 
   const handleUploadAll = async () => {
+    if (uploading.current) return;
     if (!token) {
       Alert.alert('Authentication Error', 'You must be logged in to upload documents.');
       return;
@@ -276,6 +280,7 @@ export function VerificationStatusModal({
       return;
     }
 
+    uploading.current = true;
     setUploadLoading(true);
     try {
       for (const upload of uploads) {
@@ -301,57 +306,37 @@ export function VerificationStatusModal({
         }, 45000);
 
         if (response.status === 409) {
-          console.log(`[VerificationStatusModal] ${upload.type} already submitted, continuing.`);
-          continue;
+          throw new Error(uiText('This document is already submitted. Please check its latest status before uploading again.'));
         }
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(errorData.error || `Failed to upload ${DOCUMENT_NAMES[upload.type] || upload.type}`);
         }
+        if (upload.type === 'nbi_clearance') setNbiImage(null);
+        else if (upload.type === 'police_clearance') setPoliceImage(null);
+        else if (upload.type === 'national_id_front') setNationalFrontImage(null);
+        else setNationalBackImage(null);
       }
 
-      Alert.alert('Success', 'Documents submitted successfully!');
+      Alert.alert(uiText('Success'), uiText("Your documents are submitted. We'll notify you after review."));
       setNbiImage(null);
       setPoliceImage(null);
       setNationalFrontImage(null);
       setNationalBackImage(null);
-      onRefresh?.();
     } catch (error: any) {
       Alert.alert('Upload Failed', error.message || 'An unexpected error occurred during upload.');
     } finally {
+      uploading.current = false;
       setUploadLoading(false);
+      onRefresh?.();
     }
   };
 
-  const resolveEffectiveStatus = (): 'Verified' | 'Pending' | 'Rejected' | 'Unverified' => {
-    if (!statusData) return 'Unverified';
-
-    // Derive directly from submitted documents list
-    if (statusData.documents && statusData.documents.length > 0) {
-      const verifiedTypes = new Set(
-        statusData.documents
-          .filter((d) => d.verification_status === 'Verified')
-          .map((d) => d.document_type)
-      );
-
-      if (statusData.account_type === 'Homeowner') {
-        if (verifiedTypes.has('national_id_front')) {
-          return 'Verified';
-        }
-      } else if (statusData.account_type === 'Kasambahay') {
-        if (verifiedTypes.has('nbi_clearance') && verifiedTypes.has('police_clearance')) {
-          return 'Verified';
-        }
-      }
-
-      const docStatuses = new Set(statusData.documents.map((d) => d.verification_status));
-      if (docStatuses.has('Rejected')) return 'Rejected';
-      if (docStatuses.has('Pending') || verifiedTypes.size > 0) return 'Pending';
-    }
-
-    return (statusData.overall_status as any) || 'Unverified';
-  };
+  // The backend evaluates current required documents and expiry in Philippine time.
+  // Individual past approvals must not override current account eligibility.
+  const resolveEffectiveStatus = (): 'Verified' | 'Pending' | 'Rejected' | 'Unverified' =>
+    statusData?.overall_status ?? 'Unverified';
 
   const renderStatusBanner = () => {
     const status = resolveEffectiveStatus();
@@ -364,7 +349,7 @@ export function VerificationStatusModal({
         <View style={styles.bannerTopRow}>
           <Ionicons
             name={
-              isApproved
+              renewalRequired ? 'refresh-circle' : isApproved
                 ? 'shield-checkmark'
                 : isRejected
                   ? 'alert-circle'
@@ -374,7 +359,7 @@ export function VerificationStatusModal({
             }
             size={26}
             color={
-              isApproved
+              renewalRequired ? '#B45309' : isApproved
                 ? '#00B13B'
                 : isRejected
                   ? '#FF3E3E'
@@ -386,7 +371,7 @@ export function VerificationStatusModal({
           />
           <View style={{ flex: 1 }}>
             <Text style={styles.bannerTitle}>
-              {isApproved
+              {renewalRequired ? uiText('Renewal needed') : renewalPending ? uiText('Renewal under review') : isApproved
                 ? uiText("Verified Account")
                 : isRejected
                   ? uiText("Action Required")
@@ -395,7 +380,8 @@ export function VerificationStatusModal({
                     : uiText("Verify Your Identity")}
             </Text>
             <Text style={styles.bannerSubtitle}>
-              {isApproved
+              {renewalRequired ? uiText('A required document has expired. Upload your renewed document below. You do not need to wait for an official.')
+                : renewalPending ? uiText('We received your renewed document. You can apply and post again once your required documents are approved and valid.') : isApproved
                 ? uiText("Your documents have been approved by officials. Your profile now has the verified badge.")
                 : isRejected
                   ? uiText("One of your documents was not accepted. Please check the notes below.")
@@ -407,7 +393,7 @@ export function VerificationStatusModal({
         </View>
 
         {/* 3-Step Progress Indicator */}
-        <View style={styles.progressBarWrapper}>
+        {!renewalRequired && <View style={styles.progressBarWrapper}>
           <View style={styles.progressCirclesRow}>
             {/* Step 1: Submitted / Pending */}
             <View
@@ -492,7 +478,7 @@ export function VerificationStatusModal({
               {uiText("Verified")}
             </Text>
           </View>
-        </View>
+        </View>}
 
         {/* Friendly notification note for Pending */}
         {isUnderReview && (
@@ -508,9 +494,10 @@ export function VerificationStatusModal({
   };
 
   const renderDocumentItem = (doc: DocumentStatusItem) => {
+    const isExpired = documentIsExpired(doc) && doc.verification_status !== 'Pending';
     const isPending = doc.verification_status === 'Pending';
-    const isVerified = doc.verification_status === 'Verified';
-    const isRejected = doc.verification_status === 'Rejected';
+    const isVerified = doc.verification_status === 'Verified' && !isExpired;
+    const isRejected = doc.verification_status === 'Rejected' && !isExpired;
     const docTitle = DOCUMENT_NAMES[doc.document_type] || doc.document_type;
     const formattedDate = doc.created_at
       ? new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -532,7 +519,7 @@ export function VerificationStatusModal({
         {/* Document Header Row */}
         <View style={styles.docItemHeader}>
           <Ionicons
-            name={isVerified ? 'checkmark-circle' : isRejected ? 'alert-circle' : 'time'}
+            name={isVerified ? 'checkmark-circle' : isExpired || isRejected ? 'alert-circle' : 'time'}
             size={22}
             color={isVerified ? '#00B13B' : isRejected ? '#FF3E3E' : '#FFB380'}
             style={{ marginRight: 10 }}
@@ -551,7 +538,7 @@ export function VerificationStatusModal({
             style={[
               styles.statusBadge,
               isVerified && styles.statusBadgeVerified,
-              isPending && styles.statusBadgePending,
+              (isPending || isExpired) && styles.statusBadgePending,
               isRejected && styles.statusBadgeRejected,
             ]}
           >
@@ -559,17 +546,26 @@ export function VerificationStatusModal({
               style={[
                 styles.statusBadgeText,
                 isVerified && styles.statusBadgeTextVerified,
-                isPending && styles.statusBadgeTextPending,
+                (isPending || isExpired) && styles.statusBadgeTextPending,
                 isRejected && styles.statusBadgeTextRejected,
               ]}
             >
-              {isVerified ? uiText("Approved") : isRejected ? 'Needs Re-upload' : uiText("Under Review")}
+              {isExpired ? uiText('Expired') : isVerified ? uiText("Approved") : isRejected ? 'Needs Re-upload' : uiText(isProcessingOcr ? "Checking document" : "Under Review")}
             </Text>
           </View>
         </View>
 
-        {/* Rejected State: Large, prominent feedback and re-upload call to action */}
-        {isRejected ? (
+        {isExpired ? (
+          <View style={styles.whatNextBox}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.whatNextText}>{uiText('Expired on')} {doc.valid_until ? new Date(`${doc.valid_until}T12:00:00+08:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' }) : ''}. {uiText('Please upload your renewed document.')}</Text>
+              <Pressable style={[styles.reuploadFullBtn, { marginTop: 10, minHeight: 44 }]} disabled={uploadLoading} onPress={() => handleReupload(doc.document_type)} accessibilityRole="button">
+                <Ionicons name="camera-outline" size={17} color="#FFF" style={{ marginRight: 6 }} />
+                <Text style={styles.reuploadFullBtnText}>{uiText(effectiveRole === 'kasambahay' ? 'Upload renewed clearance' : 'Upload renewed document')}</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : isRejected ? (
           <View style={styles.rejectedCard}>
             <View style={styles.rejectedHeader}>
               <Ionicons name="close-circle" size={18} color="#DC2626" style={{ marginRight: 6 }} />
@@ -613,7 +609,7 @@ export function VerificationStatusModal({
             <View style={{ flex: 1 }}>
               <Text style={styles.ocrScanningTitle}>{uiText("Reading your document...")}</Text>
               <Text style={styles.ocrScanningSubtitle}>
-                {uiText("Our system is checking the details on your")} {docTitle}{uiText(". This takes just a moment.")}</Text>
+                {uiText("Your document is saved. We're checking its details for review.")}</Text>
             </View>
           </View>
         ) : (!isRejected && (hasOcrData || hasDiscrepancies)) ? (
@@ -748,7 +744,7 @@ export function VerificationStatusModal({
         {needsNbi ? (
           <UploadBox
             title={uiText("NBI Clearance")}
-            subtitle="Click or drag file to upload"
+            subtitle={uiText('Tap to take or choose a photo')}
             image={nbiImage}
             defaultFilename="nbi_clearance.jpg"
             onPress={() => handleBoxPress('nbi')}
@@ -759,7 +755,7 @@ export function VerificationStatusModal({
         {needsPolice ? (
           <UploadBox
             title={uiText("Police Clearance")}
-            subtitle="Click or drag file to upload"
+            subtitle={uiText('Tap to take or choose a photo')}
             image={policeImage}
             defaultFilename="police_clearance.jpg"
             onPress={() => handleBoxPress('police')}
@@ -858,10 +854,10 @@ export function VerificationStatusModal({
               <>
                 {renderStatusBanner()}
 
-                {statusData?.documents && statusData.documents.length > 0 ? (
+                {documents.length > 0 ? (
                   <>
                     <Text style={styles.sectionHeader}>{uiText("Submitted Documents")}</Text>
-                    {statusData.documents.map(renderDocumentItem)}
+                    {documents.map(renderDocumentItem)}
                   </>
                 ) : null}
 

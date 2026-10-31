@@ -5,18 +5,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { ProfileAvatar } from '../../../shared/ui/ProfileAvatar';
 import THEME from '../../../shared/theme/theme';
 import type { SavedJobItem } from '../../bookings/store/savedJobsStore';
+import { applicationLabel } from '../../bookings/postAvailability';
+import { ScheduleBadge } from '../../bookings/components/ScheduleBadge';
 
 interface ActivityProps {
   readonly post: SavedJobItem;
   readonly applied?: boolean;
   readonly closed?: boolean;
+  readonly now?: number;
   readonly onProfile: () => void;
   readonly onDetails: () => void;
   readonly onUnsave?: () => void;
   readonly onMessage?: () => void;
 }
 
-export function BrowseActivityCard({ post, applied, closed, onProfile, onDetails, onUnsave, onMessage }: ActivityProps) {
+export function BrowseActivityCard({ post, applied, closed, now, onProfile, onDetails, onUnsave, onMessage }: ActivityProps) {
   const { tr: uiText } = useUiLanguage();
   const badgeText = post.termTag || post.setupTag;
 
@@ -59,7 +62,10 @@ export function BrowseActivityCard({ post, applied, closed, onProfile, onDetails
         ) : null}
       </View>
 
-      {applied && <Text style={[styles.status, closed && styles.closed]}>{closed ? uiText("Position filled") : uiText("Application sent")}</Text>}
+      <ScheduleBadge post={post} now={now} />
+      {applied && <Text style={[styles.status, (closed || applicationLabel(post, now).startsWith('Closed')) && styles.closed]}>
+        {uiText(closed && applicationLabel(post, now) === 'Application sent' ? 'Closed / Not Selected' : applicationLabel(post, now))}
+      </Text>}
 
       <View style={styles.footer}>
         <View style={styles.rate}>

@@ -143,7 +143,7 @@ function screen(t, options = {}) {
   const threadCache = compile('src/features/chat/threadCache.ts', {});
   const { ChatDetailScreen } = compile('src/features/chat/components/ChatDetailScreen.tsx', {
     '../../../shared/localization/LanguageContext': languageContext,
-    'react-native': native,
+    'react-native': native, '../../../../assets/serbisure-icon.png': 1,
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
     '@expo/vector-icons': { Ionicons: 'Icon' }, 'expo-image-picker': {},
     '../../auth/session/UserContext': { useUser: () => ({ user }) },
@@ -154,6 +154,8 @@ function screen(t, options = {}) {
     '../bookingCards': { mapBookingCard: () => null }, '../api/bookingOffersApi': {
       respondToBookingOffer: (...args) => { const request = { ...deferred(), args }; bookingResponses.push(request); return request.promise; },
     },
+    '../../bookings/postAvailability': compile('src/features/bookings/postAvailability.ts', { './engagementForm': compile('src/features/bookings/engagementForm.ts', {}) }),
+    '../../bookings/hooks/useScheduleClock': { useScheduleClock: () => Date.now() },
     '../../bookings/bookingAcceptance': compile('src/features/bookings/bookingAcceptance.ts', { 'react-native': native }),
     '../../bookings/components/BookingModal': { BookingModal: props => { dialogs.push('booking'); bookingModals.push(props); return null; } },
     '../../profile/components/UserProfileView': { UserProfileView: () => { dialogs.push('profile'); return null; } },
@@ -211,7 +213,7 @@ for (const accountType of ['Homeowner', 'Kasambahay']) {
       const chat = screen(t, { accountType, deferEntrance: true });
       const bookingType = duration === 'short_term' ? 'short_term' : 'long_term';
       const card = { bookingId: 'booking-one', proposalId: 'proposal-one', title: 'BOOKING OFFER', bookedByName: 'Offer Sender', canRespond: true,
-        bookingType, startDate: '10/20/2026', endDate: duration === 'ongoing_long_term' ? '' : duration === 'short_term' ? '10/20/2026' : '11/20/2026' };
+        bookingType, startDate: '10/20/2099', endDate: duration === 'ongoing_long_term' ? '' : duration === 'short_term' ? '10/20/2099' : '11/20/2099' };
       chat.threadCache.cacheThread(JSON.stringify(['account-one', 'Other Person']), [{ id: 'offer-message', sender: 'system', bookingInfo: card, time: 'Now' }], chat.threadCache.threadCacheGeneration());
       chat.update('Other Person', true, { contactRole: accountType === 'Homeowner' ? 'Kasambahay' : 'Homeowner', userRole: role });
       const content = node => node.text || node.children.map(content).join('');
@@ -242,7 +244,7 @@ for (const accountType of ['Homeowner', 'Kasambahay']) {
 
 test('quick booking acceptance keeps the offer available after a connection failure', async t => {
   const chat = screen(t, { accountType: 'Homeowner', deferEntrance: true });
-  const card = { bookingId: 'booking-one', title: 'BOOKING OFFER', bookedByName: 'Offer Sender', canRespond: true, bookingType: 'short_term', startDate: '10/20/2026' };
+  const card = { bookingId: 'booking-one', title: 'BOOKING OFFER', bookedByName: 'Offer Sender', canRespond: true, bookingType: 'short_term', startDate: '10/20/2099' };
   chat.threadCache.cacheThread(JSON.stringify(['account-one', 'Other Person']), [{ id: 'offer', sender: 'system', bookingInfo: card, time: 'Now' }], chat.threadCache.threadCacheGeneration());
   chat.update('Other Person', true, { contactRole: 'Kasambahay' });
   const content = node => node.text || node.children.map(content).join('');
@@ -252,6 +254,26 @@ test('quick booking acceptance keeps the offer available after a connection fail
   assert.deepEqual(chat.alerts.at(-1), ['Booking not updated', 'Could not connect. Check your connection and try again.']);
   assert.deepEqual(chat.closedBookings, []);
   assert.ok(chat.nodes().some(node => node.type === 'Pressable' && (content(node) === 'Agree & Accept' || content(node) === 'Accept')));
+});
+
+test('passed chat offer disables Accept with a helper while keeping Decline available', async t => {
+  const chat = screen(t, { accountType: 'Homeowner', deferEntrance: true });
+  const card = { bookingId: 'old-booking', proposalId: 'old-proposal', title: 'BOOKING OFFER', bookedByName: 'Applicant',
+    canRespond: true, bookingType: 'short_term', startDate: '01/01/2000', startTime: '2000-01-01T00:00:00Z' };
+  chat.threadCache.cacheThread(JSON.stringify(['account-one', 'Other Person']), [{ id: 'old-offer', sender: 'system', bookingInfo: card, time: 'Now' }], chat.threadCache.threadCacheGeneration());
+  chat.update('Other Person', true, { contactRole: 'Kasambahay' });
+  const text = node => node.text || node.children.map(text).join('');
+  const accept = chat.nodes().find(node => node.type === 'Pressable' && text(node) === 'Accept');
+  assert.equal(accept.props.disabled, true);
+  assert.ok(accept.props.style({ pressed: false }).some(style => style?.backgroundColor === '#9CA3AF'));
+  assert.ok(chat.nodes().some(node => node.type === 'Text' && text(node).includes('Please send a new offer in chat')));
+  renderer.flushSync(() => accept.props.onPress({ stopPropagation() {} }));
+  assert.equal(chat.bookingResponses.length, 0);
+  const decline = chat.nodes().find(node => node.type === 'Pressable' && text(node) === 'Decline');
+  assert.equal(decline.props.disabled, false);
+  renderer.flushSync(() => decline.props.onPress({ stopPropagation() {} }));
+  assert.equal(chat.bookingResponses[0].args[2], 'reject');
+  chat.bookingResponses[0].resolve(); await tick();
 });
 
 test('reply relationships cover incoming, outgoing and self replies', () => {

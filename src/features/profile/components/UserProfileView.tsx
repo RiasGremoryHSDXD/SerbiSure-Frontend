@@ -1,5 +1,6 @@
+import { formatRate } from '../../../shared/utils/rate';
 import { useLanguage as useUiLanguage } from '../../../shared/localization/LanguageContext';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View, ScrollView, Pressable, Modal, ActivityIndicator, Linking, Alert, RefreshControl, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,8 +20,11 @@ import { WorkerCvModal } from '../worker/WorkerCvModal';
 import { JobDetailSheet } from '../../feed/components/JobDetailSheet';
 import { BookingModal, type BookingConfirmData } from '../../bookings/components/BookingModal';
 import { sendBookingOffer, type ChatOfferPayload } from '../../chat/api/bookingOffersApi';
+import { generateUUID } from '../../chat/api/chatApi';
 import { bookingSchedule } from '../../bookings/engagementForm';
 import { useJobsActivity } from '../../bookings/store/savedJobsStore';
+import { useJobApplication } from '../../bookings/hooks/useJobApplication';
+import { mapFeedPost } from '../../feed/feedMapper';
 import type { FeedPost } from '../../feed/types';
 import { formatBookingAddress, formatBookingLocationShort, type PublicPendingPost } from '../../bookings/api/bookingApi';
 import { formatRegisteredLocation } from '../../../shared/services/locationService';
@@ -72,14 +76,20 @@ export function UserProfileView({
 
   const { user } = useUser();
   const { t } = useLanguage();
-  const { isSaved, toggleSave } = useJobsActivity();
+  const { isSaved, isApplied, toggleSave } = useJobsActivity();
   const effectiveToken = token || user.token;
-  const { profile, reviews, summary, posts, loading, postsLoading, profileError, postsError, refreshPosts, markSubmitted } = usePublicProfile(visible, userId, effectiveToken);
+  const { applyJob, applyingJobId } = useJobApplication(effectiveToken, () => { void refreshPosts(); });
+  const { profile, reviews, summary, posts, canUsePost, loading, postsLoading, profileError, postsError, refreshPosts, markSubmitted } = usePublicProfile(visible, userId, effectiveToken);
   const [activeTab, setActiveTab] = useState<'posts' | 'reviews'>('posts');
   const [isReviewsExpanded, setIsReviewsExpanded] = useState(false);
   const [showCv, setShowCv] = useState(false);
   const [selectedJob, setSelectedJob] = useState<FeedPost | null>(null);
   const [bookingModalVisible, setBookingModalVisible] = useState(false);
+  const [offerPost, setOfferPost] = useState<FeedPost | null>(null);
+  const offerDraft = useRef<{ body: string; key: string } | null>(null);
+  const offerJobPost = useMemo(() => offerPost ? {
+    role: offerPost.title, rate: offerPost.price, location: offerPost.location, rawText: offerPost.aboutText,
+  } : null, [offerPost]);
 
   const activeAvatar = profile?.profile_link || prefilledAvatar;
   const displayName = profile?.full_name || prefilledName;
@@ -92,17 +102,18 @@ export function UserProfileView({
     setShowCv(false);
     setSelectedJob(null);
     setBookingModalVisible(false);
-  }, [visible, userId]);
+    setOfferPost(null);
+    offerDraft.current = null;
+  }, [visible, userId, user.id]);
 
   const handleConfirmBookingOffer = async (details: BookingConfirmData) => {
     if (!effectiveToken || !userId) {
-      Alert.alert(uiText('Unable to Send'), uiText('Please make sure you are signed in.'));
-      return;
+      throw new Error('Please sign in and reopen the recipient’s profile before sending an offer.');
     }
     try {
       const times = details.workHours.split(' - ');
-      const start = bookingSchedule(details.startDate, times[0] || '08:00 AM');
-      const end = bookingSchedule(details.ongoing ? details.startDate : details.endDate, times[1] || '05:00 PM');
+      const start = bookingSchedule(details.startDate, times[0] || '');
+      const end = bookingSchedule(details.ongoing ? details.startDate : details.endDate, times[1] || '');
       const payload: ChatOfferPayload = {
         recipient_id: userId,
         booking_type: details.bookingType,
@@ -124,9 +135,12 @@ export function UserProfileView({
         rate_amount: details.salary,
         rate_period: details.bookingType === 'long_term' ? 'month' : 'day',
       };
-      const idempotencyKey = `booking-offer-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-      const result = await sendBookingOffer(effectiveToken, payload, idempotencyKey);
+      const body = JSON.stringify(payload);
+      if (offerDraft.current?.body !== body) offerDraft.current = { body, key: generateUUID() };
+      const result = await sendBookingOffer(effectiveToken, payload, offerDraft.current.key);
+      offerDraft.current = null;
       setBookingModalVisible(false);
+      setOfferPost(null);
       Alert.alert(
         uiText('Booking Offer Sent'),
         result.language_warning ||
@@ -135,7 +149,8 @@ export function UserProfileView({
           })
       );
     } catch (err: any) {
-      Alert.alert(uiText('Unable to Send Offer'), err?.message || uiText('Please check your details and try again.'));
+      void refreshPosts();
+      throw err;
     }
   };
 
@@ -148,13 +163,9 @@ export function UserProfileView({
   const positiveSentiment = summary?.sentiment_breakdown?.Positive ?? reviews.filter(r => r.nlp_sentiment === 'Positive').length;
   const positivePercentage = totalReviews > 0 ? Math.round((positiveSentiment / totalReviews) * 100) : 0;
 
-  const displayTags = (profile?.user_tags && profile.user_tags.length > 0)
-    ? profile.user_tags
-    : isWorker
-    ? ['Child Care', 'Cooking', 'Family Driver', 'Either']
-    : ['Pet lover', 'Non-Smoker', 'Respectful'];
+  const displayTags = profile?.user_tags || [];
 
-  const handlePostReply = (post?: PublicPendingPost) => {
+  const handlePostReply = async (post?: PublicPendingPost) => {
     if (!userId || !effectiveToken) return;
     if (!post) {
       onMessage({
@@ -169,6 +180,8 @@ export function UserProfileView({
     }
 
     const isJob = displayRole === 'Homeowner';
+    const application = isJob ? await applyJob(mapFeedPost({ ...post, poster_id: userId }, 'kasambahay')) : null;
+    if (isJob && !application) return;
     const rawCategories = Array.isArray(post.service_category)
       ? post.service_category
       : post.service_category
@@ -176,17 +189,14 @@ export function UserProfileView({
       : [isJob ? 'Household Service' : 'General Service'];
     const catKey = rawCategories[0];
     const roleName = (catKey && CATEGORY_LABELS[catKey]) || catKey?.replace(/_/g, ' ') || (isJob ? 'Job Position' : 'Service');
-    const num = Number(post.rate_amount);
-    const formattedRate = isNaN(num)
-      ? `Php ${post.rate_amount || '0'}`
-      : `₱${num.toFixed(2)}`;
+    const formattedRate = formatRate(post.rate_amount);
     const period = post.rate_period || (post.booking_type === 'long_term' ? 'month' : 'day');
     const rateStr = isJob ? `${formattedRate} / ${period}` : `${formattedRate} per ${period}`;
     const locStr = formatBookingLocationShort(post, locationText || '');
     const snippet = [roleName, rateStr, locStr].filter(Boolean).join(' • ');
 
     const initialMessage = isJob
-      ? 'I am interested in this job position'
+      ? ''
       : 'Hi! I am interested in hiring you for a service.';
 
     onMessage({
@@ -295,7 +305,7 @@ export function UserProfileView({
                   style={[
                     styles.sentimentFill,
                     {
-                      width: `${totalReviews > 0 ? Math.min(100, Math.max(10, positivePercentage)) : 0}%`,
+                      width: `${totalReviews > 0 ? Math.min(100, Math.max(0, positivePercentage)) : 0}%`,
                       backgroundColor: totalReviews > 0 ? '#22C55E' : 'transparent',
                     },
                   ]}
@@ -399,13 +409,18 @@ export function UserProfileView({
           visible={!!selectedJob}
           job={selectedJob}
           onClose={() => setSelectedJob(null)}
-          onApply={() => {
+          onApply={async () => {
             const isBookingOffer = isWorker && user.accountType === 'Homeowner';
             const currentJob = selectedJob;
-            setSelectedJob(null);
             if (isBookingOffer) {
+              setOfferPost(currentJob);
+              offerDraft.current = null;
+              setSelectedJob(null);
               setBookingModalVisible(true);
             } else if (!isWorker && user.accountType === 'Kasambahay' && currentJob && userId && effectiveToken) {
+              const application = await applyJob(currentJob);
+              if (!application) return;
+              setSelectedJob(null);
               const snippet = [
                 currentJob.title || currentJob.roleTag,
                 `${currentJob.price} ${currentJob.unit}`.trim(),
@@ -418,7 +433,7 @@ export function UserProfileView({
                 contactRole: displayRole,
                 contactAvatar: activeAvatar,
                 userRole: 'kasambahay',
-                initialMessage: 'I am interested in this job position',
+                initialMessage: '',
                 initialReplyTo: {
                   author: displayName || 'Job Post',
                   text: snippet,
@@ -428,13 +443,15 @@ export function UserProfileView({
           }}
           isApplied={
             selectedJob
-              ? posts.some(
+              ? isApplied(selectedJob.id) || posts.some(
                   (p) =>
                     p.booking_id === selectedJob.id &&
                     (p.viewer_proposal?.status === 'Pending' || p.viewer_proposal?.status === 'Accepted')
                 )
               : false
           }
+          isApplying={applyingJobId === selectedJob?.id}
+          isClosed={selectedJob ? !canUsePost(selectedJob) : false}
           isSaved={selectedJob ? isSaved(selectedJob.id) : false}
           onToggleSave={() => {
             if (selectedJob) void toggleSave(selectedJob, effectiveToken);
@@ -452,23 +469,14 @@ export function UserProfileView({
         {bookingModalVisible && (
           <BookingModal
             visible={bookingModalVisible}
-            onClose={() => setBookingModalVisible(false)}
+            onClose={() => { setBookingModalVisible(false); setOfferPost(null); offerDraft.current = null; }}
             contactName={displayName}
             contactRole={displayRole}
             contactAvatar={activeAvatar}
             userRole="homeowner"
             token={effectiveToken}
-            bookingType={selectedJob?.termTag === 'Long-term' ? 'long_term' : 'short_term'}
-            jobPost={
-              selectedJob
-                ? {
-                    role: selectedJob.title,
-                    rate: selectedJob.price,
-                    location: selectedJob.location,
-                    rawText: selectedJob.aboutText,
-                  }
-                : null
-            }
+            bookingType={offerPost?.termTag === 'Long-term' ? 'long_term' : 'short_term'}
+            jobPost={offerJobPost}
             onConfirm={handleConfirmBookingOffer}
           />
         )}

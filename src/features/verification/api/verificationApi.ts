@@ -17,6 +17,8 @@ export interface DocumentStatusItem {
   document_image_url: string | null;
   date_issued: string | null;
   valid_until: string | null;
+  is_expired?: boolean;
+  can_replace?: boolean;
   extracted_data?: Record<string, any> | null;
   ocr_match_score: number | null;
   ocr_discrepancies: DocumentDiscrepancy[];
@@ -36,6 +38,8 @@ export interface UserVerificationInfo {
 export interface VerificationStatusResponse {
   account_type: string;
   overall_status: 'Unverified' | 'Pending' | 'Verified' | 'Rejected';
+  renewal_required?: boolean;
+  renewal_pending?: boolean;
   required_documents: string[];
   user_info?: UserVerificationInfo;
   documents: DocumentStatusItem[];

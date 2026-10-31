@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { AppState } from 'react-native';
 import { savedJobsStore } from '../../bookings/store/savedJobsStore';
-import { fetchVerificationStatus } from '../../verification/api/verificationApi';
+import { fetchVerificationStatus, type VerificationStatusResponse } from '../../verification/api/verificationApi';
 
 type UserData = {
   id?: string;
@@ -19,6 +19,8 @@ type UserData = {
   resumeUrl?: string | null;
   resumeUploadedAt?: string | null;
   verificationStatus?: string;
+  renewalRequired?: boolean;
+  renewalPending?: boolean;
   region?: string;
   province?: string;
   city?: string;
@@ -40,6 +42,7 @@ type UserContextType = {
   user: UserData;
   setUser: React.Dispatch<React.SetStateAction<UserData>>;
   updateUser: (data: Partial<UserData>) => void;
+  refreshUserProfile: () => Promise<VerificationStatusResponse | null>;
   refreshVerificationStatus: () => Promise<string | null>;
   getFirstNameOnly: () => string;
   getFullName: () => string;
@@ -48,19 +51,19 @@ type UserContextType = {
 const defaultUser: UserData = {
   id: '',
   token: null,
-  firstName: 'Daven Austhine',
-  middleName: 'Santos',
-  lastName: 'Sumagang',
+  firstName: '',
+  middleName: '',
+  lastName: '',
   email: '',
   contactNumber: '',
   showContactNumber: false,
   userTags: [],
-  street: 'Brgy. Pagatpat',
-  city: 'City of Cagayan De Oro',
-  province: 'Misamis Oriental',
-  zipcode: '9000',
-  country: 'Philippines',
-  nationality: 'Filipino',
+  street: '',
+  city: '',
+  province: '',
+  zipcode: '',
+  country: '',
+  nationality: '',
 };
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -104,23 +107,38 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
   }, [token]);
   const activeSession = useRef<typeof session | null>(session);
   activeSession.current = session;
-  const verificationRequest = useRef<{ session: typeof session; promise: Promise<string | null> } | null>(null);
+  const verificationRequest = useRef<{ session: typeof session; promise: Promise<VerificationStatusResponse | null> } | null>(null);
 
-  const refreshVerificationStatus = useCallback((): Promise<string | null> => {
+  const refreshUserProfile = useCallback((): Promise<VerificationStatusResponse | null> => {
     if (!session.token || !session.userId || activeSession.current !== session) return Promise.resolve(null);
     if (verificationRequest.current?.session === session) return verificationRequest.current.promise;
     const promise = fetchVerificationStatus(session.token).then(data => {
       if (activeSession.current !== session) return null;
       const status = data?.overall_status;
       if (!['Verified', 'Pending', 'Rejected', 'Unverified'].includes(status)) return null;
-      setUser(previous => previous.id === session.userId ? { ...previous, verificationStatus: status } : previous);
-      return status;
+      const info = data.user_info;
+      setUser(previous => previous.id === session.userId ? {
+        ...previous,
+        verificationStatus: status,
+        renewalRequired: data.renewal_required === true,
+        renewalPending: data.renewal_pending === true,
+        ...(info?.first_name !== undefined ? { firstName: info.first_name ?? '' } : {}),
+        ...(info?.middle_name !== undefined ? { middleName: info.middle_name ?? '' } : {}),
+        ...(info?.last_name !== undefined ? { lastName: info.last_name ?? '' } : {}),
+        ...(info?.date_of_birth !== undefined ? { dateOfBirth: info.date_of_birth || undefined } : {}),
+      } : previous);
+      return data;
     }).catch(() => null).finally(() => {
       if (verificationRequest.current?.session === session) verificationRequest.current = null;
     });
     verificationRequest.current = { session, promise };
     return promise;
   }, [session]);
+
+  const refreshVerificationStatus = useCallback(async (): Promise<string | null> => {
+    const data = await refreshUserProfile();
+    return data?.overall_status ?? null;
+  }, [refreshUserProfile]);
 
   useEffect(() => {
     if (token) {
@@ -131,9 +149,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
         setUser((previous) => ({
           id: userId,
           token: token,
-          firstName: decoded.first_name || '',
-          middleName: decoded.middle_name || '',
-          lastName: decoded.last_name || '',
+          firstName: previous.id === userId ? previous.firstName : decoded.first_name || '',
+          middleName: previous.id === userId ? previous.middleName : decoded.middle_name || '',
+          lastName: previous.id === userId ? previous.lastName : decoded.last_name || '',
           email: decoded.email || '',
           contactNumber: decoded.contact_number || '',
           showContactNumber: decoded.show_contact_number ?? false,
@@ -142,16 +160,18 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
           accountType: decoded.account_type || '',
           verificationStatus: previous.id === userId && previous.verificationStatus
             ? previous.verificationStatus : decoded.verification_status || undefined,
+          renewalRequired: previous.id === userId && previous.renewalRequired === true,
+          renewalPending: previous.id === userId && previous.renewalPending === true,
           region: decoded.region || '',
           province: decoded.province || '',
           city: decoded.city || '',
           barangay: decoded.barangay || '',
           street: decoded.street || '',
           zipcode: decoded.zipcode || '',
-          country: decoded.country || 'Philippines',
-          dateOfBirth: decoded.date_of_birth || undefined,
+          country: decoded.country || '',
+          dateOfBirth: previous.id === userId ? previous.dateOfBirth : decoded.date_of_birth || undefined,
           gender: decoded.gender || undefined,
-          nationality: decoded.nationality || 'Filipino',
+          nationality: decoded.nationality || '',
           religion: decoded.religion || undefined,
           penaltyPoints: decoded.penalty_points ?? decoded.cancellation_strikes ?? 0,
           isRestricted: decoded.is_restricted ?? false,
@@ -163,12 +183,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
         savedJobsStore.initForUser(userId, token);
       }
       else {
-        setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', email: '', contactNumber: '', showContactNumber: false, userTags: [], profileLink: null, accountType: '', street: '', city: '', province: '', zipcode: '', country: '', nationality: 'Filipino' });
+        setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', email: '', contactNumber: '', showContactNumber: false, userTags: [], profileLink: null, accountType: '', street: '', city: '', province: '', zipcode: '', country: '', nationality: '' });
         savedJobsStore.clearStore();
       }
     }
     else {
-      setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', email: '', contactNumber: '', showContactNumber: false, userTags: [], accountType: '', street: '', city: '', province: '', zipcode: '', country: '', nationality: 'Filipino' });
+      setUser({ id: '', token: null, firstName: '', middleName: '', lastName: '', email: '', contactNumber: '', showContactNumber: false, userTags: [], accountType: '', street: '', city: '', province: '', zipcode: '', country: '', nationality: '' });
       savedJobsStore.clearStore();
     }
   }, [token])
@@ -194,9 +214,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
    * Example: "Daven Austhine" -> "Daven"
    */
   const getFirstNameOnly = (): string => {
-    const raw = user.firstName || 'Daven';
+    const raw = user.firstName || '';
     const firstWord = raw.trim().split(' ')[0];
-    return firstWord || 'Daven';
+    return firstWord || 'User';
   };
 
   /**
@@ -205,11 +225,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
    */
   const getFullName = (): string => {
     const parts = [user.firstName, user.middleName, user.lastName].map((s) => s?.trim()).filter(Boolean);
-    return parts.length > 0 ? parts.join(' ') : 'Daven Austhine Sumagang';
+    return parts.length > 0 ? parts.join(' ') : 'User';
   };
 
   return (
-    <UserContext.Provider value={{ user, setUser, updateUser, refreshVerificationStatus, getFirstNameOnly, getFullName }}>
+    <UserContext.Provider value={{ user, setUser, updateUser, refreshUserProfile, refreshVerificationStatus, getFirstNameOnly, getFullName }}>
       {children}
     </UserContext.Provider>
   );

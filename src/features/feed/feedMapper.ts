@@ -1,9 +1,10 @@
 import { workSetupLabel } from '../bookings/workSetup';
 import type { Role } from '../../app/roleConfig';
-import { formatTimeAgo } from '../../shared/utils/date';
+import { formatCompactTimeAgo } from '../../shared/utils/date';
 import { formatBookingAddress, formatBookingLocationShort } from '../bookings/api/bookingApi';
 import type { BookingFeedDto, FeedPost } from './types';
 import type { SavedJobItem } from '../bookings/store/savedJobsStore';
+import { formatRate } from '../../shared/utils/rate';
 
 // Both Browse roles use one shape for cards, saved posts, profiles and chats.
 export function mapBrowsePost(item: BookingFeedDto, role: Role): SavedJobItem & { title: string; location: string; aboutText: string; tags: string[] } {
@@ -11,6 +12,9 @@ export function mapBrowsePost(item: BookingFeedDto, role: Role): SavedJobItem & 
   const worker = mapWorkerPreview(item);
   return {
     id: worker.id, partnerId: worker.partnerId, employerName: worker.name, title: worker.role,
+    start_time: item.start_time, booking_status: item.booking_status, post_status: item.post_status,
+    end_time: item.end_time, booking_type: item.booking_type,
+    daily_start_time: item.daily_start_time, daily_end_time: item.daily_end_time, work_days: item.work_days,
     avatar: worker.avatar, image: worker.image, location: worker.location, roleTag: worker.role,
     termTag: worker.years, setupTag: worker.setupTag, price: worker.price, unit: worker.unit,
     aboutText: worker.aboutText, tags: Array.from(new Set([worker.years, ...worker.tags])),
@@ -37,11 +41,14 @@ export function mapFeedPost(item: BookingFeedDto, viewerRole: Role): FeedPost {
     : `Available for ${categories.join(' & ')} work in ${location}.`);
   return {
     id: item.booking_id, partnerId: item.poster_id, kind: isJob ? 'job' : 'service', authorRole,
+    start_time: item.start_time, booking_status: item.booking_status, post_status: item.post_status,
+    end_time: item.end_time, booking_type: item.booking_type,
+    daily_start_time: item.daily_start_time, daily_end_time: item.daily_end_time, work_days: item.work_days,
     employerName: name, title: categories[0] || (isJob ? 'Household Service' : 'Kasambahay'),
     avatar: item.profile_link || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || authorRole)}&background=FFB43B&color=fff`,
-    time: formatTimeAgo(item.createdAt), location, categories,
+    time: formatCompactTimeAgo(item.createdAt), location, categories,
     roleTag: categories[0] || (isJob ? 'Household Service' : 'Kasambahay'), termTag, setupTag,
-    price: `₱${item.rate_amount || '0'}`, unit: longTerm ? '/ month' : '/ day', aboutText: description,
+    price: formatRate(item.rate_amount), unit: longTerm ? '/ month' : '/ day', aboutText: description,
     tags: Array.from(new Set(isJob ? [...(item.poster_verification_status === 'Verified' ? ['Verified Employer'] : []), termTag, setupTag, ...categories] : [...categories, termTag, ...(item.work_setup ? [setupTag] : [])])),
   };
 }
@@ -58,12 +65,14 @@ export function mapWorkerPreview(item: BookingFeedDto) {
     id: item.booking_id,
     partnerId: item.poster_id,
     name: item.name || 'Anonymous User',
+    start_time: item.start_time, end_time: item.end_time, booking_type: item.booking_type,
+    daily_start_time: item.daily_start_time, daily_end_time: item.daily_end_time, work_days: item.work_days,
     location: formatBookingLocationShort(item, 'Location not provided'),
     role: categories.map((category) => CATEGORY_LABELS[category] || category.replace(/_/g, ' ')).join(', '),
     years: item.booking_type === 'long_term' ? 'Long-term' : 'Short-term',
     setupTag: workSetupLabel(item.work_setup),
     tags: [...categories.map((category) => CATEGORY_LABELS[category] || category.replace(/_/g, ' ')), ...(item.work_setup ? [workSetupLabel(item.work_setup)] : [])],
-    price: `₱${item.rate_amount || '0'}`,
+    price: formatRate(item.rate_amount),
     unit: item.booking_type === 'long_term' ? 'per month' : 'per day',
     aboutText: item.special_instruction?.trim() || 'Available for household services. View this post for more details.',
     image: avatarUrl,
@@ -108,10 +117,13 @@ export function mapJobPreview(item: BookingFeedDto) {
     id: item.booking_id,
     partnerId: item.poster_id,
     employerName: item.name || 'Homeowner',
+    start_time: item.start_time, booking_status: item.booking_status, post_status: item.post_status,
+    end_time: item.end_time, booking_type: item.booking_type,
+    daily_start_time: item.daily_start_time, daily_end_time: item.daily_end_time, work_days: item.work_days,
     title: categories.join(' & ') || 'Household Service',
     location: locShort,
     description,
-    price: `₱${item.rate_amount || '0'}`,
+    price: formatRate(item.rate_amount),
     unit,
     tags: [...(item.poster_verification_status === 'Verified' ? ['Verified Employer'] : []), termTag, setupTag, ...categories].filter((v, i, a) => a.indexOf(v) === i),
     image: avatarUrl,

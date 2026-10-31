@@ -2,7 +2,6 @@ $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $androidDir = Join-Path $projectRoot "android"
-$projectCacheDir = "C:\gradle-serbisure-frontend-cache"
 
 if ($env:JAVA_HOME -and (Test-Path (Join-Path $env:JAVA_HOME "bin\javac.exe"))) {
   $jdkHome = $env:JAVA_HOME
@@ -22,11 +21,19 @@ if ($env:JAVA_HOME -and (Test-Path (Join-Path $env:JAVA_HOME "bin\javac.exe"))) 
 $env:JAVA_HOME = $jdkHome
 $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 
-New-Item -ItemType Directory -Force -Path $projectCacheDir | Out-Null
+$gradleExitCode = 1
+
+& node (Join-Path $PSScriptRoot "patch-mediapipe.js")
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Push-Location $androidDir
 try {
-  & .\gradlew.bat --project-cache-dir $projectCacheDir app:assembleDebug -x lint -x test --no-watch-fs "-PreactNativeDevServerPort=8082" "-PreactNativeArchitectures=arm64-v8a,armeabi-v7a"
+  # Each included build needs its own task history; a shared project cache
+  # makes the Expo plugins' Kotlin task outputs collide.
+  & .\gradlew.bat app:assembleDebug -x lint -x test --no-watch-fs "-PreactNativeDevServerPort=8082" "-PreactNativeArchitectures=arm64-v8a,armeabi-v7a"
+  $gradleExitCode = $LASTEXITCODE
 } finally {
   Pop-Location
 }
+
+exit $gradleExitCode

@@ -23,6 +23,23 @@ buildscript {
 
 apply plugin: "com.facebook.react.rootproject"
 
+// Room's SQLite verifier runs in a separate kapt worker JVM. Keep its native
+// library extraction in a writable project directory rather than C:\Windows.
+def annotationProcessorTempDir = new File(rootDir, ".gradle/annotation-processor-tmp")
+subprojects {
+    tasks.withType(org.jetbrains.kotlin.gradle.internal.KaptWithoutKotlincTask).configureEach {
+        doFirst {
+            if (!annotationProcessorTempDir.isDirectory() && !annotationProcessorTempDir.mkdirs()) {
+                throw new GradleException("Cannot create annotation processor temp directory: ${annotationProcessorTempDir}")
+            }
+        }
+        kaptProcessJvmArgs.addAll([
+            "-Djava.io.tmpdir=${annotationProcessorTempDir.absolutePath}".toString(),
+            "-Dorg.sqlite.tmpdir=${annotationProcessorTempDir.absolutePath}".toString()
+        ])
+    }
+}
+
 allprojects {
     repositories {
         maven {

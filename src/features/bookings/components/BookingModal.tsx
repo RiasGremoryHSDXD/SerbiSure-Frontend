@@ -3,6 +3,8 @@ import { useUser } from '../../auth/session/UserContext';
 import type { WorkSetup } from '../workSetup';
 import { workSetupLabel } from '../workSetup';
 import { confirmBookingAcceptance, bookingResponseMessage } from '../bookingAcceptance';
+import { bookingStartTime, isAcceptanceExpired, PASSED_SCHEDULE_MESSAGE } from '../postAvailability';
+import { useScheduleClock } from '../hooks/useScheduleClock';
 import { buildEngagementSchedule, normalizeServices, toggleService, SERVICE_CHOICES, WORK_SHIFTS, type WorkShift } from '../engagementForm';
 import { BookingOfferReview, type BookingOfferStep } from './BookingOfferReview';
 import { WorkScheduleFields } from './WorkScheduleFields';
@@ -16,7 +18,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { StyleSheet, Text, View, Image, TextInput, Pressable, Modal, Alert, Animated, Dimensions, ScrollView, Keyboard, KeyboardAvoidingView, Platform, ActivityIndicator, BackHandler, Easing } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { fetchMinimumWage, MinimumWageData } from '../api/bookingApi';
+import { fetchBookingDetail, fetchMinimumWage, formatBookingAddress, MinimumWageData } from '../api/bookingApi';
 import THEME from '../../../shared/theme/theme';
 
 const logoSource = require('../../../../assets/serbisure-icon.png');
@@ -77,6 +79,7 @@ interface BookingModalProps {
     workSetup?: WorkSetup | null;
     region?: string;
     startDate?: string;
+    startTime?: string;
     endDate?: string;
     workHours?: string;
     location?: string;
@@ -86,6 +89,7 @@ interface BookingModalProps {
     jobPost?: BookingJobPost | null;
     id?: string | null;
     bookingId?: string | null;
+    passUrl?: string | null;
   } | null;
   onConfirm?: (bookingDetails: BookingConfirmData) => Promise<void> | void;
   onKasambahayConfirm?: () => Promise<void> | void;
@@ -120,7 +124,28 @@ export function BookingModal({
 }: BookingModalProps) {
   const { tr: uiText } = useUiLanguage();
   const { user } = useUser();
+  const ticketId = bookingId || initialDetails?.bookingId || initialDetails?.id;
+  const ticketToken = token || user.token;
+  const savedPassUrl = initialDetails?.passUrl;
+  const ticketKey = `${ticketId}:${ticketToken}`;
+  const [freshPass, setFreshPass] = useState<{ key: string; source?: string | null; url: string | null } | null>(null);
+  const passUrl = freshPass?.key === ticketKey && freshPass.source === savedPassUrl ? freshPass.url : savedPassUrl;
+
+  useEffect(() => {
+    if (!visible || !readOnly || !ticketId || !ticketToken) return;
+    let current = true;
+    // Render the last downloaded URL immediately. A failed offline refresh must
+    // not remove it; only the server can renew its 24-hour signature.
+    void fetchBookingDetail(ticketToken, ticketId).then(booking => {
+      if (current && booking?.booking_id === ticketId) {
+        setFreshPass({ key: ticketKey, source: savedPassUrl, url: booking.pass_url || null });
+      }
+    }).catch(() => {});
+    return () => { current = false; };
+  }, [visible, readOnly, ticketId, ticketToken]);
   const insets = useSafeAreaInsets();
+  const scheduleNow = useScheduleClock([bookingStartTime(initialDetails)], visible && readOnly);
+  const acceptanceExpired = readOnly && isAcceptanceExpired(initialDetails, scheduleNow);
 
   // Slide animation: Right to Left
   const [modalVisible, setModalVisible] = useState(visible);
@@ -133,7 +158,10 @@ export function BookingModal({
   const [workHours, setWorkHours] = useState('');
   const [savedLocation, setSavedLocation] = useState('');
   const address = useWorkLocation(visible && !readOnly);
-  const location = readOnly ? savedLocation : [address.streetAddress, address.selectedBarangay?.name, address.selectedCity?.name, address.selectedProvince?.name].filter(Boolean).join(', ');
+  const location = readOnly ? savedLocation : formatBookingAddress({
+    street: address.streetAddress, floor_number: address.floorUnit, barangay: address.selectedBarangay?.name,
+    city: address.selectedCity?.name, province: address.selectedProvince?.name, zip_code: address.zipcode,
+  }, '');
   const [selectedShift, setSelectedShift] = useState<WorkShift | null>(null);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [salary, setSalary] = useState('');
@@ -154,7 +182,7 @@ export function BookingModal({
   const scrollRef = useRef<ScrollView>(null);
   const currentStep = OFFER_STEPS[offerStep - 1]!;
   const wageLocation = address.selectedCity?.name || '';
-  const previewLocation = readOnly ? savedLocation : [address.floorUnit.trim(), address.streetAddress.trim(), address.selectedBarangay?.name, address.selectedCity?.name, address.selectedProvince?.name, address.zipcode.trim()].filter(Boolean).join(', ');
+  const previewLocation = location;
 
   const goToStep = (step: BookingOfferStep) => {
     if (submittingRef.current) return;
@@ -276,9 +304,15 @@ export function BookingModal({
     return () => { current = false; };
   }, [visible, readOnly, token, selectedBookingType, wageLocation, region, policyAttempt]);
 
-  const getSchedule = () => buildEngagementSchedule({
-    bookingType: selectedBookingType || 'long_term', startDate, endDate, workHours, days: selectedDays, shift: selectedShift, ongoing,
-  });
+  const getSchedule = () => {
+    const schedule = buildEngagementSchedule({
+      bookingType: selectedBookingType || 'long_term', startDate, endDate, workHours, days: selectedDays, shift: selectedShift, ongoing,
+    });
+    if (!readOnly && Date.parse(schedule.start_time) <= Date.now()) {
+      throw new Error('Choose a start time that is still ahead.');
+    }
+    return schedule;
+  };
 
   const validateStep = (step: BookingOfferStep): Record<string, boolean> => {
     const errors: Record<string, boolean> = {};
@@ -357,7 +391,7 @@ export function BookingModal({
     submittingRef.current = true;
     setSubmitting(true);
     void Promise.resolve().then(() => onConfirm({
-      startDate, endDate: selectedBookingType === 'short_term' ? startDate : ongoing ? '' : endDate,
+      startDate, endDate: selectedBookingType === 'short_term' ? (endDate || startDate) : ongoing ? '' : endDate,
       ongoing: selectedBookingType === 'long_term' && ongoing,
       workHours: selectedBookingType === 'short_term' && selectedShift !== 'custom' ? WORK_SHIFTS.find(item => item.value === selectedShift)!.hours : workHours,
       location: location.trim(), days: schedule.work_days,
@@ -382,13 +416,13 @@ export function BookingModal({
   };
 
   const salaryNum = parseFloat(salary.replace(/[^0-9.]/g, '')) || 0;
-  const effectiveMinDaily = minWageInfo?.rate_period === 'day' ? Number(minWageInfo.minimum_rate) : 350;
-  const effectiveMinMonthly = minWageInfo?.rate_period === 'month' ? Number(minWageInfo.minimum_rate) : 6500;
+  const effectiveMinDaily = minWageInfo?.rate_period === 'day' ? Number(minWageInfo.minimum_rate) : null;
+  const effectiveMinMonthly = minWageInfo?.rate_period === 'month' ? Number(minWageInfo.minimum_rate) : null;
   const isBelowMinWage =
     salaryNum > 0 &&
     (selectedBookingType === 'short_term'
-      ? salaryNum < effectiveMinDaily
-      : salaryNum < effectiveMinMonthly);
+      ? effectiveMinDaily !== null && salaryNum < effectiveMinDaily
+      : effectiveMinMonthly !== null && salaryNum < effectiveMinMonthly);
 
 
   const modalContent = (
@@ -705,7 +739,7 @@ export function BookingModal({
                 </View>
                 {isBelowMinWage && (
                   <Text style={[styles.helperText, styles.invalidRateHint]}>
-                    {uiText("Minimum: ₱")}{Number(minWageInfo?.minimum_rate || (selectedBookingType === 'short_term' ? 350 : 6500)).toLocaleString('en-PH')} / {minWageInfo?.rate_period === 'day' || selectedBookingType === 'short_term' ? uiText("day") : uiText("month")}
+                    {uiText("Minimum: ₱")}{Number(minWageInfo?.minimum_rate).toLocaleString('en-PH')} / {minWageInfo?.rate_period === 'day' || selectedBookingType === 'short_term' ? uiText("day") : uiText("month")}
                   </Text>
                 )}
               </View>
@@ -720,7 +754,7 @@ export function BookingModal({
                 workSetup={workSetup || 'stay_out'}
                 bookingType={selectedBookingType || 'long_term'}
                 startDate={startDate}
-                endDate={selectedBookingType === 'short_term' && !readOnly ? startDate : endDate}
+                endDate={selectedBookingType === 'short_term' ? (endDate || startDate) : endDate}
                 ongoing={ongoing}
                 workHours={workHours}
                 days={selectedDays}
@@ -731,6 +765,7 @@ export function BookingModal({
                 contactRole={contactRole}
                 contactAvatar={contactAvatar}
                 bookingId={bookingId || initialDetails?.bookingId || initialDetails?.id}
+                passUrl={passUrl}
                 isConfirmed={isConfirmed}
                 isDeclined={isDeclined}
                 isAcquired={isAcquired}
@@ -789,6 +824,8 @@ export function BookingModal({
           )}
         </ScrollView>
 
+        {readOnly && canRespond && !isConfirmed && !isDeclined && !isAcquired && acceptanceExpired &&
+          <Text style={{ color: '#92400E', paddingHorizontal: 20, paddingVertical: 8 }}>{uiText(PASSED_SCHEDULE_MESSAGE)}</Text>}
         {/* Action Button Footer */}
         <View style={styles.footerContainer}>
           <View style={styles.footerDivider} />
@@ -833,8 +870,8 @@ export function BookingModal({
                 </Pressable>
 
                 <Pressable
-                  disabled={submitting} style={({ pressed }) => [styles.agreeBtn, { flex: 1 }, pressed && styles.pressedBtn]}
-                  onPress={() => confirmBookingAcceptance(selectedBookingType || 'long_term', uiText, () => runResponse(onKasambahayConfirm))}
+                  disabled={submitting || acceptanceExpired} style={({ pressed }) => [styles.agreeBtn, { flex: 1 }, acceptanceExpired && { backgroundColor: '#9CA3AF' }, pressed && styles.pressedBtn]}
+                  onPress={() => { if (!isAcceptanceExpired(initialDetails)) confirmBookingAcceptance(selectedBookingType || 'long_term', uiText, () => runResponse(onKasambahayConfirm)); }}
                 >
                   <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
                   <Text style={styles.agreeBtnText}>{uiText("Accept")}</Text>

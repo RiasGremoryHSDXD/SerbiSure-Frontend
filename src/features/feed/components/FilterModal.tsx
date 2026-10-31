@@ -47,10 +47,8 @@ const BOOKING_TYPES = [
 
 export const RATE_PRESETS = [400, 500, 600, 800, 1000];
 
-export const SORT_OPTIONS: { label: string; value: 'newest' | 'rate_asc' | 'rate_desc'; icon?: keyof typeof Ionicons.glyphMap }[] = [
-  { label: 'Newest First', value: 'newest', icon: 'time-outline' },
-  { label: 'Rate: Low to High', value: 'rate_asc', icon: 'arrow-down-outline' },
-  { label: 'Rate: High to Low', value: 'rate_desc', icon: 'arrow-up-outline' },
+export const SORT_OPTIONS: { label: string; value: 'newest'; icon?: keyof typeof Ionicons.glyphMap }[] = [
+  { label: 'Newest first', value: 'newest', icon: 'time-outline' },
 ];
 
 export function FilterModal({
@@ -73,7 +71,7 @@ export function FilterModal({
   );
   const [location, setLocation] = useState<string>(initialFilters.location || '');
   const [sortBy, setSortBy] = useState<'newest' | 'rate_asc' | 'rate_desc'>(
-    initialFilters.sortBy || 'newest'
+    'newest'
   );
 
   const panY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
@@ -146,7 +144,7 @@ export function FilterModal({
       setMaxRate(initialFilters.maxRate || null);
       setCustomRateText(initialFilters.maxRate ? String(initialFilters.maxRate) : '');
       setLocation(initialFilters.location || '');
-      setSortBy(initialFilters.sortBy || 'newest');
+      setSortBy('newest');
 
       isClosingRef.current = false;
       currentTranslateY.current = SCREEN_HEIGHT;

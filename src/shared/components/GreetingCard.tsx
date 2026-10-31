@@ -1,5 +1,6 @@
 import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ProfileAvatar } from '../ui/ProfileAvatar';
 import THEME from '../theme/theme';
 import { useLanguage } from '../localization/LanguageContext';
 
@@ -10,8 +11,8 @@ export function GreetingCard({ name, greeting, avatarUri, onAvatarPress }: {
   const date = formatDate(new Date(), 'greeting').toUpperCase();
   return (
     <View style={styles.card}>
-      <Pressable onPress={onAvatarPress}>
-        <Image source={{ uri: avatarUri || 'https://i.pravatar.cc/150?u=serbisure' }} style={styles.avatar} />
+      <Pressable onPress={onAvatarPress} style={{ marginRight: 14 }}>
+        <ProfileAvatar uri={avatarUri} name={name} size={48} />
       </Pressable>
       <View style={styles.text}>
         <Text style={styles.date}>{date}</Text>

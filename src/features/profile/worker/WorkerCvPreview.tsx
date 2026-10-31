@@ -5,15 +5,6 @@ import { Ionicons } from '@expo/vector-icons';
 import THEME from '../../../shared/theme/theme';
 import type { WorkerCv } from '../api/workerCvApi';
 
-const DEFAULT_PRACTICAL_SKILLS = [
-  'Meal preparation',
-  'Deep cleaning',
-  'Laundry care',
-  'Ironing',
-  'Infant care',
-  'Child supervision',
-];
-
 /**
  * Professional two-column Curriculum Vitae preview matching the standard
  * executive/professional resume format (Image reference).
@@ -25,7 +16,7 @@ export function WorkerCvPreview({ cv }: { cv: WorkerCv }) {
 
   const displayName = (cv.name || model?.name || 'Worker').trim();
   const servicesTitle = (model?.services || details.service_categories?.join(', ') || 'Household Worker').trim();
-  const locationText = (cv.location || model?.location || 'Cagayan de Oro, Misamis Oriental').trim();
+  const locationText = (cv.location || model?.location || 'Location not provided').trim();
   const phoneText = (cv.contact_number || model?.phone || '').trim();
   const isVerified = cv.verification_status === 'Verified' || Boolean(model?.verified);
   const activePhoto = cv.profile_image_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=FFB43B&color=fff&size=150`;
@@ -35,16 +26,16 @@ export function WorkerCvPreview({ cv }: { cv: WorkerCv }) {
   const monthlyRate = details.desired_monthly_rate ? `PHP ${Number(details.desired_monthly_rate).toLocaleString()} / month` : null;
 
   // Work Setup & Engagement
-  const workSetupLabel = details.work_setup === 'stay_in' ? 'Stay-in' : details.work_setup === 'stay_out' ? 'Stay-out' : 'Either (Stay-in / Stay-out)';
-  const engagementLabel = details.engagement_preference === 'short_term' ? 'Short-term' : details.engagement_preference === 'long_term' ? 'Long-term' : 'Both (Short & Long-term)';
-  const availabilityText = details.available_from || 'Available now';
+  const workSetupLabel = details.work_setup === 'stay_in' ? 'Stay-in' : details.work_setup === 'stay_out' ? 'Stay-out' : details.work_setup === 'either' ? 'Either (Stay-in / Stay-out)' : 'Not provided';
+  const engagementLabel = details.engagement_preference === 'short_term' ? 'Short-term' : details.engagement_preference === 'long_term' ? 'Long-term' : details.engagement_preference === 'both' ? 'Both (Short & Long-term)' : 'Not provided';
+  const availabilityText = details.available_from || 'Not provided';
 
   // Experience
   const expLevel = details.experience_level === 'new'
     ? 'First-time Worker'
     : details.experience_level === 'household'
     ? 'Household Experience'
-    : 'Previous Paid Work';
+    : details.experience_level === 'paid' ? 'Previous Paid Work' : 'Not provided';
 
   const expDuration = details.experience_duration === 'under_1'
     ? 'Less than 1 year of experience'
@@ -52,35 +43,32 @@ export function WorkerCvPreview({ cv }: { cv: WorkerCv }) {
     ? '1–3 years of experience'
     : details.experience_duration === 'over_3' || details.experience_duration === '3+'
     ? '3+ years of experience'
-    : (details.experience_level === 'new' ? 'First-time worker' : '3+ years of experience');
+    : (details.experience_level === 'new' ? 'First-time worker' : 'Not provided');
 
   const expSummary = details.experience_summary?.trim() || '';
-  const isBareDuration = !expSummary || /^((\d+\+?|\w+)\s*years?(\s+of\s+experience)?|over_\d+|under_\d+)$/i.test(expSummary) || expSummary.length < 25;
-  const profileNarrative = isBareDuration
-    ? `Dedicated and reliable household service worker with ${expDuration} in home management, cleaning, and caring tasks. Committed to maintaining safe, clean, and organized households.`
-    : expSummary;
+  const profileNarrative = expSummary || 'No experience summary provided.';
 
   // Practical Skills
   const practicalSkills: string[] = (details.practical_skills && details.practical_skills.length > 0)
     ? details.practical_skills
-    : DEFAULT_PRACTICAL_SKILLS;
+    : [];
 
   // Languages
   const languagesList: string[] = cv.languages
     ? cv.languages.split(',').map(s => s.trim()).filter(Boolean)
     : (details.languages && details.languages.length > 0)
     ? details.languages
-    : ['Tagalog', 'English', 'Bisaya'];
+    : [];
 
   // Education & Training
-  const educationText = details.education?.trim() || 'Secondary Education';
+  const educationText = details.education?.trim() || 'Not provided';
   const trainingList: Array<{ name: string; provider?: string; year?: string | number }> = details.training || [];
 
   // Family details
-  const civilStatus = details.civil_status || 'Single';
+  const civilStatus = details.civil_status || 'Not provided';
   const childrenCount = details.number_of_children != null && details.number_of_children !== ''
     ? String(details.number_of_children)
-    : 'None';
+    : 'Not provided';
 
   return (
     <View style={styles.sheet}>

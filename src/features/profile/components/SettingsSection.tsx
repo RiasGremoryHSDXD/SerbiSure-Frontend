@@ -28,6 +28,8 @@ export function SettingsSection({ profile }: { profile: ProfileController }) {
     showContactNumber,
     isUpdatingPrivacy,
     effectiveVerificationStatus,
+    renewalRequired,
+    renewalPending,
     handleToggleContactPrivacy,
   } = profile;
   return (<>
@@ -49,20 +51,20 @@ export function SettingsSection({ profile }: { profile: ProfileController }) {
               style={[
                 styles.verificationStatusPill,
                 effectiveVerificationStatus === 'Verified' && styles.verificationPillVerified,
-                effectiveVerificationStatus === 'Pending' && styles.verificationPillPending,
-                effectiveVerificationStatus === 'Rejected' && styles.verificationPillRejected,
+                (effectiveVerificationStatus === 'Pending' || renewalRequired) && styles.verificationPillPending,
+                effectiveVerificationStatus === 'Rejected' && !renewalRequired && styles.verificationPillRejected,
               ]}
             >
               <Text
                 style={[
                   styles.verificationStatusPillText,
                   effectiveVerificationStatus === 'Verified' && styles.verificationPillTextVerified,
-                  effectiveVerificationStatus === 'Pending' && styles.verificationPillTextPending,
-                  effectiveVerificationStatus === 'Rejected' && styles.verificationPillTextRejected,
+                  (effectiveVerificationStatus === 'Pending' || renewalRequired) && styles.verificationPillTextPending,
+                  effectiveVerificationStatus === 'Rejected' && !renewalRequired && styles.verificationPillTextRejected,
                 ]}
               >
                 {uiText(
-                  effectiveVerificationStatus === 'Verified'
+                  renewalRequired ? 'Renewal needed' : renewalPending ? 'Renewal under review' : effectiveVerificationStatus === 'Verified'
                     ? 'Verified'
                     : effectiveVerificationStatus === 'Pending'
                       ? 'Pending'

@@ -23,6 +23,10 @@ const renderer = Reconciler({
 });
 const native = { StyleSheet: { create: value => value }, Platform: { OS: 'android' } };
 for (const name of ['Text', 'View', 'Pressable', 'Image', 'ScrollView', 'TextInput', 'Switch', 'ActivityIndicator', 'Modal', 'KeyboardAvoidingView']) native[name] = name;
+native.FlatList = React.forwardRef((props, ref) => {
+  React.useImperativeHandle(ref, () => ({ scrollToOffset() {}, scrollToIndex() {} }), []);
+  return React.createElement('FlatList', props);
+});
 const modules = new Map();
 function load(filename) {
   filename = path.resolve(__dirname, '..', filename);
@@ -33,7 +37,9 @@ function load(filename) {
   const module = { exports: {} }; modules.set(filename, module.exports);
   new Function('require', 'module', 'exports', source)(name => {
     if (name === 'react-native') return native;
-    if (name === '@expo/vector-icons') return { Ionicons: 'Icon', MaterialCommunityIcons: 'Icon' };
+    if (name === '@expo/vector-icons') return { Ionicons: 'Icon', MaterialCommunityIcons: 'Icon', Feather: 'Icon' };
+    if (name === 'react-native-safe-area-context') return { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) };
+    if (name.endsWith('/shared/ui/ProfileAvatar')) return { ProfileAvatar: 'Avatar' };
     return name.startsWith('.') ? load(path.resolve(path.dirname(filename), name)) : require(name);
   }, module, module.exports);
   return module.exports;
@@ -71,20 +77,20 @@ test('job and service feed cards share the full layout, actions and live transla
     for (const language of ['English', 'Tagalog', 'Bisaya']) {
       renderer.flushSync(() => changeLanguage(language));
       const text = content(container);
-      for (const source of ['View Profile', 'See Details', 'Long-term']) assert.ok(text.includes(translateMessage(language, source)), `${kind}: ${language}: ${source}`);
-      for (const value of ['Poster Name', 'Agusan, Cagayan de Oro', '₱8000', 'Original listing description.']) assert.ok(text.includes(value));
+      for (const source of ['Profile', 'Details']) assert.ok(nodes().some(node => node.props?.accessibilityLabel === translateMessage(language, source)), `${kind}: ${language}: ${source}`);
+      for (const value of ['Poster Name', 'Agusan, Cagayan de Oro', '₱ 8,000.00', 'Original listing description.']) assert.ok(text.includes(value));
     }
     renderer.flushSync(() => changeLanguage('English'));
     const layout = nodes().map(node => node.type || node.text);
     if (kind === 'service') serviceLayout = layout;
     else assert.deepEqual(layout, serviceLayout);
-    const press = label => nodes().find(node => node.type === 'Pressable' && content(node) === label).props.onPress();
-    press('View Profile'); press('See Details');
+    const press = label => nodes().find(node => node.type === 'Pressable' && node.props.accessibilityLabel === label).props.onPress();
+    press('Profile'); press('Details');
     nodes().find(node => node.type === 'Pressable' && node.children.some(child => child.type === 'Icon' && child.props.name === 'bookmark-outline')).props.onPress();
   }
   assert.deepEqual(calls, ['profile', 'details', 'save', 'profile', 'details', 'save']);
   show('job', true, true);
-  assert.ok(content(container).includes('Applied'));
+  assert.ok(nodes().some(node => node.type === 'Pressable' && node.props.accessibilityLabel === 'Details' && node.children.some(child => child.type === 'Icon' && child.props.name === 'checkmark-circle')));
   assert.ok(nodes().some(node => node.type === 'Icon' && node.props.name === 'bookmark'));
 });
 
