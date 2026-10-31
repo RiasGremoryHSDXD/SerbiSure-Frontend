@@ -21,12 +21,17 @@ function load(file, mocks = {}, timers = global) {
 }
 const append = (parent, child) => { parent.children = parent.children.filter(item => item !== child); parent.children.push(child); };
 const remove = (parent, child) => { parent.children = parent.children.filter(item => item !== child); };
+const insertBefore = (parent, child, before) => {
+  remove(parent, child);
+  parent.children.splice(parent.children.indexOf(before), 0, child);
+};
 const renderer = Reconciler({
   supportsMutation: true, isPrimaryRenderer: true, now: Date.now,
   getRootHostContext: () => null, getChildHostContext: () => null, getCurrentEventPriority: () => DefaultEventPriority,
   prepareForCommit: () => null, resetAfterCommit() {}, shouldSetTextContent: () => false,
   createInstance: (type, props) => ({ type, props, children: [] }), createTextInstance: text => ({ text, children: [] }), getPublicInstance: instance => instance,
   appendInitialChild: append, appendChild: append, appendChildToContainer: append, removeChild: remove, removeChildFromContainer: remove,
+  insertBefore, insertInContainerBefore: insertBefore,
   prepareUpdate: () => true, commitUpdate(instance, _payload, _type, _old, props) { instance.props = props; }, commitTextUpdate(instance, _old, text) { instance.text = text; },
   finalizeInitialChildren: () => false, clearContainer(parent) { parent.children = []; },
   scheduleTimeout: setTimeout, cancelTimeout: clearTimeout, noTimeout: -1, detachDeletedInstance() {},
@@ -137,6 +142,10 @@ test('open screens react immediately to booking events, refresh on resume/reconn
 
 test('own history offers rescheduling only on expired unbooked posts, retaining all other states', t => {
   const { OwnPostsSection } = load('src/features/profile/components/OwnPostsSection.tsx', {
+    '@expo/vector-icons': { Ionicons: 'Icon' },
+    'react-native-safe-area-context': { useSafeAreaInsets: () => ({ bottom: 0 }) },
+    '../../bookings/engagementForm': load('src/features/bookings/engagementForm.ts'),
+    '../../bookings/workSetup': load('src/features/bookings/workSetup.ts'),
     'react-native': { View: 'View', Text: 'Text', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', Alert: { alert() {} } },
     '../../../shared/localization/LanguageContext': language,
     '../../bookings/api/bookingApi': { formatBookingAddress: () => 'Pagatpat' }, '../../bookings/postAvailability': rules,
@@ -146,10 +155,10 @@ test('own history offers rescheduling only on expired unbooked posts, retaining 
   const view = screen(t);
   view.render(React.createElement(OwnPostsSection, { posts: [post, ...['Booked', 'Ongoing', 'Completed', 'Cancelled'].map((post_status, i) => ({ ...post, booking_id: String(i), post_status }))],
     token: 'token', now: Date.now(), loading: false, error: null, onRefresh() {} }));
-  const buttons = view.all('Pressable');
+  const buttons = view.all('Pressable').filter(node => ['Cancel Post', 'Reschedule'].includes(node.props.accessibilityLabel));
   assert.equal(buttons.length, 2);
-  assert.equal(content(buttons[0]), 'Cancel Post');
-  assert.equal(content(buttons[1]), 'Reschedule');
+  assert.equal(buttons[0].props.accessibilityLabel || content(buttons[0]), 'Cancel Post');
+  assert.equal(buttons[1].props.accessibilityLabel || content(buttons[1]), 'Reschedule');
   view.act(() => buttons[1].props.onPress());
   assert.equal(view.all('RepostModal')[0].props.post.booking_id, post.booking_id);
 });
@@ -158,6 +167,10 @@ test('Cancel Post requires confirmation and blocks duplicate submissions before 
   const alerts = [], calls = [];
   let resolve, refreshes = 0;
   const { OwnPostsSection } = load('src/features/profile/components/OwnPostsSection.tsx', {
+    '@expo/vector-icons': { Ionicons: 'Icon' },
+    'react-native-safe-area-context': { useSafeAreaInsets: () => ({ bottom: 0 }) },
+    '../../bookings/engagementForm': load('src/features/bookings/engagementForm.ts'),
+    '../../bookings/workSetup': load('src/features/bookings/workSetup.ts'),
     'react-native': { View: 'View', Text: 'Text', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', Alert: { alert: (...args) => alerts.push(args) } },
     '../../../shared/localization/LanguageContext': language,
     '../../bookings/api/bookingApi': { formatBookingAddress: () => 'Pagatpat', cancelBooking: (...args) => {
@@ -169,7 +182,7 @@ test('Cancel Post requires confirmation and blocks duplicate submissions before 
   });
   const view = screen(t);
   view.render(React.createElement(OwnPostsSection, { posts: [post], token: 'token', now: Date.now(), loading: false, error: null, onRefresh: () => refreshes++ }));
-  view.act(() => view.all('Pressable').find(node => content(node) === 'Cancel Post').props.onPress());
+  view.act(() => view.all('Pressable').find(node => (node.props.accessibilityLabel || content(node)) === 'Cancel Post').props.onPress());
   assert.equal(calls.length, 0);
   const confirm = alerts[0][2].find(button => button.text === 'Cancel Post').onPress;
   view.act(() => { confirm(); confirm(); });
@@ -177,8 +190,137 @@ test('Cancel Post requires confirmation and blocks duplicate submissions before 
   assert.deepEqual(calls[0][2], { reason: 'Other', expected_points: 0, pending_only: true });
   resolve({ success: true }); await tick();
   assert.equal(refreshes, 1);
-  assert.equal(view.all('Pressable').length, 0);
+  assert.equal(view.all('Pressable').filter(node => ['Cancel Post', 'Reschedule'].includes(node.props.accessibilityLabel)).length, 0);
   assert.ok(view.all('Text').some(node => content(node) === 'Cancelled'));
+});
+
+function ownDetailsScreen(t, options = {}) {
+  const alerts = [], calls = [];
+  let refreshes = 0;
+  const messages = load('src/shared/localization/messages.ts');
+  const copy = { useLanguage: () => ({ tr: value => messages.translateMessage(options.language || 'English', value),
+    formatDate: (value, style) => messages.formatLocalizedDate(options.language || 'English', value, style) }) };
+  const native = { View: 'View', Text: 'Text', Pressable: 'Pressable', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator',
+    StyleSheet: { create: value => value, absoluteFill: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 } },
+    Modal: props => props.visible ? React.createElement('Modal', props, props.children) : null,
+    Alert: { alert: (...args) => alerts.push(args) } };
+  const { ScheduleBadge } = load('src/features/bookings/components/ScheduleBadge.tsx', {
+    'react-native': native, '../../../shared/localization/LanguageContext': copy, '../postAvailability': rules,
+    '../../../shared/theme/theme': { default: { typography: { fontFamily: { secondaryMedium: 'Geist-Medium' } } } },
+  });
+  const { OwnPostsSection } = load('src/features/profile/components/OwnPostsSection.tsx', {
+    'react-native': native, '@expo/vector-icons': { Ionicons: 'Icon' },
+    'react-native-safe-area-context': { useSafeAreaInsets: () => ({ bottom: 12 }) },
+    '../../../shared/localization/LanguageContext': copy, '../../bookings/postAvailability': rules,
+    '../../bookings/engagementForm': load('src/features/bookings/engagementForm.ts'),
+    '../../bookings/workSetup': load('src/features/bookings/workSetup.ts'),
+    '../../bookings/components/ScheduleBadge': { ScheduleBadge },
+    '../../bookings/components/RepostModal': { RepostModal: 'RepostModal' },
+    '../../bookings/api/bookingApi': { formatBookingAddress: value => value.full_address || 'Full address not provided',
+      cancelBooking: (...args) => { calls.push(args); return options.cancel ? options.cancel(...args) : Promise.resolve({ success: true }); } },
+  });
+  const item = { ...post, work_setup: 'stay_out', end_time: '2026-10-29T09:00:00Z',
+    daily_start_time: '08:00:00', daily_end_time: '17:00:00', work_days: ['Th'],
+    full_address: 'Block 12, Lot 3, Brgy. Canito-an, Cagayan de Oro, 9000', special_instruction: 'Please bring gloves.', ...options.post };
+  const view = screen(t);
+  let props = { posts: [item], token: 'token', now: Date.parse('2026-10-31T04:00:00Z'), loading: false, error: null,
+    onRefresh: () => refreshes++, ...options.props };
+  const render = patch => { props = { ...props, ...patch }; view.render(React.createElement(OwnPostsSection, props)); };
+  const descendants = node => [node, ...node.children.flatMap(descendants)];
+  const modal = () => view.all('Modal')[0];
+  const actions = () => modal() ? descendants(modal()).filter(node => node.type === 'Pressable') : [];
+  const card = () => view.all('Pressable').find(node => node.props.accessibilityLabel?.startsWith(messages.translateMessage(options.language || 'English', 'Post Details') + ':'));
+  render();
+  return { ...view, render, alerts, calls, item, modal, card, actions, text: () => modal() ? content(modal()) : '',
+    open: () => view.act(() => card().props.onPress()), get refreshes() { return refreshes; } };
+}
+
+test('tapping an own post opens essential details without profile or technical clutter and Close dismisses it', t => {
+  const view = ownDetailsScreen(t);
+  assert.equal(view.modal(), undefined);
+  view.open();
+  assert.equal(view.modal().props.animationType, 'slide');
+  assert.equal(view.modal().props.transparent, true);
+  for (const expected of ['Cleaning', 'Available', '₱ 800.00 / day', 'Short-term', 'Stay-out',
+    'Oct 29, 2026 (Same day)', '08:00 AM – 05:00 PM', 'Thu', 'Expired', view.item.full_address, 'Please bring gloves.']) {
+    assert.ok(view.text().includes(expected), expected);
+  }
+  assert.doesNotMatch(view.text(), /reviews|rating|sentiment|Apply|Message|old-post|T00:00:00Z/i);
+  view.act(() => view.actions().filter(node => node.props.accessibilityLabel === 'Close').at(-1).props.onPress());
+  assert.equal(view.modal(), undefined);
+  view.open();
+  view.act(() => view.modal().props.onRequestClose());
+  assert.equal(view.modal(), undefined);
+});
+
+test('list action icons stop event propagation and Reschedule hands off to one modal', t => {
+  const view = ownDetailsScreen(t);
+  let stops = 0;
+  const event = { stopPropagation() { stops++; } };
+  view.act(() => view.all('Pressable').find(node => node.props.accessibilityLabel === 'Cancel Post').props.onPress(event));
+  assert.equal(stops, 1);
+  assert.equal(view.alerts.length, 1);
+  assert.equal(view.modal(), undefined);
+  view.open();
+  view.act(() => view.actions().find(node => node.props.accessibilityLabel === 'Reschedule').props.onPress());
+  assert.equal(view.modal(), undefined);
+  assert.equal(view.all('RepostModal')[0].props.post.booking_id, view.item.booking_id);
+});
+
+test('details cancellation reuses confirmation, blocks duplicates, and updates the visible status', async t => {
+  let resolve;
+  const view = ownDetailsScreen(t, { cancel: () => new Promise(yes => { resolve = yes; }) });
+  view.open();
+  view.act(() => view.actions().find(node => node.props.accessibilityLabel === 'Cancel Post').props.onPress());
+  assert.equal(view.calls.length, 0);
+  const confirm = view.alerts[0][2].find(button => button.style === 'destructive').onPress;
+  view.act(() => { confirm(); confirm(); });
+  assert.equal(view.calls.length, 1);
+  assert.deepEqual(view.calls[0][2], { reason: 'Other', expected_points: 0, pending_only: true });
+  assert.equal(view.actions().find(node => node.props.accessibilityLabel === 'Cancel Post').props.disabled, true);
+  resolve({ success: true }); await tick();
+  assert.match(view.text(), /Cancelled/);
+  assert.equal(view.actions().some(node => ['Cancel Post', 'Reschedule'].includes(node.props.accessibilityLabel)), false);
+  assert.equal(view.refreshes, 1);
+});
+
+test('failed cancellation leaves the sheet open and allows retry; refreshed records update or dismiss it', async t => {
+  const view = ownDetailsScreen(t, { cancel: async () => ({ success: false, error: 'Please retry later.' }) });
+  view.open();
+  view.act(() => view.actions().find(node => node.props.accessibilityLabel === 'Cancel Post').props.onPress());
+  view.act(() => view.alerts[0][2].find(button => button.style === 'destructive').onPress()); await tick();
+  assert.match(view.text(), /Available/);
+  assert.equal(view.actions().find(node => node.props.accessibilityLabel === 'Cancel Post').props.disabled, false);
+  assert.equal(view.alerts.at(-1)[1], 'Please retry later.');
+  view.render({ posts: [{ ...view.item, post_status: 'Booked', booking_status: 'Accepted' }] });
+  assert.match(view.text(), /Booked/);
+  assert.equal(view.actions().some(node => ['Cancel Post', 'Reschedule'].includes(node.props.accessibilityLabel)), false);
+  view.render({ posts: [] });
+  assert.equal(view.modal(), undefined);
+});
+
+test('details handle Philippine dates, ranges, ongoing work, and missing legacy data honestly', t => {
+  const view = ownDetailsScreen(t, { post: { start_time: '2026-10-28T16:00:00Z' } });
+  view.open();
+  assert.match(view.text(), /Oct 29, 2026 \(Same day\)/);
+  view.render({ posts: [{ ...view.item, end_time: '2026-11-05T09:00:00Z', special_instruction: ' ' }] });
+  assert.match(view.text(), /Oct 29, 2026 – Nov 5, 2026/);
+  assert.doesNotMatch(view.text(), /About \/ Instructions/);
+  view.render({ posts: [{ ...view.item, booking_type: 'long_term', end_time: null }] });
+  assert.match(view.text(), /Ongoing \(No end date\)/);
+  view.render({ posts: [{ ...view.item, end_time: undefined, daily_start_time: null, daily_end_time: null, work_days: [] }] });
+  assert.match(view.text(), /Date unavailable/);
+  assert.match(view.text(), /Not provided/);
+  assert.doesNotMatch(view.text(), /Ongoing|Invalid Date|undefined|NaN/);
+});
+
+test('own post details use translated labels and omit management actions without a token', t => {
+  const view = ownDetailsScreen(t, { language: 'Tagalog', props: { token: null } });
+  view.open();
+  assert.match(view.text(), /Iskedyul|Mga petsa ng trabaho/);
+  assert.match(view.text(), /Huw/);
+  assert.match(view.text(), /Isara/);
+  assert.equal(view.actions().some(node => ['Kanselahin ang post', 'I-reschedule'].includes(node.props.accessibilityLabel)), false);
 });
 
 test('acceptance clock updates at the deadline and cleans up its timer and app listener', t => {

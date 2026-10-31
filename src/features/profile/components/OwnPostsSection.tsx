@@ -1,10 +1,31 @@
 import React, { useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '../../../shared/localization/LanguageContext';
 import { type BookingItem, formatBookingAddress, cancelBooking } from '../../bookings/api/bookingApi';
 import { isScheduleExpired, postDisplayStatus } from '../../bookings/postAvailability';
 import { RepostModal } from '../../bookings/components/RepostModal';
 import { ScheduleBadge } from '../../bookings/components/ScheduleBadge';
+import { WORK_DAYS } from '../../bookings/engagementForm';
+import { workSetupLabel } from '../../bookings/workSetup';
+
+function calendarDate(value?: string | null): string {
+  const stamp = Date.parse(value || '');
+  return Number.isFinite(stamp) ? new Date(stamp + 8 * 3600000).toISOString().slice(0, 10) : '';
+}
+
+function clockLabel(value?: string | null): string {
+  const match = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(value || '');
+  if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) return '';
+  const hour = Number(match[1]);
+  return `${String(hour % 12 || 12).padStart(2, '0')}:${match[2]} ${hour < 12 ? 'AM' : 'PM'}`;
+}
+
+function rateParts(post: BookingItem) {
+  return (Number(post.rate_amount) || 0)
+    .toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).split('.');
+}
 
 export function OwnPostsSection({
   posts,
@@ -22,6 +43,8 @@ export function OwnPostsSection({
   onRefresh: () => void;
 }) {
   const { tr, formatDate } = useLanguage();
+  const insets = useSafeAreaInsets();
+  const [selectedPost, setSelectedPost] = useState<BookingItem | null>(null);
   const [repost, setRepost] = useState<BookingItem | null>(null);
   const busy = useRef(false);
   const [cancelling, setCancelling] = useState(false);
@@ -49,14 +72,43 @@ export function OwnPostsSection({
     }
   };
 
-  const statusColors: Record<string, { bg: string; text: string }> = {
-    Available: { bg: '#DCFCE7', text: '#166534' },
-    Cancelled: { bg: '#FEE2E2', text: '#991B1B' },
-    Booked: { bg: '#DBEAFE', text: '#1E40AF' },
-    Ongoing: { bg: '#E0E7FF', text: '#3730A3' },
-    Completed: { bg: '#F3F4F6', text: '#374151' },
-    Expired: { bg: '#FEF3C7', text: '#92400E' },
+  const statusColors: Record<string, string> = {
+    Available: '#16A34A',
+    Cancelled: '#9CA3AF',
+    Booked: '#2563EB',
+    Ongoing: '#4F46E5',
+    Completed: '#6B7280',
+    Expired: '#C2410C',
   };
+  const statusFor = (post: BookingItem) => cancelled.has(post.booking_id) ? 'Cancelled' : postDisplayStatus(post, now);
+  const confirmCancel = (post: BookingItem) => {
+    if (!token || busy.current || statusFor(post) !== 'Available') return;
+    Alert.alert(tr('Cancel Post'), tr('Remove this post from the public feed?'), [
+      { text: tr('Keep Post'), style: 'cancel' },
+      { text: tr('Cancel Post'), style: 'destructive', onPress: () => { void cancel(post); } },
+    ]);
+  };
+  const openRepost = (post: BookingItem) => {
+    if (!token || cancelling || statusFor(post) !== 'Available' || !isScheduleExpired(post, now)) return;
+    setSelectedPost(null);
+    setRepost(post);
+  };
+
+  // Read the current list record so refreshes cannot leave an outdated status in the sheet.
+  const detailsPost = selectedPost ? posts.find(post => post.booking_id === selectedPost.booking_id) : null;
+  const detailsStatus = detailsPost ? statusFor(detailsPost) : '';
+  const [detailsWhole, detailsDecimals] = detailsPost ? rateParts(detailsPost) : [];
+  const start = calendarDate(detailsPost?.start_time);
+  const end = calendarDate(detailsPost?.end_time);
+  const startLabel = start ? formatDate(start, 'compact') : tr('Date unavailable');
+  const dates = !start ? startLabel
+    : detailsPost?.booking_type === 'long_term' && detailsPost.end_time === null ? `${startLabel} – ${tr('Ongoing (No end date)')}`
+    : start === end ? `${startLabel} (${tr('Same day')})`
+    : `${startLabel} – ${end ? formatDate(end, 'compact') : tr('Date unavailable')}`;
+  const startsAt = clockLabel(detailsPost?.daily_start_time);
+  const endsAt = clockLabel(detailsPost?.daily_end_time);
+  const hours = startsAt && endsAt ? `${startsAt} – ${endsAt}` : tr('Not provided');
+  const days = WORK_DAYS.filter(day => detailsPost?.work_days?.includes(day.value)).map(day => tr(day.label)).join(', ');
 
   return (
     <View style={styles.container}>
@@ -72,13 +124,16 @@ export function OwnPostsSection({
         </View>
       )}
       {posts.map(post => {
-        const status = cancelled.has(post.booking_id) ? 'Cancelled' : postDisplayStatus(post, now);
-        const badgeColors = statusColors[status] || { bg: '#F3F4F6', text: '#374151' };
+        const status = statusFor(post);
+        const statusColor = statusColors[status] || '#6B7280';
+        const [whole, decimals] = rateParts(post);
         const address = formatBookingAddress(post);
         const hasInstructions = !!post.special_instruction?.trim();
 
         return (
-          <View key={post.booking_id} style={styles.card}>
+          <Pressable key={post.booking_id} style={styles.card}
+            accessibilityRole="button" accessibilityLabel={`${tr('Post Details')}: ${post.service_category.join(', ')}`}
+            onPress={() => setSelectedPost(post)}>
             {/* Header: Service + Date on left, Rate + Status on right */}
             <View style={styles.headerRow}>
               <View style={styles.headerLeft}>
@@ -91,12 +146,13 @@ export function OwnPostsSection({
               </View>
 
               <View style={styles.headerRight}>
-                <Text style={styles.rateAmount}>
-                  ₱{post.rate_amount}
-                  <Text style={styles.rateUnit}> / {post.rate_period || 'day'}</Text>
-                </Text>
-                <View style={[styles.statusBadge, { backgroundColor: badgeColors.bg }]}>
-                  <Text style={[styles.statusBadgeText, { color: badgeColors.text }]}>
+                <View style={styles.rateAmount}>
+                  <Text style={styles.rateMainNumber} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>₱ {whole}</Text>
+                  <Text style={styles.rateDecimalsAndUnit}>.{decimals}/{tr(post.rate_period || 'day')}</Text>
+                </View>
+                <View style={styles.statusRow}>
+                  <View style={[styles.statusDot, { backgroundColor: statusColor }]} accessible={false} />
+                  <Text style={[styles.statusText, { color: statusColor }]}>
                     {tr(status)}
                   </Text>
                 </View>
@@ -121,7 +177,7 @@ export function OwnPostsSection({
             ) : null}
 
             {/* Bottom Actions Row */}
-            <View style={styles.actionsRow}>
+            {status === 'Available' && <View style={styles.actionsRow}>
               <View style={styles.actionsLeft}>
                 {status === 'Available' && <ScheduleBadge post={post} now={now} />}
               </View>
@@ -130,20 +186,14 @@ export function OwnPostsSection({
                 {status === 'Available' && token && (
                   <Pressable
                     accessibilityRole="button"
+                    accessibilityLabel={tr('Cancel Post')}
+                    accessibilityState={{ disabled: cancelling }}
+                    hitSlop={6}
                     disabled={cancelling}
-                    onPress={() =>
-                      Alert.alert(tr('Cancel Post'), tr('Remove this post from the public feed?'), [
-                        { text: tr('Keep Post'), style: 'cancel' },
-                        {
-                          text: tr('Cancel Post'),
-                          style: 'destructive',
-                          onPress: () => { void cancel(post); },
-                        },
-                      ])
-                    }
+                    onPress={event => { event?.stopPropagation(); confirmCancel(post); }}
                     style={styles.cancelBtn}
                   >
-                    <Text style={styles.cancelBtnText}>{tr('Cancel Post')}</Text>
+                    <Ionicons name="trash-outline" size={18} color="#DC2626" accessible={false} />
                   </Pressable>
                 )}
 
@@ -151,17 +201,108 @@ export function OwnPostsSection({
                   <Pressable
                     disabled={cancelling}
                     accessibilityRole="button"
-                    onPress={() => setRepost(post)}
+                    accessibilityLabel={tr('Reschedule')}
+                    accessibilityState={{ disabled: cancelling }}
+                    hitSlop={6}
+                    onPress={event => { event?.stopPropagation(); openRepost(post); }}
                     style={styles.repostBtn}
                   >
-                    <Text style={styles.repostBtnText}>{tr('Reschedule')}</Text>
+                    <Ionicons name="calendar-outline" size={18} color="#35220D" accessible={false} />
                   </Pressable>
                 )}
               </View>
-            </View>
-          </View>
+            </View>}
+          </Pressable>
         );
       })}
+      {detailsPost && <Modal visible={!!detailsPost} transparent animationType="slide" onRequestClose={() => setSelectedPost(null)}>
+        <View style={styles.detailsOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel={tr('Close')}
+            onPress={() => setSelectedPost(null)} />
+          <View style={styles.detailsSheet} accessibilityViewIsModal>
+            <View style={styles.dragHandle} accessible={false} />
+            <View style={styles.detailsHeader}>
+              <View style={styles.headerRow}>
+                <Text style={styles.detailsTitle}>{detailsPost.service_category.join(', ')}</Text>
+                <View style={styles.statusRow}>
+                  <View style={[styles.statusDot, { backgroundColor: statusColors[detailsStatus] || '#6B7280' }]} accessible={false} />
+                  <Text style={[styles.statusText, { color: statusColors[detailsStatus] || '#6B7280' }]}>{tr(detailsStatus)}</Text>
+                </View>
+              </View>
+              <View style={styles.rateAmount}>
+                <Text style={styles.rateMainNumber}>₱ {detailsWhole}</Text>
+                <Text style={styles.rateDecimalsAndUnit}>.{detailsDecimals} / {tr(detailsPost.rate_period || 'day')}</Text>
+              </View>
+              <Text style={styles.detailsMeta}>
+                {tr(detailsPost.booking_type === 'short_term' ? 'Short-term' : 'Long-term')} · {tr(workSetupLabel(detailsPost.work_setup))}
+              </Text>
+            </View>
+            <ScrollView style={styles.detailsScroll} contentContainerStyle={styles.detailsContent} bounces={false}>
+              <View style={styles.scheduleCard}>
+                <View style={styles.sectionHeading}>
+                  <Ionicons name="calendar-outline" size={18} color="#4B5563" accessible={false} />
+                  <Text style={styles.sectionTitle}>{tr('Schedule')}</Text>
+                </View>
+                {[{ label: 'Work Dates', value: dates }, { label: 'Work hours', value: hours }, { label: 'Work days', value: days || tr('Not provided') }].map(row => (
+                  <View key={row.label} style={styles.detailsRow}>
+                    <Text style={styles.detailsLabel}>{tr(row.label)}</Text>
+                    <Text style={styles.detailsValue}>{row.value}</Text>
+                  </View>
+                ))}
+                <ScheduleBadge post={detailsPost} now={now} />
+              </View>
+              <View>
+                <View style={styles.sectionHeading}>
+                  <Ionicons name="location-outline" size={18} color="#4B5563" accessible={false} />
+                  <Text style={styles.sectionTitle}>{tr('Location')}</Text>
+                </View>
+                <Text style={styles.detailsBody}>{formatBookingAddress(detailsPost)}</Text>
+              </View>
+              {!!detailsPost.special_instruction?.trim() && <View>
+                <View style={styles.sectionHeading}>
+                  <Ionicons name="document-text-outline" size={18} color="#4B5563" accessible={false} />
+                  <Text style={styles.sectionTitle}>{tr('About / Instructions')}</Text>
+                </View>
+                <Text style={styles.detailsBody}>{detailsPost.special_instruction.trim()}</Text>
+              </View>}
+            </ScrollView>
+            <View style={[styles.detailsFooter, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+              {detailsStatus === 'Available' && token && <>
+                <Pressable
+                  style={[styles.footerButton, styles.cancelModalButton]}
+                  accessibilityRole="button"
+                  accessibilityLabel={tr('Cancel Post')}
+                  disabled={cancelling}
+                  accessibilityState={{ disabled: cancelling }}
+                  onPress={() => confirmCancel(detailsPost)}
+                >
+                  <Text style={[styles.footerText, styles.cancelModalButtonText]} numberOfLines={1}>{tr('Cancel Post')}</Text>
+                </Pressable>
+                {isScheduleExpired(detailsPost, now) && (
+                  <Pressable
+                    style={[styles.footerButton, styles.rescheduleModalButton]}
+                    accessibilityRole="button"
+                    accessibilityLabel={tr('Reschedule')}
+                    disabled={cancelling}
+                    accessibilityState={{ disabled: cancelling }}
+                    onPress={() => openRepost(detailsPost)}
+                  >
+                    <Text style={[styles.footerText, styles.rescheduleModalButtonText]} numberOfLines={1}>{tr('Reschedule')}</Text>
+                  </Pressable>
+                )}
+              </>}
+              <Pressable
+                style={[styles.footerButton, styles.closeButton]}
+                accessibilityRole="button"
+                accessibilityLabel={tr('Close')}
+                onPress={() => setSelectedPost(null)}
+              >
+                <Text style={[styles.footerText, styles.closeButtonText]} numberOfLines={1}>{tr('Close')}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>}
       {repost && token && (
         <RepostModal
           post={repost}
@@ -180,8 +321,8 @@ const safeStyleSheet = (StyleSheet && typeof StyleSheet.create === 'function')
 
 const styles = safeStyleSheet({
   container: {
-    gap: 14,
-    paddingVertical: 12,
+    gap: 0,
+    paddingVertical: 0,
   },
   loader: {
     marginVertical: 16,
@@ -207,15 +348,13 @@ const styles = safeStyleSheet({
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 0,
     paddingHorizontal: 16,
-    paddingVertical: 18,
-    marginBottom: 2,
-    shadowColor: '#2D241D',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
+    paddingVertical: 16,
+    marginBottom: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    elevation: 0,
   },
   headerRow: {
     flexDirection: 'row',
@@ -242,26 +381,42 @@ const styles = safeStyleSheet({
   },
   headerRight: {
     alignItems: 'flex-end',
-    flexShrink: 0,
+    flexShrink: 1,
+    maxWidth: '60%',
   },
   rateAmount: {
-    fontSize: 16,
-    lineHeight: 21,
-    fontWeight: '700',
-    color: '#176B3A',
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    minHeight: 28,
     marginBottom: 3,
   },
-  rateUnit: {
-    fontSize: 12,
+  rateMainNumber: {
+    flexShrink: 1,
+    fontSize: 17,
+    lineHeight: 26,
+    includeFontPadding: true,
+    fontWeight: '700',
+    color: '#176B3A',
+  },
+  rateDecimalsAndUnit: {
+    flexShrink: 0,
+    fontSize: 11.5,
+    lineHeight: 20,
+    includeFontPadding: true,
     fontWeight: '500',
     color: '#176B3A',
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
-  statusBadgeText: {
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
     fontSize: 11,
     fontWeight: '700',
   },
@@ -307,28 +462,149 @@ const styles = safeStyleSheet({
     marginLeft: 'auto',
   },
   cancelBtn: {
-    minHeight: 36,
-    paddingHorizontal: 8,
+    width: 36,
+    height: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 8,
-  },
-  cancelBtnText: {
-    fontSize: 13,
-    color: '#DC2626',
-    fontWeight: '600',
   },
   repostBtn: {
-    minHeight: 36,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    backgroundColor: '#FFA135',
+    width: 36,
+    height: 36,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  repostBtnText: {
-    fontSize: 13,
-    color: '#35220D',
+  detailsOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  detailsSheet: {
+    maxHeight: '90%',
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+    paddingTop: 10,
+  },
+  dragHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D1D5DB',
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  detailsHeader: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  detailsTitle: {
+    flex: 1,
+    fontSize: 22,
+    lineHeight: 28,
     fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  detailsMeta: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#6B7280',
+  },
+  detailsScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
+  detailsContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 18,
+    gap: 20,
+  },
+  scheduleCard: {
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: '#F9FAFB',
+    gap: 10,
+  },
+  sectionHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  sectionTitle: {
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  detailsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  detailsLabel: {
+    maxWidth: '45%',
+    flexShrink: 1,
+    fontSize: 12,
+    lineHeight: 20,
+    color: '#6B7280',
+  },
+  detailsValue: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'right',
+    color: '#1A1A1A',
+  },
+  detailsBody: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#4B5563',
+  },
+  detailsFooter: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  footerButton: {
+    flex: 1,
+    minHeight: 44,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  footerText: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  cancelModalButton: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  cancelModalButtonText: {
+    color: '#DC2626',
+  },
+  rescheduleModalButton: {
+    backgroundColor: '#FFA135',
+  },
+  rescheduleModalButtonText: {
+    color: '#35220D',
+  },
+  closeButton: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  closeButtonText: {
+    color: '#4B5563',
   },
 });
