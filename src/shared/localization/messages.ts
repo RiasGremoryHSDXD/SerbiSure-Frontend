@@ -1,6 +1,16 @@
 // English source text -> Tagalog, Bisaya. Keep stored API values in English;
 // translate only their presentation. User-authored content is never passed here.
 export const UI_MESSAGES = {
+  'Connect to the internet and reopen this booking to get a fresh pass.': ['Kumonekta sa internet at buksan muli ang booking para makakuha ng bagong pass.', 'Konektar sa internet ug ablihi pag-usab ang booking aron makakuha og bag-ong pass.'],
+  'Digital Village Pass': ['Digital na Gate Pass', 'Digital nga Gate Pass'],
+  'QR Pass will be generated once booking is sent.': ['Lalabas ang QR Pass kapag naipadala na ang booking.', 'Mogawas ang QR Pass kung mapadala na ang booking.'],
+  'Copy booking code': ['Kopyahin ang booking code', 'Kopyaha ang booking code'],
+  'Booking code copied': ['Nakopya ang booking code', 'Nakopya ang booking code'],
+  'Could not copy. Please write down the booking code.': ['Hindi makopya. Pakisulat na lang ang booking code.', 'Dili makopya. Palihog isulat na lang ang booking code.'],
+  'QR unavailable. Please reload the ticket.': ['Hindi lumabas ang QR. Pakibuksan muli ang ticket.', 'Wala mogawas ang QR. Palihog ablihi pag-usab ang ticket.'],
+  'Scan this QR code to check the booking online.': ['I-scan ang QR para tingnan ang booking online.', 'I-scan ang QR aron masusi ang booking online.'],
+  'Tap the QR or code to copy the booking code.': ['Pindutin ang QR o code para kopyahin ang booking code.', 'Pislita ang QR o code aron makopya ang booking code.'],
+  'The guard needs internet to check the live booking status.': ['Kailangan ng internet ng guwardiya para tingnan ang kasalukuyang katayuan ng booking.', 'Kinahanglan og internet ang guwardiya aron masusi ang kasamtangang kahimtang sa booking.'],
   'Renewal needed': ['Kailangang mag-renew', 'Kinahanglang mag-renew'],
   'Renewal under review': ['Sinusuri ang bagong dokumento', 'Gisusi ang bag-ong dokumento'],
   'Expired': ['Paso na', 'Napaso na'],

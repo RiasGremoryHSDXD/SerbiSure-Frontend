@@ -18,7 +18,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { StyleSheet, Text, View, Image, TextInput, Pressable, Modal, Alert, Animated, Dimensions, ScrollView, Keyboard, KeyboardAvoidingView, Platform, ActivityIndicator, BackHandler, Easing } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { fetchMinimumWage, formatBookingAddress, MinimumWageData } from '../api/bookingApi';
+import { fetchBookingDetail, fetchMinimumWage, formatBookingAddress, MinimumWageData } from '../api/bookingApi';
 import THEME from '../../../shared/theme/theme';
 
 const logoSource = require('../../../../assets/serbisure-icon.png');
@@ -89,6 +89,7 @@ interface BookingModalProps {
     jobPost?: BookingJobPost | null;
     id?: string | null;
     bookingId?: string | null;
+    passUrl?: string | null;
   } | null;
   onConfirm?: (bookingDetails: BookingConfirmData) => Promise<void> | void;
   onKasambahayConfirm?: () => Promise<void> | void;
@@ -123,6 +124,25 @@ export function BookingModal({
 }: BookingModalProps) {
   const { tr: uiText } = useUiLanguage();
   const { user } = useUser();
+  const ticketId = bookingId || initialDetails?.bookingId || initialDetails?.id;
+  const ticketToken = token || user.token;
+  const savedPassUrl = initialDetails?.passUrl;
+  const ticketKey = `${ticketId}:${ticketToken}`;
+  const [freshPass, setFreshPass] = useState<{ key: string; source?: string | null; url: string | null } | null>(null);
+  const passUrl = freshPass?.key === ticketKey && freshPass.source === savedPassUrl ? freshPass.url : savedPassUrl;
+
+  useEffect(() => {
+    if (!visible || !readOnly || !ticketId || !ticketToken) return;
+    let current = true;
+    // Render the last downloaded URL immediately. A failed offline refresh must
+    // not remove it; only the server can renew its 24-hour signature.
+    void fetchBookingDetail(ticketToken, ticketId).then(booking => {
+      if (current && booking?.booking_id === ticketId) {
+        setFreshPass({ key: ticketKey, source: savedPassUrl, url: booking.pass_url || null });
+      }
+    }).catch(() => {});
+    return () => { current = false; };
+  }, [visible, readOnly, ticketId, ticketToken]);
   const insets = useSafeAreaInsets();
   const scheduleNow = useScheduleClock([bookingStartTime(initialDetails)], visible && readOnly);
   const acceptanceExpired = readOnly && isAcceptanceExpired(initialDetails, scheduleNow);
@@ -745,6 +765,7 @@ export function BookingModal({
                 contactRole={contactRole}
                 contactAvatar={contactAvatar}
                 bookingId={bookingId || initialDetails?.bookingId || initialDetails?.id}
+                passUrl={passUrl}
                 isConfirmed={isConfirmed}
                 isDeclined={isDeclined}
                 isAcquired={isAcquired}

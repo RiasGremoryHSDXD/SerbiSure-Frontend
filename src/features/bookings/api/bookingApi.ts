@@ -34,6 +34,7 @@ export interface BookingParticipant {
 export interface BookingItem {
   schedule_expired?: boolean;
   booking_id: string;
+  pass_url?: string | null;
   booking_type: 'short_term' | 'long_term';
   work_setup?: WorkSetup | null;
   booking_status: 'Pending' | 'Accepted' | 'InProgress' | 'Completed' | 'Cancelled';

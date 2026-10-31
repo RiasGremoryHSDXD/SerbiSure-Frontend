@@ -40,6 +40,7 @@ function ticket(t, props, language = 'English') {
     '../../../shared/localization/LanguageContext': { useLanguage: () => ({ tr: source => messages.translateMessage(language, source),
       formatDate: (value, style) => messages.formatLocalizedDate(language, value, style) }) },
     '../engagementForm': load('src/features/bookings/engagementForm.ts'), '../workSetup': load('src/features/bookings/workSetup.ts'),
+    './BookingPassQRCode': { BookingPassQRCode: 'BookingPassQRCode' },
   });
   const container = { children: [] };
   const root = renderer.createContainer(container, 0, null, false, null, '', error => { throw error; }, null);

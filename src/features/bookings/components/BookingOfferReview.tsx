@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import THEME from '../../../shared/theme/theme';
 import { SERVICE_CHOICES, WORK_DAYS } from '../engagementForm';
 import { workSetupLabel, type WorkSetup } from '../workSetup';
+import { BookingPassQRCode } from './BookingPassQRCode';
 
 export type BookingOfferStep = 1 | 2 | 3 | 4;
 
@@ -29,12 +30,8 @@ interface Props {
   isDeclined?: boolean;
   isAcquired?: boolean;
   bookingId?: string | null;
+  passUrl?: string | null;
 }
-
-// Realistic barcode stripe widths (dp)
-const BARCODE_PATTERN = [
-  3, 1, 2, 4, 1, 2, 1, 3, 2, 1, 4, 1, 2, 3, 1, 2, 1, 4, 2, 1, 3, 1, 1, 2, 4, 1, 2, 1, 3, 2, 1, 4, 1, 2, 3, 1, 2, 1, 4, 2, 1, 3, 2, 1, 1, 4, 2, 1, 3, 1, 2, 4
-];
 
 function TicketPerforation() {
   return (
@@ -46,7 +43,7 @@ function TicketPerforation() {
   );
 }
 
-/** A ticket-style visual summary of booking terms with cutouts, 2-column grid, and barcode stub. */
+/** Booking terms with a locally generated QR linking to live pass verification. */
 export function BookingOfferReview(props: Props) {
   const { tr: uiText, formatDate } = useUiLanguage();
   const short = props.bookingType === 'short_term';
@@ -77,10 +74,6 @@ export function BookingOfferReview(props: Props) {
   const days = WORK_DAYS.filter(day => props.days.includes(day.value))
     .map(day => uiText(day.label))
     .join(', ');
-
-  const bookingCode = props.bookingId
-    ? `BK-${props.bookingId.slice(0, 8).toUpperCase()}`
-    : null;
 
   const displayName = props.contactName || uiText('Service Partner');
   const initials = displayName
@@ -207,25 +200,9 @@ export function BookingOfferReview(props: Props) {
       {/* Perforation 2 with cutouts */}
       <TicketPerforation />
 
-      {/* 3. Bottom Stub: Barcode & Reference */}
+      {/* 3. Locally rendered pass; drafts never generate a verification link. */}
       <View style={styles.stubSection}>
-        <View style={styles.barcodeWrapper}>
-          {bookingCode && <View style={styles.barcodeRow}>
-            {BARCODE_PATTERN.map((w, idx) => (
-              <View
-                key={idx}
-                style={{
-                  width: w,
-                  height: 42,
-                  backgroundColor: '#0D0D11',
-                  marginRight: idx % 5 === 0 ? 3 : 1.5,
-                  borderRadius: 0.5,
-                }}
-              />
-            ))}
-          </View>}
-          <Text style={styles.barcodeText}>{bookingCode || uiText('Booking code assigned after sending')}</Text>
-        </View>
+        <BookingPassQRCode bookingId={props.bookingId} passUrl={props.passUrl} />
       </View>
     </View>
   );
@@ -430,23 +407,5 @@ const styles = StyleSheet.create({
     paddingBottom: 22,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
-  },
-  barcodeWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  barcodeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 2,
-  },
-  barcodeText: {
-    fontFamily: THEME.typography.fontFamily.mainBold,
-    fontSize: 11,
-    color: '#000000',
-    letterSpacing: 3.5,
-    marginTop: 9,
   },
 });

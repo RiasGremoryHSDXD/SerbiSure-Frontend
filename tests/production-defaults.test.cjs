@@ -35,9 +35,13 @@ function load(file, mocks = {}) {
     if (name.endsWith('LanguageContext')) return { useLanguage: () => ({ tr: text => text, formatDate: text => text }) };
     if (name.endsWith('theme/theme')) return { default: { colors: {}, typography: { fontFamily: {} } } };
     if (name.endsWith('.png')) return 1;
+    if (name === 'react-native-qrcode-svg') return { default: 'QRCode' };
+    if (name === 'expo-clipboard') return { setStringAsync: async () => true };
+    if (name.endsWith('/shared/api/config')) return { API_BASE_URL: 'https://example.test' };
     if (name.startsWith('.')) {
       const target = path.resolve(path.dirname(path.resolve(__dirname, '..', file)), name);
-      return load(path.relative(path.resolve(__dirname, '..'), target + (path.extname(target) ? '' : '.ts')), mocks);
+      const resolved = path.extname(target) ? target : ['.ts', '.tsx'].map(extension => target + extension).find(fs.existsSync);
+      return load(path.relative(path.resolve(__dirname, '..'), resolved), mocks);
     }
     if (name.endsWith('/utils/rate')) return load('src/shared/utils/rate.ts');
     if (name.endsWith('/reviews/ratings') || name === '../ratings') return load('src/features/reviews/ratings.ts');
@@ -142,7 +146,7 @@ test('unsaved booking tickets do not invent a name, region, price, schedule or b
   const { BookingOfferReview } = load('src/features/bookings/components/BookingOfferReview.tsx');
   const screen = mount(t, BookingOfferReview, { bookingType: 'short_term', contactName: '', serviceCategory: [],
     salary: '', region: '', days: [], startDate: '', endDate: '', workHours: '', location: '' });
-  assert.match(screen.content(), /Booking code assigned after sending/);
+  assert.match(screen.content(), /QR Pass will be generated once booking is sent/);
   assert.doesNotMatch(screen.content(), /158EEE|Shennie|Northern Mindanao|Mon - Sun|08:00|₱600/);
 });
 

@@ -832,6 +832,7 @@ export function MyBookingsModal({
           salary: selectedBookingForDetails.rate_amount || '',
           bookingType: selectedBookingForDetails.booking_type,
           bookingId: selectedBookingForDetails.booking_id,
+          passUrl: selectedBookingForDetails.pass_url,
           id: selectedBookingForDetails.booking_id,
         }}
         token={token}

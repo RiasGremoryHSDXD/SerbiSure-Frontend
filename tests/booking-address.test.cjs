@@ -44,9 +44,11 @@ test('pending and confirmed chat cards reconstruct the complete work location fr
   for (const status of ['Pending', 'Confirmed']) {
     for (const full_address of [null, '', 'Lot 5555, Pagatpat, City of Cagayan de Oro, Misamis Oriental']) {
       const booking = { ...address, full_address, booking_id: 'booking', booking_status: status === 'Confirmed' ? 'Accepted' : 'Pending',
+        pass_url: 'https://test.local/verify/?token=signed-token',
         booking_type: 'short_term', service_category: ['Cleaning'], rate_amount: '800', rate_period: 'day', start_time: '2099-01-01T00:00:00Z' };
       const card = mapBookingCard({ booking, status, can_respond: status === 'Pending', sender_name: 'Homeowner' });
       assert.equal(card.location, expected);
+      assert.equal(card.passUrl, booking.pass_url);
       assert.equal(card.isConfirmed, status === 'Confirmed');
     }
   }

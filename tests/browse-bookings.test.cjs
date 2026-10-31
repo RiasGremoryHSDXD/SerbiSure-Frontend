@@ -84,6 +84,7 @@ function bookingDetails(t, role, bookingType, ongoing = false, options = {}) {
   const languageApi = { useLanguage: () => ({ tr: text => localization.translateMessage(language, text), formatDate: (date, style) => localization.formatLocalizedDate(language, date, style) }) };
   const theme = { default: { colors: {}, typography: { fontFamily: {} } } };
   const review = load('src/features/bookings/components/BookingOfferReview.tsx', { 'react-native': native, '@expo/vector-icons': { Ionicons: 'Icon' },
+    './BookingPassQRCode': { BookingPassQRCode: 'BookingPassQRCode' },
     '../../../shared/localization/LanguageContext': languageApi, '../../../shared/theme/theme': theme,
     '../engagementForm': engagement, '../workSetup': load('src/features/bookings/workSetup.ts') });
   const scheduleFields = load('src/features/bookings/components/WorkScheduleFields.tsx', { 'react-native': native, '@expo/vector-icons': { Ionicons: 'Icon' },
@@ -107,7 +108,7 @@ function bookingDetails(t, role, bookingType, ongoing = false, options = {}) {
     './BookingOfferReview': review, './WorkScheduleFields': scheduleFields,
     './WorkLocationFields': locationFields, '../workLocation': load('src/features/bookings/workLocation.ts'),
     '../hooks/useWorkLocation': realLocation || { useWorkLocation: () => address }, '../../posting/validation': load('src/features/posting/validation.ts', { './postingConfig': load('src/features/posting/postingConfig.ts') }),
-    '../../../shared/ui/ProfileAvatar': { ProfileAvatar: 'ProfileAvatar' }, '../api/bookingApi': { formatBookingAddress: addressApi.formatBookingAddress, fetchMinimumWage: async (_token, type) => ({ booking_type: type, rate_period: type === 'long_term' ? 'month' : 'day', minimum_rate: type === 'long_term' ? '6500' : '600' }) },
+    '../../../shared/ui/ProfileAvatar': { ProfileAvatar: 'ProfileAvatar' }, '../api/bookingApi': { fetchBookingDetail: options.fetchBookingDetail || (async () => null), formatBookingAddress: addressApi.formatBookingAddress, fetchMinimumWage: async (_token, type) => ({ booking_type: type, rate_period: type === 'long_term' ? 'month' : 'day', minimum_rate: type === 'long_term' ? '6500' : '600' }) },
     '../../profile/components/PrivacyPolicyModal': { PrivacyPolicyModal: props => props.visible ? React.createElement('PrivacyPolicyModal', props) : null },
     '../../../shared/theme/theme': theme, '../../../../assets/serbisure-logo.png': 1, '../../../../assets/serbisure-icon.png': 1,
   });
@@ -127,6 +128,27 @@ function bookingDetails(t, role, bookingType, ongoing = false, options = {}) {
   };
   return { ...screen, render, pressAccept, press, text: () => content(screen.find('Modal')), alerts, actions, closed, language(value) { language = value; render(); } };
 }
+
+test('ticket renders its saved signed pass immediately, keeps it offline, and refreshes on reopen', async t => {
+  const requests = [];
+  const screen = bookingDetails(t, 'kasambahay', 'short_term', false, {
+    user: { token: 'session' }, initialDetails: { bookingId: 'ticket', passUrl: 'saved-signed-url' },
+    fetchBookingDetail: (token, id) => { const request = deferred(); requests.push({ ...request, token, id }); return request.promise; },
+  });
+  assert.equal(screen.find('BookingPassQRCode').props.passUrl, 'saved-signed-url');
+  assert.equal(requests[0].token, 'session'); assert.equal(requests[0].id, 'ticket');
+  requests[0].reject(new Error('offline')); await tick();
+  assert.equal(screen.find('BookingPassQRCode').props.passUrl, 'saved-signed-url');
+  screen.render({ visible: false }); screen.render({ visible: true });
+  requests[1].resolve({ booking_id: 'ticket', pass_url: 'fresh-signed-url' }); await tick();
+  assert.equal(screen.find('BookingPassQRCode').props.passUrl, 'fresh-signed-url');
+  screen.render({ visible: false }); screen.render({ visible: true });
+  screen.render({ initialDetails: { bookingId: 'different', passUrl: 'different-signed-url' } });
+  requests[2].resolve({ booking_id: 'ticket', pass_url: 'late-old-response' }); await tick();
+  assert.equal(screen.find('BookingPassQRCode').props.passUrl, 'different-signed-url');
+  requests[3].resolve({ booking_id: 'different', pass_url: null }); await tick();
+  assert.equal(screen.find('BookingPassQRCode').props.passUrl, null);
+});
 
 for (const [workHours, blocked] of [['08:00 AM - 05:00 PM', true], ['02:00 PM - 05:00 PM', false]]) {
   test(`new offer schedule ${blocked ? 'blocks an already-started shift' : 'accepts a future shift'}`, async t => {
