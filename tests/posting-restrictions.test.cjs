@@ -89,6 +89,7 @@ function postingScreen(t, mode = 'service') {
     'react-native': native, '@expo/vector-icons': { Ionicons: 'Icon' },
     '../../../shared/localization/LanguageContext': language, '../styles': { postingStyles: {} },
     '../../profile/components/PrivacyPolicyModal': { PrivacyPolicyModal: () => null },
+    '../../bookings/engagementForm': engagement,
   });
   let controller;
   const { PostScreen } = load('src/features/posting/screens/PostScreen.tsx', {

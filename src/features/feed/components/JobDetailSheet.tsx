@@ -9,6 +9,7 @@ import { BottomSheetHandle } from '../../../shared/components/BottomSheetHandle'
 import { StarIcon } from '../../../shared/components/icons/LucideIcons';
 import { POST_UNAVAILABLE } from '../../bookings/postAvailability';
 import { ScheduleBadge } from '../../bookings/components/ScheduleBadge';
+import { WORK_DAYS } from '../../bookings/engagementForm';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SNAP_EXPANDED = 0;
@@ -17,6 +18,11 @@ const SNAP_DISMISSED = SCREEN_HEIGHT;
 
 export interface JobDetailData {
   start_time?: string;
+  end_time?: string | null;
+  booking_type?: 'short_term' | 'long_term';
+  daily_start_time?: string | null;
+  daily_end_time?: string | null;
+  work_days?: string[];
   id: number | string;
   partnerId?: number | string;
   employerName?: string;
@@ -65,7 +71,7 @@ export function JobDetailSheet({
   ctaNotice,
   token,
 }: JobDetailSheetProps) {
-  const { tr: uiText } = useUiLanguage();
+  const { tr: uiText, formatDate } = useUiLanguage();
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const effectiveToken = token || user?.token;
@@ -278,6 +284,28 @@ export function JobDetailSheet({
     job.description ||
     'No description provided.';
 
+  const calendarDate = (value?: string | null) => {
+    const stamp = Date.parse(value || '');
+    return Number.isFinite(stamp) ? new Date(stamp + 8 * 3600000).toISOString().slice(0, 10) : '';
+  };
+  const start = calendarDate(job.start_time);
+  const end = calendarDate(job.end_time);
+  const startLabel = start ? formatDate(start, 'compact') : uiText('Date unavailable');
+  const workDates = !start ? startLabel
+    : job.booking_type === 'long_term' && job.end_time === null ? `${startLabel} – ${uiText('Ongoing (No end date)')}`
+    : end === start ? `${startLabel} (${uiText('Same day')})`
+    : `${startLabel} – ${end ? formatDate(end, 'compact') : uiText('Date unavailable')}`;
+  const clock = (value?: string | null) => {
+    const match = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(value || '');
+    if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) return '';
+    const hour = Number(match[1]);
+    return `${String(hour % 12 || 12).padStart(2, '0')}:${match[2]} ${hour < 12 ? 'AM' : 'PM'}`;
+  };
+  const startsAt = clock(job.daily_start_time);
+  const endsAt = clock(job.daily_end_time);
+  const workHours = startsAt && endsAt ? `${startsAt} – ${endsAt}` : uiText('Not provided');
+  const workDays = WORK_DAYS.filter(day => job.work_days?.includes(day.value)).map(day => uiText(day.label)).join(', ');
+
   const backdropOpacity = panY.interpolate({
     inputRange: [SNAP_EXPANDED, SNAP_COLLAPSED, SNAP_DISMISSED],
     outputRange: [1, 0.75, 0],
@@ -390,7 +418,21 @@ export function JobDetailSheet({
               </View>
             </View>
 
-            <ScheduleBadge post={job} />
+            <View style={styles.scheduleSection}>
+              <View style={styles.scheduleRow}>
+                <Text style={styles.scheduleLabel}>{uiText('Work Dates')}</Text>
+                <Text style={styles.scheduleValue}>{workDates}</Text>
+              </View>
+              <View style={styles.scheduleRow}>
+                <Text style={styles.scheduleLabel}>{uiText('Work hours')}</Text>
+                <Text style={styles.scheduleValue}>{workHours}</Text>
+              </View>
+              <View style={styles.scheduleRow}>
+                <Text style={styles.scheduleLabel}>{uiText('Work days')}</Text>
+                <Text style={styles.scheduleValue}>{workDays || uiText('Not provided')}</Text>
+              </View>
+              <ScheduleBadge post={job} />
+            </View>
             {/* About This Role (Clean Squircle Card) */}
             <View style={styles.aboutCard}>
               <Text style={styles.aboutTitle}>{uiText("ABOUT THIS ROLE")}</Text>
@@ -671,6 +713,27 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     marginBottom: 16,
+  },
+  scheduleSection: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  scheduleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  scheduleLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  scheduleValue: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'right',
+    color: '#0D0D11',
+    fontWeight: '600',
   },
   aboutHeader: {
     flexDirection: 'row',

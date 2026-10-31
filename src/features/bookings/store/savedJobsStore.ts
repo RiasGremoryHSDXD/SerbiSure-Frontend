@@ -20,6 +20,11 @@ export interface SavedJobItem {
   tags?: string[];
   image?: string;
   start_time?: string;
+  end_time?: string | null;
+  booking_type?: 'short_term' | 'long_term';
+  daily_start_time?: string | null;
+  daily_end_time?: string | null;
+  work_days?: string[];
   booking_status?: string;
   post_status?: string;
   application_status?: string;
@@ -111,6 +116,8 @@ class SavedJobsStore {
             tags: [...categories, ...(item.work_setup ? [workSetupLabel(item.work_setup)] : [])],
             image: avatarUrl,
             start_time: item.start_time, booking_status: item.booking_status, post_status: item.post_status,
+            end_time: item.end_time, booking_type: item.booking_type,
+            daily_start_time: item.daily_start_time, daily_end_time: item.daily_end_time, work_days: item.work_days,
           };
           this.savedMap.set(jobItem.id, jobItem);
         }
@@ -126,6 +133,8 @@ class SavedJobsStore {
             price: formatRate(item.rate_amount, 'PHP '), unit: '/ ' + item.rate_period,
             aboutText: item.special_instruction || '', tags: item.service_category || [],
             start_time: item.start_time, booking_status: item.booking_status, post_status: item.post_status,
+            end_time: item.end_time, booking_type: item.booking_type,
+            daily_start_time: item.daily_start_time, daily_end_time: item.daily_end_time, work_days: item.work_days,
             application_status: item.application_status,
           });
         }
