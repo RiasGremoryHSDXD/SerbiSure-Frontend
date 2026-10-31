@@ -100,6 +100,26 @@ const namedJwt = (role, version = 1) => `header.${Buffer.from(JSON.stringify({
   first_name: 'Jerry', middle_name: 'Testing', last_name: 'Doloriel', date_of_birth: '1988-06-22',
 })).toString('base64url')}.signature`;
 
+test('expiry and renewal refresh remove stale green badges despite historical approvals', async t => {
+  const app = screen(t, 'Kasambahay', true);
+  app.render(jwt('Kasambahay', 'Verified'));
+  app.requests[0].resolve({ overall_status: 'Unverified', renewal_required: true, documents: [
+    { document_type: 'nbi_clearance', verification_status: 'Verified' },
+    { document_type: 'police_clearance', verification_status: 'Verified' },
+  ] }); await tick();
+  assert.equal(app.profile.isVerified, false);
+  assert.equal(app.profile.verificationLabel, 'Renewal needed');
+  assert.equal(app.profile.effectiveVerificationStatus, 'Unverified');
+  app.foreground();
+  app.requests[1].resolve({ overall_status: 'Pending', renewal_required: false, renewal_pending: true }); await tick();
+  assert.equal(app.profile.isVerified, false);
+  assert.equal(app.profile.verificationLabel, 'Renewal under review');
+  app.foreground();
+  app.requests[2].resolve({ overall_status: 'Verified', renewal_required: false, renewal_pending: false }); await tick();
+  assert.equal(app.profile.isVerified, true);
+  assert.equal(app.profile.verificationLabel, 'Verified');
+});
+
 for (const role of ['Homeowner', 'Kasambahay']) {
   test(`${role}: pull-to-refresh updates the displayed name and birthdate without logging out`, async t => {
     const app = screen(t, role, true);

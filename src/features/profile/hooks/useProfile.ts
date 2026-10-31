@@ -23,7 +23,6 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
   const { getFullName, getFirstNameOnly, user, updateUser, refreshUserProfile } = useUser();
   const role = requestedRole || resolveRole(user.accountType);
   const isWorker = ROLE_CONFIG[role].workerProfile;
-  const requiredDocuments = ROLE_CONFIG[role].requiredDocuments;
   const copy = localizeProfileCopy(role, tr);
   const worker = useWorkerProfile(isWorker);
   const { isOnJob, jobStatusError, isUpdatingJobStatus, analyticsData, isLoadingAnalytics, refreshWorkerProfile, handleToggleJobStatus } = worker;
@@ -203,24 +202,17 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
     }
   };
 
-  const effectiveVerificationStatus = React.useMemo(() => {
-    if (verificationData?.documents && verificationData.documents.length > 0) {
-      const verifiedTypes = new Set(
-        verificationData.documents
-          .filter((d) => d.verification_status === 'Verified')
-          .map((d) => d.document_type)
-      );
-      if (requiredDocuments.every((type) => verifiedTypes.has(type))) {
-        return 'Verified';
-      }
-      const docStatuses = new Set(verificationData.documents.map((d) => d.verification_status));
-      if (docStatuses.has('Rejected')) return 'Rejected';
-      if (docStatuses.has('Pending') || verifiedTypes.size > 0) return 'Pending';
-    }
-    return verificationData?.overall_status || user.verificationStatus || 'Unverified';
-  }, [verificationData, user.verificationStatus, role]);
+  useEffect(() => {
+    if (isVerificationModalVisible) loadVerificationStatus();
+  }, [isVerificationModalVisible]);
 
-  const isVerified = effectiveVerificationStatus === 'Verified' || (isWorker && user.verificationStatus === 'Verified');
+  // The live account status includes expiry and only the latest required submissions.
+  const effectiveVerificationStatus = user.verificationStatus || verificationData?.overall_status || 'Unverified';
+  const renewalRequired = user.renewalRequired === true;
+  const renewalPending = user.renewalPending === true;
+  const verificationLabel = renewalRequired ? 'Renewal needed'
+    : renewalPending ? 'Renewal under review' : effectiveVerificationStatus;
+  const isVerified = effectiveVerificationStatus === 'Verified' && !renewalRequired;
 
   React.useEffect(() => {
     if (avatarUri) {
@@ -395,6 +387,9 @@ export function useProfile({ role: requestedRole, avatarUri, initialView = 'main
     handleRefresh,
     loadVerificationStatus,
     effectiveVerificationStatus,
+    renewalRequired,
+    renewalPending,
+    verificationLabel,
     isVerified,
     handleSaveTags,
     handleToggleContactPrivacy,

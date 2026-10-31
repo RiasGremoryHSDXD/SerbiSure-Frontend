@@ -19,6 +19,8 @@ type UserData = {
   resumeUrl?: string | null;
   resumeUploadedAt?: string | null;
   verificationStatus?: string;
+  renewalRequired?: boolean;
+  renewalPending?: boolean;
   region?: string;
   province?: string;
   city?: string;
@@ -118,6 +120,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
       setUser(previous => previous.id === session.userId ? {
         ...previous,
         verificationStatus: status,
+        renewalRequired: data.renewal_required === true,
+        renewalPending: data.renewal_pending === true,
         ...(info?.first_name !== undefined ? { firstName: info.first_name ?? '' } : {}),
         ...(info?.middle_name !== undefined ? { middleName: info.middle_name ?? '' } : {}),
         ...(info?.last_name !== undefined ? { lastName: info.last_name ?? '' } : {}),
@@ -156,6 +160,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode, token?: string 
           accountType: decoded.account_type || '',
           verificationStatus: previous.id === userId && previous.verificationStatus
             ? previous.verificationStatus : decoded.verification_status || undefined,
+          renewalRequired: previous.id === userId && previous.renewalRequired === true,
+          renewalPending: previous.id === userId && previous.renewalPending === true,
           region: decoded.region || '',
           province: decoded.province || '',
           city: decoded.city || '',

@@ -1,6 +1,18 @@
 // English source text -> Tagalog, Bisaya. Keep stored API values in English;
 // translate only their presentation. User-authored content is never passed here.
 export const UI_MESSAGES = {
+  'Renewal needed': ['Kailangang mag-renew', 'Kinahanglang mag-renew'],
+  'Renewal under review': ['Sinusuri ang bagong dokumento', 'Gisusi ang bag-ong dokumento'],
+  'Expired': ['Paso na', 'Napaso na'],
+  'Expired on': ['Petsa ng pagkapaso:', 'Petsa sa pagkapaso:'],
+  'Upload renewed clearance': ['I-upload ang bagong clearance', 'I-upload ang bag-ong clearance'],
+  'Upload renewed document': ['I-upload ang bagong dokumento', 'I-upload ang bag-ong dokumento'],
+  'Please upload your renewed document.': ['Paki-upload ang bago mong dokumento.', 'Palihog i-upload ang imong bag-ong dokumento.'],
+  'Tap to take or choose a photo': ['Pindutin para kumuha o pumili ng larawan', 'Pislita aron mokuha o mopili og litrato'],
+  'A required document has expired. Tap to upload your renewed document so you can apply and post again.': ['Paso na ang isang kailangang dokumento. Pindutin para i-upload ang bago mong dokumento upang makapag-apply at makapag-post muli.', 'Napaso na ang usa ka gikinahanglang dokumento. Pislita aron i-upload ang bag-ong dokumento para maka-apply ug maka-post pag-usab.'],
+  'A required document has expired. Upload your renewed document below. You do not need to wait for an official.': ['Paso na ang isang kailangang dokumento. I-upload ang bago mong dokumento sa ibaba. Hindi mo kailangang maghintay ng opisyal.', 'Napaso na ang usa ka gikinahanglang dokumento. I-upload ang bag-ong dokumento sa ubos. Dili ka kinahanglang maghulat og opisyal.'],
+  'We received your renewed document. You can apply and post again once your required documents are approved and valid.': ['Natanggap namin ang bago mong dokumento. Makakapag-apply at makakapag-post ka muli kapag aprubado at balido na ang lahat ng kailangang dokumento.', 'Nadawat namo ang imong bag-ong dokumento. Maka-apply ug maka-post ka pag-usab kung aprobahan ug balido na ang tanan nimong gikinahanglang dokumento.'],
+  'This document is already submitted. Please check its latest status before uploading again.': ['Naipasa na ang dokumentong ito. Tingnan muna ang pinakabagong katayuan nito bago mag-upload muli.', 'Napasa na kini nga dokumento. Susiha una ang pinakabag-ong kahimtang niini sa dili pa mag-upload pag-usab.'],
   'Profile': ['Profile', 'Profile'],
   'Details': ['Mga detalye', 'Mga detalye'],
   'Now': ['Ngayon', 'Karon'],

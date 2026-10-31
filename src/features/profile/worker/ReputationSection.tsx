@@ -23,7 +23,7 @@ export function ReputationSection({ profile }: { profile: ProfileController }) {
         </View>
         <View style={profile.isVerified ? styles.statusBadgeSuccess : styles.statusBadgeNeutral}>
           <Ionicons name={profile.isVerified ? "shield-checkmark" : "information-circle-outline"} size={13} color={profile.isVerified ? "#10B981" : "#6B7280"} />
-          <Text style={profile.isVerified ? styles.statusBadgeSuccessText : styles.statusBadgeNeutralText}>{uiText(profile.effectiveVerificationStatus)}</Text>
+          <Text style={profile.isVerified ? styles.statusBadgeSuccessText : styles.statusBadgeNeutralText}>{uiText(profile.verificationLabel)}</Text>
         </View>
       </View>
 

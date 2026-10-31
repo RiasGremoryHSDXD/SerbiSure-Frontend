@@ -311,7 +311,18 @@ export function ProfileScreen(props: ProfileScreenProps) {
             </View>
 
             {/* Verification Notice Banner */}
-            {(isWorker ? verificationData?.overall_status : effectiveVerificationStatus) === 'Pending' ? (
+            {profile.renewalRequired ? (
+              <Pressable style={styles.verificationNoticeBanner} onPress={() => setIsVerificationModalVisible(true)}>
+                <View style={styles.verificationNoticeIconBox}>
+                  <Ionicons name="refresh-circle" size={22} color="#B45309" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.verificationNoticeTitle}>{uiText('Renewal needed')}</Text>
+                  <Text style={styles.verificationNoticeSub}>{uiText('A required document has expired. Tap to upload your renewed document so you can apply and post again.')}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#B45309" />
+              </Pressable>
+            ) : effectiveVerificationStatus === 'Pending' ? (
               <Pressable
                 style={styles.verificationNoticeBanner}
                 onPress={() => setIsVerificationModalVisible(true)}
@@ -320,14 +331,14 @@ export function ProfileScreen(props: ProfileScreenProps) {
                   <Ionicons name="time" size={18} color="#B45309" />
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.verificationNoticeTitle}>{copy.pendingTitle}</Text>
+                  <Text style={styles.verificationNoticeTitle}>{profile.renewalPending ? uiText('Renewal under review') : copy.pendingTitle}</Text>
                   <Text style={styles.verificationNoticeSub}>
-                    {copy.pendingDescription}
+                    {profile.renewalPending ? uiText('We received your renewed document. You can apply and post again once your required documents are approved and valid.') : copy.pendingDescription}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#B45309" />
               </Pressable>
-            ) : (isWorker ? verificationData?.overall_status : effectiveVerificationStatus) === 'Rejected' ? (
+            ) : effectiveVerificationStatus === 'Rejected' ? (
               <Pressable
                 style={[styles.verificationNoticeBanner, styles.verificationNoticeBannerRejected]}
                 onPress={() => setIsVerificationModalVisible(true)}

@@ -10,6 +10,7 @@ import THEME from '../../../shared/theme/theme';
 import { RegistrationStepper } from '../../auth/components/RegistrationStepper';
 import type { SelfieUploadTask } from '../api/selfieUpload';
 import { APP_HEADER_BACK_ICON_COLOR, APP_HEADER_BACK_ICON_SIZE, APP_HEADER_LOGO_SIZE, APP_HEADER_SIDE_WIDTH } from '../../../shared/components/AppHeader';
+import { canReplaceDocument, currentDocuments } from '../documentStatus';
 
 const noSubscription = () => () => {};
 const noSelfieUpload = () => null;
@@ -80,9 +81,9 @@ export function DocumentUploadScreen({ role = 'kasambahay', token, selfieUpload,
         .then((data) => {
           if (data && Array.isArray(data.documents)) {
             const active = new Set<string>(
-              data.documents
-                .filter((d: any) => d.verification_status === 'Pending' || d.verification_status === 'Verified')
-                .map((d: any) => d.document_type)
+              currentDocuments(data.documents)
+                .filter(d => !canReplaceDocument(d))
+                .map(d => d.document_type)
             );
             setExistingDocs(active);
           }
